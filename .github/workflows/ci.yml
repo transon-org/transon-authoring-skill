@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  harness-gates:
+    name: Harness gates (traceability, append-only IDs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 harness/scripts/check_traceability.py
+      - run: python3 harness/scripts/check_append_only_ids.py
+
+  tests:
+    name: Tests (${{ matrix.os }})
+    # Supported platforms per SPEC §11.9: macOS and Linux (Windows best-effort, not a v1 gate).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install -e ".[dev]"
+      - run: python3 -m pytest -q
+
+  # NFR-003 / AC-020 (offline verify/check/metadata) gets a dedicated job that cuts
+  # network access after install — added at A1 when the surface under test exists.
