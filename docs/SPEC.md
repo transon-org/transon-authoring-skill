@@ -73,9 +73,9 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - Not MCP, hosted HTTP engine, or WASM/Pyodide in v1.
 - Not shell-less product/docs agents in v1.
 - Not editor in-surface checking/disclosure.
-- Not real filesystem/network I/O in `verify` dry-run.
+- Not real filesystem/network I/O in `verify` dry-run (including inside timeout worker subprocesses).
 - Not custom `Transformer` subclasses, custom rule/operator/function registries, or non-default
-  markers in v1 (AD-017).
+  markers as a **verify execution profile** in v1 (AD-017) — templates always run under `"$"`.
 
 ## 4. Consumers
 
@@ -147,7 +147,10 @@ No console-script product; no MCP.
 - **AD-009 — Convention-first install.** Native Claude/Cursor paths (§11.9); no MCP.
 - **AD-010 — Eval-driven improvement.** Changes gated by NFR-010 / AD-020.
 - **AD-011 — Measurement before skill body.** A2 before A3.
-- **AD-012 — In-process pinned engine only.** No HTTP/WASM/MCP.
+- **AD-012 — Pinned engine package; local execution only.** Verification depends on the pinned
+  `transon` **Python package** loaded in the same environment — no hosted HTTP, WASM/Pyodide, or
+  MCP. Dry-run cases MAY run in a **short-lived local worker subprocess** that imports that same
+  package (AD-017 timeout isolation). That is still local/embedded execution, not a remote engine.
 - **AD-013 — Engine-valid under v1 profile; no editor-surface awareness.** Output may be any
   template valid for the **v1 execution profile** (AD-017), not “any conceivable engine subclass.”
   No in-surface check/disclosure.
@@ -158,15 +161,23 @@ No console-script product; no MCP.
 - **AD-016 — Obligations in SampleSet; deterministic `check_samples`.** Model proposes coverage
   obligations; user/CI accepts/rejects them and confirms the SampleSet. `check_samples` only
   checks the artifact — it never parses NL. **`coverage_complete` ≠ `confirmed`.**
-- **AD-017 — v1 execution profile.** `verify` / dry-run use only:
-  - class `transon.Transformer` (no subclasses);
+- **AD-017 — v1 execution profile (how verify executes).** `verify` / dry-run **always construct**
+  `transon.Transformer` with:
+  - the base class only (never a subclass);
   - built-in rule/operator/function registries as shipped in the pinned package;
   - default marker `"$"` (`Transformer.DEFAULT_MARKER`);
   - `max_include_depth=50` (engine default);
   - sandboxed `file_writer` + `template_loader` (AD-015);
-  - per-case wall-clock timeout **5s** (library-enforced); on timeout → `failed_stage: "dry_run"`.
-  Custom markers, custom registries, and subclassed transformers are **out of v1**. Trust boundary:
-  `verify` is for **trusted local agents/CI**, not multi-tenant untrusted tenants.
+  - the engine’s R-32 **one core recursion frame per template node** (pinned `0.1.7`; over-depth
+    surfaces as include `TransformationError`, never raw `RecursionError`);
+  - per-case wall-clock timeout **5s**, enforced by running each dry-run case in a **local worker
+    subprocess** that imports the pinned package, applies the same sandbox delegates, and returns
+    `{result, writes, errors}` over IPC. On timeout the worker is killed → `TimeoutError`,
+    `failed_stage: "dry_run"`. Subprocess isolation does not change match semantics (NFR-002): same
+    SampleSet + template + pin ⇒ same Verdict. Sandbox invariants (AD-015) hold inside the worker
+    (no FS/network). The library/CLI **MUST NOT** expose knobs for non-default marker, transformer
+    class, or registries in v1; explicit requests for those are rejected with `ProfileError` before
+    any engine call (AC-027). Trust boundary: trusted local agents/CI only.
 - **AD-018 — Authority precedence.** (1) behavior of the **pinned running engine**;
   (2) engine `docs/SPECIFICATION.md` for that version; (3) pinned `get_editor_metadata()` snapshot
   for catalog/examples structure; (4) NL intent sidecar (hints only). Never LLM memory / web /
@@ -208,9 +219,11 @@ No console-script product; no MCP.
 - **FR-006** — Stages: `samples` → `validate` → `dry_run` → `match` only (no engine round-trip).
 - **FR-007** — On verify failure, feed verbatim engine errors/diff; repair up to
   **`repair_attempts`** times. **Counting:** `repair_attempts` = max number of **repair** cycles
-  after a failed `verify` (default **3**, allowed range **1..10** in config). Total candidates
-  tried ≤ `1 + repair_attempts`. Diagram “N ≤ 3” means this default. Config overrides the default;
-  CLI `--repair-attempts` overrides config for that invocation only.
+  after a failed `verify` (default **3**, allowed range **1..10** in `.transon-authoring.json`).
+  Total candidates tried ≤ `1 + repair_attempts`. This bound is a **skill-loop** concern: the
+  library/`python -m … verify` subcommand performs a **single** deterministic `verify` (NFR-002 /
+  AC-018) and does **not** loop or accept `--repair-attempts`. The skill reads `repair_attempts`
+  from ProjectConfig when deciding whether to draft another candidate.
 - **FR-008** — On exhaustion / defer / abort / reject, return `AuthoringResult` failure (§11.5).
   Never return unverified JSON as success.
 
@@ -251,8 +264,9 @@ No console-script product; no MCP.
     Do **not** claim Cursor “discovered/ingested” the skill (OQ-008).
 
 ### Additional
-- **FR-026** — Library and module entry emit/accept only the JSON schemas in §11; reject unknown
-  `schema_version` with `status: "schema-error"`.
+- **FR-026** — Library and module entry emit/accept only the JSON schemas in §11. Malformed JSON or
+  unknown/`unsupported` `schema_version` on ingress → CLI exit **2** and a `schema-error` envelope
+  (§11.6); skill-level `AuthoringResult.status === "schema-error"` (§11.5).
 - **FR-027** — `verify` must call `check_samples` and require `ok_for_verify` (AD-019).
 - **FR-028** — Enforce AD-017 resource limits (timeout, include depth) during dry-run.
 
@@ -265,7 +279,8 @@ No console-script product; no MCP.
 - **NFR-002 — Deterministic gates.** Same SampleSet + template + pin ⇒ same `SampleCheck` /
   `Verdict`. Sandboxed I/O only.
 - **NFR-003 — Offline after install.** No network required for verify/check/metadata once the
-  pinned engine and package are installed.
+  pinned engine and package are installed (local package import and optional local worker
+  subprocesses only).
 - **NFR-004 — Snapshot drift vs pin.** `check_snapshot` fails if bundle ≠ metadata from pinned
   `transon==…`. Does not track unpinned newer releases (AD-007).
 - **NFR-005 — Honest failure.** §11.5 statuses distinguishable from success.
@@ -320,8 +335,12 @@ No console-script product; no MCP.
   fail match.
 - **AC-025** — Eval fixtures from real use lack secrets/PII; consent recorded (NFR-011).
 - **AC-026** — Failure envelopes always include `ok: false` and a §11.5 `status`.
-- **AC-027** — Custom marker / subclassed Transformer templates are rejected at `validate` or
-  profile preflight as out of v1 profile (AD-017) with clear error.
+- **AC-027** — `verify` always executes under the AD-017 default profile (base `Transformer`,
+  marker `"$"`, built-in registries). Explicit profile-violating requests (reserved CLI flags /
+  config fields for non-default marker or transformer class) are rejected with `ProfileError`
+  before engine execution; skill-level stop uses `status: "profile-rejected"` (§11.5). A template
+  JSON that merely *would* need another marker is **not** detectable as a profile violation — it
+  runs under `"$"` and fails or succeeds via normal validate/dry_run/match.
 - **AC-028** — Per-case dry-run exceeding 5s fails `dry_run` with timeout error.
 
 ### Use cases
@@ -345,7 +364,7 @@ transon-authoring/
 │   ├── metadata.py
 │   ├── examples.py
 │   ├── match.py                   # §11.4
-│   └── schemas/                   # JSON Schema documents for SampleSet, etc.
+│   └── schemas/                   # SampleSet, SampleCheck, Verdict, AuthoringResult, EvalFixture, …
 ├── resources/
 │   ├── metadata-snapshot.json     # get_editor_metadata() pin
 │   ├── metadata-snapshot.md       # provenance
@@ -371,18 +390,35 @@ transon-authoring/
 ```
 JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
+# Tagged values allowed ONLY in SampleCase.output and SampleCase.writes values:
 NoContentRef = { "$transon_authoring": "NO_CONTENT" }
-  # Only legal as a SampleCase.output (or writes value) marker meaning engine NO_CONTENT.
-  # Must not appear in templates as Transon syntax.
+LitRef = { "$transon_authoring": "lit", "value": JsonValue }
+
+AuthoringTag =
+  | NoContentRef                          # means engine NO_CONTENT sentinel
+  | LitRef                                # means the literal JsonValue in "value"
 ```
 
+**Decoding (normative):** When reading an expected `output` / `writes` value:
+
+1. If it is an object with exactly the keys required for a known tag:
+   - `NoContentRef` → compare as engine `NO_CONTENT`;
+   - `LitRef` → compare as deep-equal to `value` (use this when the literal data is itself
+     `{"$transon_authoring": "NO_CONTENT"}` or any other tagged shape).
+2. If it is an object containing `"$transon_authoring"` but is **not** a known tag → SampleSet
+   schema failure, gap `schema_invalid` (message: unknown authoring tag).
+3. Otherwise treat as ordinary `JsonValue` (including objects that happen to use other keys).
+
+Tagged forms MUST NOT appear inside **templates** or **include** map templates (those are plain
+Transon JSON). They are SampleSet expectation encoding only.
 **Serialization (stdout):** UTF-8 JSON objects; `json.dumps` with `allow_nan=False`,
 `separators=(",", ":")` optional for compactness in CI, pretty-print allowed for humans; **object
 key order is not significant** for equality of results; parsers MUST reject duplicate object keys
 and non-finite numbers (`NaN`/`Infinity`) at ingress.
 
 **Schema versions:** documents carry `schema_version` string. v1 library understands `"1.0"` for
-SampleSet, SampleCheck, Verdict, AuthoringResult, ProjectConfig, NlIntents, EvalRunner.
+SampleSet, SampleCheck, Verdict, AuthoringResult, ProjectConfig, NlIntents, EvalRunner,
+EvalFixture.
 
 ### 11.1 SampleSet & `check_samples`
 
@@ -391,7 +427,8 @@ CoverageObligation = {
   id: string,                       # stable within SampleSet
   kind: "happy_path" | "optional_present" | "optional_absent"
       | "list_empty" | "list_singleton" | "list_many" | "mode_choice" | "custom",
-  target?: string,                  # field/list/mode name when applicable
+  target?: string,                  # JSON pointer (kinds that need structural checks) or
+                                    # mode label string for mode_choice; see §11.1 table
   description: string,
   acceptance: "proposed" | "accepted" | "rejected"
 }
@@ -406,8 +443,8 @@ Waiver = {
 SampleCase = {
   id: string,
   input: JsonValue,
-  output: JsonValue | NoContentRef,
-  writes?: { [name: string]: JsonValue | NoContentRef },
+  output: JsonValue | AuthoringTag,
+  writes?: { [name: string]: JsonValue | AuthoringTag },
   satisfies: string[]               # obligation ids this case is claimed to satisfy
 }
 
@@ -416,9 +453,10 @@ Confirmation = {
   confirmed_by?: "user" | "ci",
   confirmed_at?: string,            # ISO-8601
   note?: string,
-  content_fingerprint: string       # hex sha256 over canonical subset: schema_version,
-                                    # coverage, waivers, cases, includes
-                                    # (see library canonicalization: sort keys, no WS variance)
+  content_fingerprint: string       # hex sha256 over canonical subset (sorted keys):
+                                    # schema_version, coverage, waivers, cases, includes
+                                    # intent_nl is DELIBERATELY EXCLUDED: it is human context only
+                                    # and must not invalidate confirmation when prose is edited
 }
 
 SampleSet = {
@@ -455,6 +493,8 @@ GapCode =
   | "no_cases"
   | "case_satisfies_unknown"
   | "duplicate_id"
+  | "target_invalid"
+  | "target_required"
 ```
 
 ```
@@ -470,23 +510,39 @@ SampleCheck = {
 
 **`check_samples` algorithm (normative):**
 
-1. Validate SampleSet against JSON Schema `1.0`. On failure: all flags false;
-   gap `schema_invalid`.
+1. Validate SampleSet against JSON Schema `1.0` (including AuthoringTag decoding rules in §11.0).
+   On failure: all flags false; gap `schema_invalid`.
 2. Reject duplicate `coverage.id` / `cases.id` / `waivers.id` → `duplicate_id`.
 3. Consider only obligations with `acceptance === "accepted"`. If any remain `proposed`,
-   gap `obligation_not_accepted` and `coverage_complete=false`.
-4. For each accepted obligation, it is **met** if either:
-   - some case lists its `id` in `satisfies` **and** structural side-conditions hold
-     (e.g. `list_empty` ⇒ that case’s `input` path/target is an empty array when `target` denotes
-     a list path the library can check via a simple JSON pointer in `target`, format
-     `json_pointer` starting with `/`; if pointer invalid → `custom_unmet`), or
-   - an **accepted** waiver lists the obligation id in `clears_obligation_ids` with valid refs
-     (`waiver_invalid` otherwise).
-5. `coverage_complete = (no unmet accepted obligations) && (cases.length >= 1)`.
+   gap `obligation_not_accepted` and `coverage_complete=false`. Rejected obligations are ignored.
+4. For each accepted obligation, it is **met** if an **accepted** waiver lists its `id` in
+   `clears_obligation_ids` (waiver refs must be valid else `waiver_invalid`), **or** some case
+   lists its `id` in `satisfies` **and** the kind-specific rule below holds. Unknown ids in
+   `satisfies` → `case_satisfies_unknown` (does not meet any obligation).
+
+   **JSON pointer `target`:** when a kind requires a pointer, `target` MUST be a JSON pointer
+   string starting with `/` (RFC 6901). Missing/invalid pointer → `target_required` or
+   `target_invalid`; obligation unmet. Resolve against that case’s `input` only.
+
+   | kind | `target` | Structural check on a satisfying case’s `input` |
+   |---|---|---|
+   | `happy_path` | ignored | None beyond schema: case exists with `input` + `output`. A `satisfies` claim alone meets it. |
+   | `optional_present` | required pointer | Pointer resolves to a value **and** the final key/index exists (not missing). `null` counts as present. |
+   | `optional_absent` | required pointer | Pointer does **not** resolve (missing key/index). Present `null` does **not** count as absent. |
+   | `list_empty` | required pointer | Pointer resolves to an array of length `0`. |
+   | `list_singleton` | required pointer | Pointer resolves to an array of length `1`. |
+   | `list_many` | required pointer | Pointer resolves to an array of length `≥ 2`. |
+   | `mode_choice` | optional string (mode/variant label; **not** a pointer) | **No input structural check** — mode is a property of the template under draft, not of sample inputs. Met by an accepted `satisfies` claim on any case (user/CI attestation) or an accepted waiver. |
+   | `custom` | optional | **No input structural check.** Met by `satisfies` claim or waiver; `description` is human-only. |
+
+5. `coverage_complete = (no unmet accepted obligations) && (cases.length >= 1)`. If
+   `cases.length === 0` → gap `no_cases`.
 6. `confirmed = confirmation.confirmed === true
    && confirmation.content_fingerprint === recomputed_fingerprint
    && confirmed_by in {"user","ci"}`. Else gaps `unconfirmed` / `fingerprint_mismatch`.
 7. `ok_for_verify = coverage_complete && confirmed && gaps has no schema/duplicate errors`.
+
+All steps are deterministic given the SampleSet alone (NFR-002).
 
 **Skill responsibilities:** propose obligations (`acceptance: "proposed"`); propose cases/waivers;
 present gaps; on user approval set obligations/waivers to `accepted` and set `confirmation` with
@@ -505,8 +561,8 @@ EngineError = {
 DiffEntry = {
   path: string,             # JSON pointer
   kind: "missing" | "extra" | "value_mismatch" | "type_mismatch" | "writes_mismatch",
-  expected?: JsonValue | NoContentRef | { "writes": { [name: string]: JsonValue | NoContentRef } },
-  actual?: JsonValue | NoContentRef | { "writes": { [name: string]: JsonValue | NoContentRef } }
+  expected?: JsonValue | AuthoringTag | { "writes": { [name: string]: JsonValue | AuthoringTag } },
+  actual?: JsonValue | AuthoringTag | { "writes": { [name: string]: JsonValue | AuthoringTag } }
 }
 
 Verdict = {
@@ -518,20 +574,22 @@ Verdict = {
   gaps?: Gap[],             # when failed_stage === "samples"
   json?: JsonValue,         # candidate on success
   diff?: DiffEntry[],
-  writes?: { [name: string]: JsonValue | NoContentRef }
+  writes?: { [name: string]: JsonValue | AuthoringTag }
 }
 ```
 
 **Stages:**
 
 1. **`samples`** — parse SampleSet; run `check_samples`; require `ok_for_verify`. Else
-   `failed_stage: "samples"` (malformed, zero cases, incomplete coverage, unconfirmed,
-   fingerprint mismatch).
-2. **`validate`** — `Transformer(candidate)` under AD-017; `validate()`. Profile violations
-   (non-default marker detected in construction API misuse, etc.) → `ProfileError`.
-3. **`dry_run`** — per case, `transform(input, no_content=Transformer.NO_CONTENT)` with sandboxed
-   delegates; timeout 5s; `max_include_depth=50`; `includes` from SampleSet only.
-4. **`match`** — §11.4 comparing outputs and writes.
+   `failed_stage: "samples"` (malformed handled as CLI schema-error per §11.6; semantic rejects
+   include zero cases, incomplete coverage, unconfirmed, fingerprint mismatch).
+2. **`validate`** — construct `Transformer(candidate)` **only** with AD-017 defaults; call
+   `validate()`. There is no JSON-level “custom marker” detector. `ProfileError` occurs only when
+   the caller requested a non-default profile via rejected API/CLI/config knobs (AC-027).
+3. **`dry_run`** — per case, execute in a **worker subprocess** (AD-017) with
+   `transform(input, no_content=Transformer.NO_CONTENT)`, sandboxed delegates, timeout 5s,
+   `max_include_depth=50`, `includes` from SampleSet only.
+4. **`match`** — §11.4 comparing outputs and writes (AuthoringTag decoding on expected values).
 
 `ok === true` iff all stages pass; then `assurance` is always `"matched"`.
 
@@ -539,22 +597,26 @@ Verdict = {
 
 | Concern | v1 rule |
 |---|---|
-| Transformer | `transon.Transformer` only |
-| Marker | `"$"` only |
+| Transformer | Always construct `transon.Transformer` (base class) |
+| Marker | Always `"$"` |
 | Registries | built-ins from pinned package only |
 | `include` | loader resolves `SampleSet.includes[name]` only; miss → dry_run error |
 | `file` | capture `(name, content)` in memory; never FS |
 | Custom rules/ops/fns | out of scope |
-| Depth | engine `max_include_depth=50` |
-| Timeout | 5s wall clock per case |
+| Include depth | engine `max_include_depth=50` |
+| Recursion budget (R-32) | one core frame per template node (pinned `0.1.7`); self-`include` reach ≥75 at CPython default recursion limit; over-depth → include `TransformationError`, never raw `RecursionError` |
+| Timeout | 5s wall clock per case via **local worker subprocess** |
+| Profile overrides | none; reserved knobs → `ProfileError` / exit 2 |
 | Trust | trusted local agent/CI only |
 
 ### 11.4 Matching (§5 / FR-005)
 
 **Deep equality** on JSON values (and `NoContentRef`):
 
-1. **NO_CONTENT:** If actual is the engine `NO_CONTENT` sentinel, it matches only expected
-   `NoContentRef`. It does **not** match `null`, `false`, `0`, or `""`.
+1. **NO_CONTENT:** Decode expected via §11.0. If actual is the engine `NO_CONTENT` sentinel, it
+   matches only expected `NoContentRef`. It does **not** match `null`, `false`, `0`, or `""`.
+   Expected `LitRef` whose `value` is the NoContentRef object matches only that literal JSON
+   object from the engine result (not the sentinel).
 2. **null:** matches only `null`.
 3. **boolean:** matches same boolean (not numbers).
 4. **number:** type-sensitive: Python `int` matches only `int` with equal value; `float` only
@@ -562,11 +624,22 @@ Verdict = {
 5. **string:** exact code-point equality.
 6. **array:** same length; pairwise equal in order.
 7. **object:** same key set (order ignored); each key’s values equal.
-8. **writes:** Let `W` be captured map (names → content; `NO_CONTENT` content encoded as
-   `NoContentRef` if ever applicable). If case has `writes`: deep-equal `W` to it (missing keys /
-   extras → `writes_mismatch`). If case omits `writes`: require `W` empty; else fail match.
+8. **writes:** Let `W` be captured map (names → content; encode engine `NO_CONTENT` content as
+   `NoContentRef` when returning writes). Decode expected `writes` values per §11.0. If case has
+   `writes`: deep-equal `W` to decoded expectations (missing keys / extras → `writes_mismatch`).
+   If case omits `writes`: require `W` empty; else fail match.
 
 ### 11.5 AuthoringResult & failure taxonomy
+
+**Producer:** `AuthoringResult` is the **skill-level** envelope assembled by the agent following
+`SKILL.md`. **No** `python -m transon_authoring` subcommand emits it — the module returns
+`SampleCheck` / `Verdict` / debug objects only (§11.6). The skill maps those plus conversation
+exits into `AuthoringResult`.
+
+**Conformance:** JSON Schema at `src/transon_authoring/schemas/authoring_result.json` (and related
+schemas). Verified by (1) unit tests that validate fixtures against the schema, and (2) authoring
+eval fixtures that assert the skill’s final message/object conforms to `AuthoringResult`
+(`expect` outcomes in §11.8).
 
 ```
 AuthoringResult = {
@@ -583,21 +656,21 @@ AuthoringResult = {
   gaps?: Gap[],
   last_candidate?: JsonValue,
   samples_path?: string,
-  repair_count?: number           # repairs consumed
+  repair_count?: number           # repairs consumed by the skill loop
 }
 ```
 
 | status | When |
 |---|---|
-| `matched` | success |
+| `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` |
 | `need-samples` | stopped with incomplete coverage / need more cases |
-| `deferred` | user defer |
-| `aborted` | user abort |
-| `repair-exhausted` | used all repair_attempts |
-| `samples-rejected` | verify/check failed samples stage |
-| `verify-failed` | validate/dry_run/match failed and skill stopped without repair left mapping |
-| `schema-error` | bad schema_version / JSON |
-| `profile-rejected` | outside AD-017 |
+| `deferred` | user chose defer |
+| `aborted` | user chose abort |
+| `repair-exhausted` | skill consumed all `repair_attempts` without a matched verdict |
+| `samples-rejected` | `check_samples` / verify `samples` stage failed on a schema-valid SampleSet |
+| `verify-failed` | validate, dry_run, or match failed and the skill stopped without scheduling another repair |
+| `schema-error` | malformed JSON or unsupported `schema_version` on ingress |
+| `profile-rejected` | user/agent requested an out-of-profile execution option (non-default marker/class); skill stops without calling verify — or CLI rejected the reserved knob (AC-027) |
 
 ### 11.6 Module CLI (`python -m transon_authoring`)
 
@@ -608,14 +681,32 @@ primary machine result on stderr.
 |---|---|---|---|
 | `metadata` | none | snapshot JSON (`JsonValue`) | 0 |
 | `examples search <query>` | query string | `{ "hits": [ example objects… ] }` | 0 |
-| `check-samples` | `--samples PATH` | `SampleCheck` | 0 if `ok_for_verify` else 1 |
-| `verify` | `--template PATH --samples PATH` [`--repair-attempts N`] | `Verdict` | 0 if ok else 1 |
+| `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
+| `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
 | `validate` | `--template PATH` | `{ ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ ok, result, writes, errors }` | 0/1 |
 | `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--non-interactive`] | `ProjectConfig` | 0/2 |
 
-**Exit codes:** `0` success; `1` check/verify failure; `2` usage/schema/config error; `3` internal
-unexpected error.
+**Exit codes:** `0` success; `1` semantic check/verify failure on **schema-valid** inputs; `2`
+usage / **schema** / config error; `3` internal unexpected error.
+
+**Schema vs semantic failures (FR-026):** If `--samples` or `--template` (or `--input` /
+`--includes`) cannot be parsed as JSON, fails SampleSet/template schema validation, or carries an
+unsupported `schema_version`:
+
+- exit **`2`**
+- stdout envelope:
+  `{ "schema_version": "1.0", "ok": false, "status": "schema-error", "explanation": string, "errors": EngineError[] }`
+  (not a `SampleCheck` / `Verdict` body)
+
+If the SampleSet is schema-valid but `ok_for_verify` is false, `check-samples` exits **`1`** with a
+normal `SampleCheck`. If schema-valid but verify stages fail, `verify` exits **`1`** with a normal
+`Verdict` (`failed_stage` set).
+
+**No repair loop on CLI:** `verify` runs once. There is **no** `--repair-attempts` flag (FR-007).
+
+**Reserved profile knobs:** flags such as `--marker` / `--transformer` are rejected (exit **2**,
+`ProfileError` in the schema-error/profile envelope) even if present for forward-compat parsing.
 
 **Engine errors:** `EngineError.message` is the **exact** `str(exception)` from the engine when
 applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
@@ -648,20 +739,46 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
 Initial committed values are chosen at A2 standup and become part of the gate identity; changing
 them is an explicit eval-policy commit.
 
-- **Population / denominator:** all fixtures under `evals/cases/` with
-  `expect: "matched" | "refuse"`. Infra failures (`infra_error`) excluded from denominator but
-  reported; if infra skips &gt; 10% of fixtures → gate **fail**.
-- **Authoring pass rate:** `#fixtures with majority matched success / #scored should-succeed`.
-- **Adversarial:** fixtures with `expect: "refuse"` must not invent operators/modes; structured
-  failure required. Fixtures may instead use `expect: "matched_correction"` when a real metadata
-  operator is the intended recovery — counted separately, not in the 100% refuse bucket.
+**EvalFixture** (`evals/cases/*.json`, schema_version `"1.0"`):
+```
+EvalFixture = {
+  schema_version: "1.0",
+  id: string,
+  expect: "matched" | "refuse" | "matched_correction",
+  intent_nl: string,
+  samples?: SampleSet,              # required for expect matched / matched_correction when
+                                    # the fixture supplies the SampleSet rather than driving the
+                                    # full sample loop
+  notes?: string,
+  consent?: {                       # required when sourced from real use (NFR-011)
+    by: string,
+    at: string,                     # ISO-8601
+    note: string
+  },
+  redacted: boolean                 # true if privacy redaction applied
+}
+```
+
+- **Population:** all committed fixtures under `evals/cases/`.
+- **Buckets / denominators:**
+  - **should-succeed (authoring rate):** fixtures with `expect: "matched"`.
+  - **should-refuse (adversarial 100%):** fixtures with `expect: "refuse"`.
+  - **correction (reported, not in either rate above):** fixtures with
+    `expect: "matched_correction"` — skill may map a nonexistent name to a real metadata
+    operator/mode and still `matched`; tracked separately for diagnostics; neither raises nor
+    lowers the refuse invariant.
+- **Infra:** `infra_error` runs excluded from denominators but reported; if infra skips &gt; 10% of
+  fixtures in a bucket → gate **fail** for that gate.
+- **Authoring pass rate:** `#should-succeed fixtures with majority matched / #scored should-succeed`.
+- **Adversarial refuse rate:** `#refuse fixtures with majority refuse-success / #scored refuse`
+  must be **100%** (no invented operators/modes).
 - **Ratchet:** let `T` be declared authoring target (starts 0.80). After release R with achieved
   rate `A`, set `T' = max(T, min(A, 0.95))` by explicit commit to `evals/targets.json`. Never
   decrease `T` silently.
-- **Fixture regression:** any previously passing captured fixture that fails majority → gate fail
-  regardless of aggregate rate.
-- **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; record
-  `consent: { by, at, note }` in fixture metadata; default deny.
+- **Fixture regression:** any previously passing captured fixture (any expect bucket) that fails
+  majority → gate fail regardless of aggregate rate.
+- **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
+  `redacted: true`; record `consent`; default deny.
 
 ### 11.9 Project config & installation
 
@@ -734,9 +851,11 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   drift gate, NL-intents sidecar skeleton, `SKILL.md` stub, §17 matrix stub. *DoD:*
   `python -m transon_authoring metadata` works offline against pin; `check_snapshot` green;
   no open decisions required to start A1. **ID lock on A0 approval.**
-- **A1 — Verification library.** Full §11.2–11.6 verify/match/sandbox/CLI; SampleSet schema
-  validation used by verify preflight. *DoD:* AC-015/016/018/021/023/024/027/028 green on
-  fixtures; hand AC-001 path with fixed SampleSet (no skill body).
+- **A1 — Verification library.** Full §11.2–11.6 verify/match/sandbox/CLI (single-shot verify; no
+  repair flag); SampleSet schema validation; worker-subprocess timeout; AuthoringTag encoding.
+  *DoD:* AC-015/016/018/021/023/024/027/028 green on fixtures (AC-027 = default-profile execution +
+  rejection of reserved profile knobs — not “detect custom marker in template JSON”); hand AC-001
+  path with fixed SampleSet (no skill body).
 - **A2 — Measurement spine.** `check_samples` complete; config init; `evals/runner.json` +
   targets + seed cases; `check_evals` red/green; trivial skill stub only. *DoD:* AD-020
   executable; NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
@@ -750,7 +869,8 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 
 ## 15. Open questions
 
-- **OQ-001** — **Resolved (2026-07-09; rev 2026-07-10):** in-process pin only; no HTTP/WASM/MCP.
+- **OQ-001** — **Resolved (2026-07-09; rev 2026-07-10):** pinned local engine package only; no
+  HTTP/WASM/MCP. Dry-run may use local worker subprocesses for timeout (AD-012/017).
 - **OQ-002** — **Resolved (2026-07-09):** standalone repo (AD-001).
 - **OQ-003** — **Resolved (2026-07-09; rev 2026-07-10):** authoritative example JSON =
   snapshot `docs.examples`; NL intents in sidecar by `name`; no editor codec corpus duplication
@@ -772,7 +892,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 - Pin staleness vs newer engine → upgrade PR policy (AD-007); not silent.
 - Verify bypass → AD-019 + samples stage (AC-016).
 - Self-approval → fingerprint + library never sets confirmed.
-- `file`/`include` → sandbox only; residual in-process trust boundary (AD-017).
+- `file`/`include` → sandbox only (incl. worker); residual trust boundary (AD-017).
 - Weak obligations → user confirmation + evals.
 - Eval cost/flakiness → majority-of-3 + infra_skip cap.
 - Privacy leaks in fixtures → NFR-011.
@@ -813,9 +933,9 @@ excluded from active coverage.
 | FR-023 | AC-012 | A3 | sample-loop evals |
 | FR-024 | AC-010, AC-011 | A3 | sample-loop evals |
 | FR-025 | AC-010, AC-017 | A3 | sample-loop evals |
-| FR-026 | AC-021, AC-026 | A1 | schema unit |
+| FR-026 | AC-021, AC-026 | A1 | schema unit + CLI exit 2 |
 | FR-027 | AC-016 | A1 | verify preflight |
-| FR-028 | AC-027, AC-028 | A1 | profile + timeout unit |
+| FR-028 | AC-027, AC-028 | A1 | profile-knob reject + timeout worker unit |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
@@ -835,7 +955,7 @@ excluded from active coverage.
 | Milestone | Ready to begin? | Notes |
 |---|---|---|
 | **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. |
-| **A1** | **Yes** | Verify/match/sandbox/CLI/profile normative; no blocking OQ. |
+| **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. |
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. |
 | A3 | After A2 green | Skill body only. |
 | A4 | After A3; needs OQ-010 decision for Claude listing depth | Non-blocking for A0–A3. |
