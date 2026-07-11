@@ -430,6 +430,31 @@ def test_fr_006_timeout_error_propagates_with_case_id(monkeypatch):
     ]
 
 
+def test_fr_020_oq_018_invalid_include_fails_dry_run_stage():
+    # OQ-018g: an invalid template inside `includes` fails at the `dry_run`
+    # stage (include-load error on the including case), never at `samples` —
+    # check_samples is engine-free and validates includes values only as
+    # JsonValues (§11.1 step 1, AD-016 / NFR-002).
+    ss = make_sample_set(
+        [{"id": "c1", "input": {"x": 1}, "output": 1, "satisfies": ["happy"]}],
+        includes={"inc": {"$": "no_such_rule"}},
+    )
+    # The samples stage passes: the invalid include is invisible to it.
+    assert check_samples(ss)["ok_for_verify"] is True
+
+    verdict = verify({"$": "include", "name": "inc"}, ss)
+    assert verdict["ok"] is False
+    assert verdict["failed_stage"] == "dry_run"
+    assert len(verdict["errors"]) == 1
+    error = verdict["errors"][0]
+    # Engine-verbatim DefinitionError from the include-load, attributed to the
+    # including case (OQ-011).
+    assert error["type"] == "DefinitionError"
+    assert error["engine_type"] == "DefinitionError"
+    assert error["case_id"] == "c1"
+    assert "no_such_rule" in error["message"]
+
+
 # ---------------------------------------------------------------------------
 # Stage 4 — match (FR-006 / §11.4 / OQ-013)
 # ---------------------------------------------------------------------------

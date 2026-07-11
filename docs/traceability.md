@@ -28,7 +28,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-017 | AC-008 | A2 | check_evals | [ ] | |
 | FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | |
 | FR-019 | AC-009 | A4 | check_install | [ ] | |
-| FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [ ] | |
+| FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [x] | tests/test_check_samples.py (test_fr_020_ac_010_gap_codes_and_waiver_flow, test_fr_020_oq_018_placeholder_fingerprint_both_gaps, test_fr_020_oq_018_confirmed_true_missing_confirmed_by_is_unconfirmed, test_fr_020_oq_018_waiver_on_rejected_obligation_not_invalid, test_fr_020_oq_018_proposed_waiver_inert_dangling_ref_invalid, test_fr_020_oq_018_mode_choice_and_custom_target_ignored, test_fr_020_ac_017_flags_independent, test_fr_020_ac_018_sample_check_byte_deterministic), tests/test_verify.py (test_fr_020_oq_018_invalid_include_fails_dry_run_stage) |
 | FR-021 | AC-029, AC-017 | A2 | schema unit | [x] | tests/test_sample_persistence.py (test_fr_021_ac_029_persisted_confirmation_round_trips, test_ac_029_content_edit_flips_fingerprint_mismatch, test_fr_021_oq_015_fingerprint_only_from_sample_check, test_fr_021_oq_015_cli_acquisition_route, test_fr_021_ac_017_confirmation_alone_insufficient) |
 | FR-022 | AC-014 | A2 | config unit | [ ] | |
 | FR-023 | AC-012 | A3 | sample-loop evals | [ ] | |
