@@ -1,0 +1,33 @@
+#!/bin/sh
+# Binding traceability trailer. Any commit that touches *product code* must
+# carry a `Refs:` or `Slice:` trailer naming the requirement/slice it serves, so
+# `git log --grep FR-xxx` becomes a complete audit of where a requirement was
+# implemented. Commits touching no product code (harness/, docs/, .github/, and
+# the .claude/ / .cursor/ tool adapters) are exempt; the product `adapters/`
+# directory IS product code and requires a trailer.
+#
+# Enable once per clone:
+#   git config core.hooksPath harness/githooks
+msg_file="$1"
+
+# Product-code directories (mirror check_traceability.py CODE_DIRS exactly).
+code=$(git diff --cached --name-only | grep -E '^(src|tests|scripts|evals|install|adapters)/' || true)
+[ -z "$code" ] && exit 0
+
+# Parse the actual trailer block (not arbitrary body lines) and validate values:
+# Refs: one or more requirement IDs; Slice: a non-empty slug.
+trailers=$(git interpret-trailers --parse <"$msg_file" 2>/dev/null || true)
+if printf '%s\n' "$trailers" |
+  grep -qE '^Refs: *(FR|NFR|AC|UC|AD|OQ)-[0-9]+([ ,]+(FR|NFR|AC|UC|AD|OQ)-[0-9]+)* *$'; then
+  exit 0
+fi
+if printf '%s\n' "$trailers" | grep -qE '^Slice: *[A-Za-z0-9][A-Za-z0-9._/-]* *$'; then
+  exit 0
+fi
+
+echo "commit-msg: a code-touching commit needs a valid trailer (in the trailer block), e.g.:" >&2
+echo "    Refs: FR-020            (one or more FR/NFR/AC/UC/AD/OQ IDs)" >&2
+echo "    Slice: harness-spine    (non-empty slug)" >&2
+echo "  staged product-code files:" >&2
+echo "$code" | sed 's/^/    /' >&2
+exit 1

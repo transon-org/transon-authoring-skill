@@ -848,21 +848,33 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 ## 14. Milestones
 
 - **A0 — Grounding spine.** Repo, package skeleton, pin `transon==0.1.7`, snapshot + provenance +
-  drift gate, NL-intents sidecar skeleton, `SKILL.md` stub, §17 matrix stub. *DoD:*
-  `python -m transon_authoring metadata` works offline against pin; `check_snapshot` green;
-  no open decisions required to start A1. **ID lock on A0 approval.**
+  drift gate, NL-intents sidecar skeleton, `SKILL.md` stub, §17 matrix stub. *Resolve at start:*
+  **OQ-019** (Python floor, needed for `pyproject.toml`), **OQ-021** (sidecar consistency gate),
+  **OQ-022** (`search_examples` minimal contract) — each resolved by a SPEC edit before the
+  corresponding artifact lands. *DoD:* `python -m transon_authoring metadata` works offline
+  against pin; `check_snapshot` green (including OQ-021 sidecar check); no open decisions
+  required to start A1. **ID lock on A0 approval.**
 - **A1 — Verification library.** Full §11.2–11.6 verify/match/sandbox/CLI (single-shot verify; no
   repair flag); SampleSet schema validation; worker-subprocess timeout; AuthoringTag encoding.
-  *DoD:* AC-015/016/018/021/023/024/027/028 green on fixtures (AC-027 = default-profile execution +
-  rejection of reserved profile knobs — not “detect custom marker in template JSON”); hand AC-001
-  path with fixed SampleSet (no skill body).
+  *Resolve during design, before implementation of the affected part:* **OQ-011** (per-case
+  attribution + reporting policy), **OQ-012** (`NO_CONTENT` encoding outside expectations),
+  **OQ-013** (deterministic array ordering — prerequisite for AC-018 fixtures), **OQ-014**
+  (envelope closure). *DoD:* OQ-011–OQ-014 closed in SPEC; AC-015/016/018/021/023/024/027/028
+  green on fixtures (AC-027 = default-profile execution + rejection of reserved profile knobs —
+  not “detect custom marker in template JSON”); hand AC-001 path with fixed SampleSet (no skill
+  body).
 - **A2 — Measurement spine.** `check_samples` complete; config init; `evals/runner.json` +
-  targets + seed cases; `check_evals` red/green; trivial skill stub only. *DoD:* AD-020
-  executable; NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
+  targets + seed cases; `check_evals` red/green; trivial skill stub only. *Resolve at standup,
+  before the corresponding code:* **OQ-015** (fingerprint canonicalization + acquisition path —
+  before `check_samples`), **OQ-016** (eval bucket scoring) and **OQ-017** (eval harness shape) —
+  both before `check_evals`; **OQ-018** (`check_samples` edge semantics) and **OQ-023** (AC-011
+  traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
+  NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
 - **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses.
-  *DoD:* authoring target met; AC-003/004/010–014/017/019/025/026 green.
+  *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011). *DoD:* authoring target met;
+  AC-003/004/010–014/017/019/025/026 green.
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
-  OQ-010. *DoD:* AC-005/007/009.
+  OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009.
 - **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
 
 ---
@@ -883,6 +895,59 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 - **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
 - **OQ-010** — *(open; A4 only)* Claude Code headless skill listing. Until resolved, CI asserts
   **install integrity** only for Claude (FR-019 / AC-009). Does **not** block A0–A3.
+- **OQ-011** — *(open; resolve during A1 design, before A1 DoD)* Per-case attribution in
+  `Verdict`: `EngineError` / `DiffEntry` carry no `case_id`, so multi-case `dry_run` / `match`
+  failures are ambiguous — this degrades the verbatim-error repair loop (FR-007). Also decide the
+  reporting policy: fail-fast at first failing case vs run all cases and report all failures.
+- **OQ-012** — *(open; A1)* Encoding of engine `NO_CONTENT` **outside** SampleSet expectations:
+  `dry-run` `result`, `DiffEntry.actual`, and root-level `Verdict.writes` values. §11.0 currently
+  scopes AuthoringTag to "SampleSet expectation encoding only", which read literally forbids the
+  natural answer (emit `NoContentRef`). Needs an explicit carve-out or alternative encoding.
+- **OQ-013** — *(open; A1)* Deterministic ordering of `gaps[]`, `errors[]`, `diff[]`. AC-018
+  requires identical semantic content and §11.4 makes array order significant, so these arrays
+  need a defined sort (e.g., source-document order, then code) or a per-field
+  order-insensitivity carve-out.
+- **OQ-014** — *(open; A1)* Envelope closure: stdout envelope for exit **3**; missing
+  `schema_version` on the `examples search` / `validate` / `dry-run` envelopes vs FR-026 / §11.0;
+  `PreflightError` is declared in `EngineError.type` but never referenced — define when it occurs
+  or drop it; schema of the `--includes PATH` file (presumably the `SampleSet.includes` map
+  shape); which JSON Schema draft "JSON Schema `1.0` validation" (§11.1 step 1) uses.
+- **OQ-015** — *(open; resolve at A2 standup, before `check_samples` lands)* Byte-precise
+  `content_fingerprint` canonicalization: separators, `ensure_ascii`/unicode policy, number
+  formatting (`1` vs `1.0`), and whether an absent `includes` key hashes as omitted or as `{}`.
+  Any divergence between producers yields spurious `fingerprint_mismatch`, silently invalidating
+  confirmations. Also make the acquisition path normative: the skill obtains the fingerprint from
+  `SampleCheck.content_fingerprint` (via `check-samples` on the unconfirmed set), never computes
+  it by hand.
+- **OQ-016** — *(open; A2 standup)* Mechanical eval scoring for two buckets: which
+  `AuthoringResult.status` values count as **refuse-success** for `expect: "refuse"`; and how
+  `matched_correction` scoring differs from plain `matched` (or whether the bucket label is
+  reporting-only). `check_evals` cannot be implemented without this.
+- **OQ-017** — *(open; A2 standup)* Eval harness shape: how the runner pinned by
+  `evals/runner.json` actually drives the skill (headless coding agent vs raw API tool loop),
+  which tools are exposed, and how `SKILL.md` is injected. AD-020 pins the *values*; the harness
+  *architecture* is still unspecified and sits on the AD-011 critical path.
+- **OQ-018** — *(open; A2)* `check_samples` edge semantics: valid placeholder for the required
+  `Confirmation.content_fingerprint` before first confirmation, and whether `fingerprint_mismatch`
+  is emitted alongside `unconfirmed` when `confirmed === false`; gap code when `confirmed: true`
+  but `confirmed_by` is missing; whether a waiver clearing a **rejected** obligation is
+  `waiver_invalid`; handling of `proposed` (unaccepted) waivers; whether `target` on
+  `mode_choice` / `custom` is validated (`target_invalid`) or ignored; stage attribution when an
+  `includes` template is itself invalid (`samples` vs `dry_run`).
+- **OQ-019** — *(open; A0 start)* Python version floor for the package — needed literally in the
+  A0 `pyproject.toml` skeleton (the pinned engine supports ≥3.10 by its dependency markers).
+- **OQ-020** — *(open; A4)* Distribution channel for the Python package itself (PyPI name
+  `transon-authoring` vs private index). §11.9 covers skill-file install only; UC-004's install
+  story depends on this. Does **not** block A0–A3.
+- **OQ-021** — *(open; A0)* Sidecar consistency gate: assert `nl-intents.json` keys ⊆ snapshot
+  example names (fold into `check_snapshot`) and define behavior for examples without NL intents,
+  so a pin bump cannot silently strand dangling or missing sidecar entries.
+- **OQ-022** — *(open; A0)* Minimal `search_examples` contract so AC-022 is testable: at least
+  "exact `name` match must return that example", plus a bounded, deterministically ordered result
+  list. Ranking beyond that may stay unspecified.
+- **OQ-023** — *(open; A2/A3)* Traceability tension on AC-011: FR-021 maps to AC-011 at **A2**,
+  but "conversational confirm" is skill-body behavior (**A3**). Split AC-011 into a schema half
+  (FR-021, A2-testable) and a conversational half (FR-024, A3), or re-map the matrix.
 
 ---
 
@@ -954,9 +1019,9 @@ excluded from active coverage.
 
 | Milestone | Ready to begin? | Notes |
 |---|---|---|
-| **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. |
-| **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. |
-| **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. |
-| A3 | After A2 green | Skill body only. |
-| A4 | After A3; needs OQ-010 decision for Claude listing depth | Non-blocking for A0–A3. |
+| **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
+| **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
+| **A2** | **Yes, after standup decisions** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. OQ-015–018 must close at standup before the affected code (in DoD). |
+| A3 | After A2 green | Skill body only. Entry: OQ-023 resolved. |
+| A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. |
 | A5 | After A4 | Optional editor sink demo. |

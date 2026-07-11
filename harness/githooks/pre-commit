@@ -1,0 +1,15 @@
+#!/bin/sh
+# Binding inner-loop gate. The deterministic checks an agent is *told* to run
+# before finishing must also run before a commit can land — so drift cannot be
+# committed locally, not just blocked at the PR.
+#
+# Enable once per clone:
+#   git config core.hooksPath harness/githooks
+#
+# Skip in an emergency with --no-verify (CI still enforces the same checks).
+# Pure-stdlib gates only — the hook must work without the project venv.
+set -e
+
+python3 harness/scripts/check_traceability.py
+# Requirement IDs are append-only vs the committed ledger — never deleted or renumbered.
+python3 harness/scripts/check_append_only_ids.py

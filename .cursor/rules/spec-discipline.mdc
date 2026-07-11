@@ -1,0 +1,13 @@
+---
+description: Operating contract for the Transon Authoring Skill repo — always applies.
+alwaysApply: true
+---
+
+Read `AGENTS.md` and follow it — it is the canonical, tool-neutral operating contract for this
+repo. The product contract is `docs/SPEC.md`; behavior changes go SPEC-first, requirement IDs are
+append-only, Transon semantics come only from the pinned engine / its SPECIFICATION / the pinned
+metadata snapshot (never model memory), and no template is ever reported valid unless `verify`
+returns `assurance: "matched"`.
+
+Tool-neutral harness bodies live in `harness/`; the files under `.cursor/` are thin adapters that
+point there. Never copy a body into `.cursor/` — reference it.
