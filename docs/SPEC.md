@@ -381,6 +381,11 @@ transon-authoring/
     └── traceability.md            # generated or maintained matrix (§17)
 ```
 
+Repo-root `resources/` is the canonical, human-edited source. The wheel build maps it into the
+package as `transon_authoring/resources/` (hatchling force-include) so the installed package
+satisfies NFR-003 / the §11.6 `metadata` subcommand offline; the library loads the snapshot via
+`importlib.resources` with a repo-root fallback for source checkouts.
+
 ---
 
 ## 11. Normative contracts
@@ -716,7 +721,9 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
 - **A0 pin:** `transon==0.1.7`, expect `metadata_version == "3.0"`,
   `engine_version == "0.1.7"` in snapshot.
 - **“Current metadata”** = metadata from that pin after `sync-metadata`, bundled in-repo.
-- **Drift:** bundle hash/content vs live `get_editor_metadata()` under the pinned install.
+- **Drift:** bundle hash/content vs live `get_editor_metadata()` under the pinned install. Drift
+  also covers the NL sidecar: `check_snapshot` enforces the OQ-021 consistency rules (sidecar
+  keys ⊆ snapshot example names; provenance sidecar hash current).
 - **Newer releases:** not red by drift alone. Upgrade path: bump pin → sync → update NL sidecar →
   PR. Optional scheduled notifier (OQ-004) opens that PR.
 
@@ -934,17 +941,36 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   `waiver_invalid`; handling of `proposed` (unaccepted) waivers; whether `target` on
   `mode_choice` / `custom` is validated (`target_invalid`) or ignored; stage attribution when an
   `includes` template is itself invalid (`samples` vs `dry_run`).
-- **OQ-019** — *(open; A0 start)* Python version floor for the package — needed literally in the
-  A0 `pyproject.toml` skeleton (the pinned engine supports ≥3.10 by its dependency markers).
+- **OQ-019** — **Resolved (2026-07-11):** Python floor is **`>=3.10`** in `pyproject.toml`. The
+  pinned engine's actual marker is `>=3.9` (checked in the `transon==0.1.7` checkout), so any
+  floor ≥3.9 is dependency-compatible; 3.10 is chosen because 3.9 is past end-of-life
+  (Oct 2025) and the AGENTS.md stack contract already states ≥3.10. Note `tomllib` is 3.11+:
+  repo scripts that read the pin from `pyproject.toml` must not import `tomllib` (parse the pin
+  line textually).
 - **OQ-020** — *(open; A4)* Distribution channel for the Python package itself (PyPI name
   `transon-authoring` vs private index). §11.9 covers skill-file install only; UC-004's install
   story depends on this. Does **not** block A0–A3.
-- **OQ-021** — *(open; A0)* Sidecar consistency gate: assert `nl-intents.json` keys ⊆ snapshot
-  example names (fold into `check_snapshot`) and define behavior for examples without NL intents,
-  so a pin bump cannot silently strand dangling or missing sidecar entries.
-- **OQ-022** — *(open; A0)* Minimal `search_examples` contract so AC-022 is testable: at least
-  "exact `name` match must return that example", plus a bounded, deterministically ordered result
-  list. Ranking beyond that may stay unspecified.
+- **OQ-021** — **Resolved (2026-07-11):** Sidecar consistency is part of `check_snapshot` (no
+  separate gate). Normative checks: (a) `resources/nl-intents.json` parses, has
+  `schema_version: "1.0"` and an `intents` object per FR-010; (b) every key of `intents` MUST be
+  the `name` of an example in the bundled snapshot's `docs.examples` — any dangling key is a
+  **failure** (gate red, exit 1, dangling names listed on stderr); (c) snapshot examples
+  **without** a sidecar entry are **allowed** — the gate stays green but MUST report the count of
+  uncovered examples on stderr (full sorted name list under `--verbose`), so a pin bump never
+  *silently* strands missing entries; (d) the sidecar's SHA-256 recorded in the provenance file
+  (FR-010) MUST match the current sidecar bytes — mismatch is a failure until `sync-metadata` is
+  re-run.
+- **OQ-022** — **Resolved (2026-07-11):** Minimal normative
+  `search_examples(query: str, *, limit: int = 10) -> list` contract: (a) **exact-name
+  guarantee** — if `query` equals an example `name` (case-sensitive), that example MUST be in the
+  results, ranked first; (b) **bound** — at most `limit` results (`limit ≥ 1`; default 10);
+  (c) **determinism** — results are a pure function of (query, snapshot, sidecar); ties and all
+  ranking below the exact-name hit are ordered by the example's index in snapshot `docs.examples`
+  (corpus order); (d) **payload** — each hit is the snapshot example object verbatim, plus an
+  optional `"nl"` string copied from the sidecar when present; retrieval MAY match over `name`,
+  `tags`, `doc`, and sidecar NL text (FR-010), but hit *content* other than `nl` comes only from
+  the snapshot (this is what AC-022's "sidecar enriches display only" means). Ranking beyond
+  (a)–(c) is unspecified.
 - **OQ-023** — *(open; A2/A3)* Traceability tension on AC-011: FR-021 maps to AC-011 at **A2**,
   but "conversational confirm" is skill-body behavior (**A3**). Split AC-011 into a schema half
   (FR-021, A2-testable) and a conversational half (FR-024, A3), or re-map the matrix.
