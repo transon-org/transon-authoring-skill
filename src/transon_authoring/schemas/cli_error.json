@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CliError",
+  "description": "SPEC 11.6 CliError, schema_version 1.0 (FR-026, AC-021/AC-026, OQ-014a). Failure envelope: ok is always false.",
+  "type": "object",
+  "required": ["schema_version", "ok", "status", "explanation", "errors"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "ok": {"const": false},
+    "status": {"enum": ["schema-error", "profile-rejected", "internal-error"]},
+    "explanation": {"type": "string"},
+    "errors": {
+      "description": "may be empty for \"internal-error\"",
+      "type": "array",
+      "items": {"$ref": "#/$defs/engineError"}
+    }
+  },
+  "$defs": {
+    "engineError": {
+      "type": "object",
+      "required": ["type", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "DefinitionError",
+            "TransformationError",
+            "ProfileError",
+            "TimeoutError",
+            "PreflightError"
+          ]
+        },
+        "message": {"type": "string"},
+        "engine_type": {"type": "string"},
+        "path": {"type": "string"},
+        "case_id": {"type": "string"}
+      }
+    }
+  }
+}

@@ -10,7 +10,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 # AD-007 — initial engine pin (A0 baseline). Bumping this pin is a deliberate,
 # reviewed change: sync the metadata snapshot and refresh the NL sidecar with it.
-dependencies = ["transon==0.1.7"]
+dependencies = [
+    "transon==0.1.7",
+    # OQ-014e — runtime JSON Schema (draft 2020-12) validation for §11 documents.
+    "jsonschema>=4.18",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

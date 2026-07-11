@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuthoringResult",
+  "description": "SPEC 11.5 AuthoringResult, schema_version 1.0 (FR-026, AC-026). Skill-level envelope; no module subcommand emits it. \"internal-error\" is CLI-level only and deliberately absent from status (OQ-014a).",
+  "type": "object",
+  "required": ["schema_version", "ok", "status", "explanation"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "ok": {"type": "boolean"},
+    "status": {
+      "enum": [
+        "matched",
+        "need-samples",
+        "deferred",
+        "aborted",
+        "repair-exhausted",
+        "samples-rejected",
+        "verify-failed",
+        "schema-error",
+        "profile-rejected"
+      ]
+    },
+    "explanation": {"type": "string"},
+    "template": {
+      "description": "only when ok (any JsonValue)"
+    },
+    "verdict": {"$ref": "#/$defs/verdict"},
+    "sample_check": {"$ref": "#/$defs/sampleCheck"},
+    "gaps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gap"}
+    },
+    "last_candidate": true,
+    "samples_path": {"type": "string"},
+    "repair_count": {
+      "description": "repairs consumed by the skill loop",
+      "type": "number"
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "type": "object",
+      "required": ["schema_version", "ok", "errors"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "ok": {"type": "boolean"},
+        "assurance": {"const": "matched"},
+        "failed_stage": {"enum": ["samples", "validate", "dry_run", "match"]},
+        "errors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/engineError"}
+        },
+        "gaps": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/gap"}
+        },
+        "json": true,
+        "diff": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/diffEntry"}
+        },
+        "writes": {
+          "description": "reserved; never emitted by verify in v1 (OQ-011)",
+          "type": "object"
+        }
+      }
+    },
+    "sampleCheck": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "coverage_complete",
+        "confirmed",
+        "ok_for_verify",
+        "gaps",
+        "content_fingerprint"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "coverage_complete": {"type": "boolean"},
+        "confirmed": {"type": "boolean"},
+        "ok_for_verify": {"type": "boolean"},
+        "gaps": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/gap"}
+        },
+        "content_fingerprint": {"type": "string"}
+      }
+    },
+    "engineError": {
+      "type": "object",
+      "required": ["type", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "DefinitionError",
+            "TransformationError",
+            "ProfileError",
+            "TimeoutError",
+            "PreflightError"
+          ]
+        },
+        "message": {"type": "string"},
+        "engine_type": {"type": "string"},
+        "path": {"type": "string"},
+        "case_id": {"type": "string"}
+      }
+    },
+    "diffEntry": {
+      "type": "object",
+      "required": ["path", "kind", "case_id"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "kind": {
+          "enum": [
+            "missing",
+            "extra",
+            "value_mismatch",
+            "type_mismatch",
+            "writes_mismatch"
+          ]
+        },
+        "expected": true,
+        "actual": true,
+        "case_id": {"type": "string"}
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "schema_invalid",
+            "missing_happy_path",
+            "optional_present_unmet",
+            "optional_absent_unmet",
+            "list_empty_unmet",
+            "list_singleton_unmet",
+            "list_many_unmet",
+            "mode_choice_unmet",
+            "custom_unmet",
+            "obligation_not_accepted",
+            "waiver_invalid",
+            "unconfirmed",
+            "fingerprint_mismatch",
+            "no_cases",
+            "case_satisfies_unknown",
+            "duplicate_id",
+            "target_invalid",
+            "target_required"
+          ]
+        },
+        "message": {"type": "string"},
+        "obligation_id": {"type": "string"},
+        "case_id": {"type": "string"}
+      }
+    }
+  }
+}
