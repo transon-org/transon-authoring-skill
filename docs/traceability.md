@@ -40,7 +40,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals | [ ] | |
 | NFR-002 | AC-018 | A1 | determinism unit | [ ] | |
 | NFR-003 | AC-020 | A1 | offline CI job | [ ] | |
-| NFR-004 | AC-006 | A0 | check_snapshot | [ ] | |
+| NFR-004 | AC-006 | A0 | check_snapshot | [x] | tests/test_check_snapshot.py (test_nfr_004_ac_006_fresh_sync_is_green, test_nfr_004_ac_006_drift_gate, test_nfr_004_stale_provenance_snapshot_hash_is_red, test_nfr_004_oq_021_dangling_sidecar_key_is_red, test_nfr_004_oq_021_uncovered_examples_stay_green_with_count, test_nfr_004_off_pin_root_is_red, test_nfr_004_repo_root_is_green) |
 | NFR-005 | AC-026 | A1 | envelope unit | [ ] | |
 | NFR-006 | AC-019 | A3 | repair unit | [ ] | |
 | NFR-007 | AC-005 | A4 | check_parity | [ ] | |

@@ -18,6 +18,18 @@ from typing import Any, Mapping
 
 _JSON_BLOCK_RE = re.compile(r"```json\n(.*?)```", re.DOTALL)
 
+# Textual pin extraction from the pyproject dependency line, e.g.
+#   dependencies = ["transon==0.1.7"]
+# PEP 440 version charset in the capture so quotes/brackets stay out of it.
+# Textual on purpose: no ``tomllib`` — the Python floor is 3.10 (OQ-019).
+PIN_RE = re.compile(r"transon==([0-9A-Za-z.!+*-]+)")
+
+
+def extract_pin(pyproject_text: str) -> str | None:
+    """Return the ``transon==<version>`` pin from *pyproject_text*, or None."""
+    match = PIN_RE.search(pyproject_text)
+    return match.group(1) if match else None
+
 
 def canonical_bytes(obj: Any) -> bytes:
     """Serialize *obj* to the canonical snapshot byte form."""

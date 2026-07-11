@@ -20,7 +20,6 @@ Exit codes: 0 success, 2 pin/config error.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from datetime import datetime, timezone
 from importlib.metadata import version as installed_version
@@ -29,6 +28,7 @@ from pathlib import Path
 try:
     from transon_authoring._snapshot import (
         canonical_bytes,
+        extract_pin,
         render_provenance,
         sha256_hex,
     )
@@ -36,14 +36,10 @@ except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from transon_authoring._snapshot import (
         canonical_bytes,
+        extract_pin,
         render_provenance,
         sha256_hex,
     )
-
-# Textual pin extraction from the dependency line, e.g.
-#   dependencies = ["transon==0.1.7"]
-# PEP 440 version charset in the capture so quotes/brackets stay out of it.
-PIN_RE = re.compile(r"transon==([0-9A-Za-z.!+*-]+)")
 
 SIDECAR_SKELETON = {"schema_version": "1.0", "intents": {}}
 
@@ -67,14 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     if not pyproject.is_file():
         print(f"sync-metadata: no pyproject.toml under {root}", file=sys.stderr)
         return 2
-    match = PIN_RE.search(pyproject.read_text(encoding="utf-8"))
-    if not match:
+    pin = extract_pin(pyproject.read_text(encoding="utf-8"))
+    if pin is None:
         print(
             f"sync-metadata: no 'transon==<version>' pin found in {pyproject}",
             file=sys.stderr,
         )
         return 2
-    pin = match.group(1)
 
     installed = installed_version("transon")
     if installed != pin:
