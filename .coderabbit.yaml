@@ -61,7 +61,10 @@ reviews:
         mode: error
         instructions: |
           Applies when the diff touches docs/SPEC.md or docs/id-ledger.json.
-          Fail if:
+          The pairing rule takes effect when docs/id-ledger.json exists on the
+          base branch: if it does not, the project is pre-A0 and this check
+          passes — including the PR that first introduces the ledger.
+          Otherwise fail if:
           - docs/SPEC.md introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
             that did not appear in the file before, and docs/id-ledger.json in
             this same PR does not add exactly that number to the matching
