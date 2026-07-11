@@ -3,11 +3,20 @@
   "title": "AuthoringResult",
   "description": "SPEC 11.5 AuthoringResult, schema_version 1.0 (FR-026, AC-026). Skill-level envelope; no module subcommand emits it. \"internal-error\" is CLI-level only and deliberately absent from status (OQ-014a).",
   "type": "object",
-  "required": ["schema_version", "ok", "status", "explanation"],
+  "required": [
+    "schema_version",
+    "ok",
+    "status",
+    "explanation"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "ok": {"type": "boolean"},
+    "schema_version": {
+      "const": "1.0"
+    },
+    "ok": {
+      "type": "boolean"
+    },
     "status": {
       "enum": [
         "matched",
@@ -21,18 +30,28 @@
         "profile-rejected"
       ]
     },
-    "explanation": {"type": "string"},
+    "explanation": {
+      "type": "string"
+    },
     "template": {
       "description": "only when ok (any JsonValue)"
     },
-    "verdict": {"$ref": "#/$defs/verdict"},
-    "sample_check": {"$ref": "#/$defs/sampleCheck"},
+    "verdict": {
+      "$ref": "#/$defs/verdict"
+    },
+    "sample_check": {
+      "$ref": "#/$defs/sampleCheck"
+    },
     "gaps": {
       "type": "array",
-      "items": {"$ref": "#/$defs/gap"}
+      "items": {
+        "$ref": "#/$defs/gap"
+      }
     },
     "last_candidate": true,
-    "samples_path": {"type": "string"},
+    "samples_path": {
+      "type": "string"
+    },
     "repair_count": {
       "description": "repairs consumed by the skill loop",
       "type": "number"
@@ -41,31 +60,98 @@
   "$defs": {
     "verdict": {
       "type": "object",
-      "required": ["schema_version", "ok", "errors"],
+      "required": [
+        "schema_version",
+        "ok",
+        "errors"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schema_version": {"const": "1.0"},
-        "ok": {"type": "boolean"},
-        "assurance": {"const": "matched"},
-        "failed_stage": {"enum": ["samples", "validate", "dry_run", "match"]},
+        "schema_version": {
+          "const": "1.0"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "assurance": {
+          "const": "matched"
+        },
+        "failed_stage": {
+          "enum": [
+            "samples",
+            "validate",
+            "dry_run",
+            "match"
+          ]
+        },
         "errors": {
           "type": "array",
-          "items": {"$ref": "#/$defs/engineError"}
+          "items": {
+            "$ref": "#/$defs/engineError"
+          }
         },
         "gaps": {
           "type": "array",
-          "items": {"$ref": "#/$defs/gap"}
+          "items": {
+            "$ref": "#/$defs/gap"
+          }
         },
-        "json": true,
+        "json": {
+          "description": "candidate template on success (any JsonValue)"
+        },
         "diff": {
           "type": "array",
-          "items": {"$ref": "#/$defs/diffEntry"}
+          "items": {
+            "$ref": "#/$defs/diffEntry"
+          }
         },
         "writes": {
           "description": "reserved; never emitted by verify in v1 (OQ-011)",
           "type": "object"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ok": {
+                "const": true
+              }
+            },
+            "required": [
+              "ok"
+            ]
+          },
+          "then": {
+            "required": [
+              "assurance"
+            ],
+            "properties": {
+              "failed_stage": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ok": {
+                "const": false
+              }
+            },
+            "required": [
+              "ok"
+            ]
+          },
+          "then": {
+            "required": [
+              "failed_stage"
+            ],
+            "properties": {
+              "assurance": false
+            }
+          }
+        }
+      ]
     },
     "sampleCheck": {
       "type": "object",
@@ -79,20 +165,35 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "schema_version": {"const": "1.0"},
-        "coverage_complete": {"type": "boolean"},
-        "confirmed": {"type": "boolean"},
-        "ok_for_verify": {"type": "boolean"},
+        "schema_version": {
+          "const": "1.0"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "confirmed": {
+          "type": "boolean"
+        },
+        "ok_for_verify": {
+          "type": "boolean"
+        },
         "gaps": {
           "type": "array",
-          "items": {"$ref": "#/$defs/gap"}
+          "items": {
+            "$ref": "#/$defs/gap"
+          }
         },
-        "content_fingerprint": {"type": "string"}
+        "content_fingerprint": {
+          "type": "string"
+        }
       }
     },
     "engineError": {
       "type": "object",
-      "required": ["type", "message"],
+      "required": [
+        "type",
+        "message"
+      ],
       "additionalProperties": false,
       "properties": {
         "type": {
@@ -104,18 +205,32 @@
             "PreflightError"
           ]
         },
-        "message": {"type": "string"},
-        "engine_type": {"type": "string"},
-        "path": {"type": "string"},
-        "case_id": {"type": "string"}
+        "message": {
+          "type": "string"
+        },
+        "engine_type": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        }
       }
     },
     "diffEntry": {
       "type": "object",
-      "required": ["path", "kind", "case_id"],
+      "required": [
+        "path",
+        "kind",
+        "case_id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "path": {"type": "string"},
+        "path": {
+          "type": "string"
+        },
         "kind": {
           "enum": [
             "missing",
@@ -127,12 +242,17 @@
         },
         "expected": true,
         "actual": true,
-        "case_id": {"type": "string"}
+        "case_id": {
+          "type": "string"
+        }
       }
     },
     "gap": {
       "type": "object",
-      "required": ["code", "message"],
+      "required": [
+        "code",
+        "message"
+      ],
       "additionalProperties": false,
       "properties": {
         "code": {
@@ -157,9 +277,15 @@
             "target_required"
           ]
         },
-        "message": {"type": "string"},
-        "obligation_id": {"type": "string"},
-        "case_id": {"type": "string"}
+        "message": {
+          "type": "string"
+        },
+        "obligation_id": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        }
       }
     }
   }

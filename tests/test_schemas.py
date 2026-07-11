@@ -424,3 +424,65 @@ def test_fr_026_invalid_fixture_errors_deterministically_sorted():
         "/ok",
         "/status",
     ]
+
+
+# ---------------------------------------------------------------------------
+# FR-026 — shared $defs stay in sync across schema files (drift guard).
+# The bundled schemas deliberately inline their shared definitions
+# (engineError, gap, diffEntry, and the embedded verdict/sampleCheck shapes)
+# instead of cross-document $refs; this test is the mechanical lockstep
+# guarantee: a SPEC enum change applied to one copy fails here until every
+# copy agrees. Comparison ignores "description" (doc-only) annotations.
+# ---------------------------------------------------------------------------
+
+
+def _strip_descriptions(node):
+    if isinstance(node, dict):
+        return {
+            key: _strip_descriptions(value)
+            for key, value in node.items()
+            if key != "description"
+        }
+    if isinstance(node, list):
+        return [_strip_descriptions(item) for item in node]
+    return node
+
+
+@pytest.mark.parametrize(
+    ("def_name", "schema_files"),
+    [
+        ("engineError", ["verdict.json", "authoring_result.json", "cli_error.json"]),
+        ("gap", ["verdict.json", "authoring_result.json", "sample_check.json"]),
+        ("diffEntry", ["verdict.json", "authoring_result.json"]),
+    ],
+)
+def test_fr_026_shared_defs_identical_across_schema_files(def_name, schema_files):
+    shapes = [
+        _strip_descriptions(load_schema(name)["$defs"][def_name])
+        for name in schema_files
+    ]
+    assert all(shape == shapes[0] for shape in shapes[1:]), (
+        f"$defs/{def_name} drifted between {schema_files}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("def_name", "standalone_file"),
+    [("verdict", "verdict.json"), ("sampleCheck", "sample_check.json")],
+)
+def test_fr_026_embedded_document_defs_match_standalone_schemas(
+    def_name, standalone_file
+):
+    # authoring_result.json embeds whole-document shapes; they must stay
+    # structurally identical to the standalone schema's top-level shape.
+    embedded = _strip_descriptions(load_schema("authoring_result.json")["$defs"][def_name])
+    standalone = _strip_descriptions(
+        {
+            key: value
+            for key, value in load_schema(standalone_file).items()
+            if key not in ("$schema", "title", "$defs")
+        }
+    )
+    assert embedded == standalone, (
+        f"$defs/{def_name} drifted from {standalone_file}"
+    )

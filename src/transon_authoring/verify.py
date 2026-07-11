@@ -22,6 +22,7 @@ stage runner adds it when iterating SampleSet cases (OQ-011).
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from copy import deepcopy
@@ -29,6 +30,8 @@ from typing import Any
 
 from .match import match_all
 from .samples import check_samples
+
+_logger = logging.getLogger(__name__)
 
 #: AD-017 / AC-028 — wall-clock budget per dry-run case, in seconds.
 DRY_RUN_TIMEOUT_SECONDS = 5.0
@@ -91,7 +94,7 @@ def run_dry_run_case(
         stderr=subprocess.PIPE,
     )
     try:
-        stdout_bytes, _stderr = proc.communicate(
+        stdout_bytes, stderr_bytes = proc.communicate(
             input=request_bytes, timeout=DRY_RUN_TIMEOUT_SECONDS
         )
     except subprocess.TimeoutExpired:
@@ -99,19 +102,32 @@ def run_dry_run_case(
         proc.communicate()  # reap the killed worker; nothing lingers (AC-028)
         return _timeout_envelope()
 
+    # The envelope keeps the stable §11.2 library text; the worker's stderr
+    # (e.g. a crash traceback) goes to debug logging only, so a genuinely
+    # crashing worker stays diagnosable without touching the error contract.
     if proc.returncode != 0:
+        _log_worker_stderr(stderr_bytes)
         return _dead_worker_envelope(proc.returncode)
     try:
         response = json.loads(stdout_bytes.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
+        _log_worker_stderr(stderr_bytes)
         return _dead_worker_envelope(proc.returncode)
     if not (
         isinstance(response, dict)
         and isinstance(response.get("ok"), bool)
         and isinstance(response.get("errors"), list)
     ):
+        _log_worker_stderr(stderr_bytes)
         return _dead_worker_envelope(proc.returncode)
     return response
+
+
+def _log_worker_stderr(stderr_bytes: bytes) -> None:
+    if stderr_bytes:
+        _logger.debug(
+            "dry-run worker stderr: %s", stderr_bytes.decode("utf-8", "replace")
+        )
 
 
 def _validate_template(template: Any) -> dict | None:

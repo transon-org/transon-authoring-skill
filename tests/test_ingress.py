@@ -206,7 +206,13 @@ def test_fr_026_root_violation_uses_root_pointer():
 
 
 def test_fr_026_schema_violations_empty_for_valid_instance():
-    verdict = {"schema_version": "1.0", "ok": False, "errors": []}
+    # ok:false requires failed_stage (§11.2 ok/assurance/failed_stage coupling).
+    verdict = {
+        "schema_version": "1.0",
+        "ok": False,
+        "failed_stage": "samples",
+        "errors": [],
+    }
     assert schema_violations(verdict, "verdict.json") == []
 
 
