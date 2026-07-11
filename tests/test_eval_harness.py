@@ -234,6 +234,11 @@ def test_fr_017_oq_017_transon_authoring_argv_paths_confined():
             ),
             tool_turn(
                 "transon_authoring",
+                {"argv": ["verify", "--temp=/etc/passwd", "--samples", "s.json"]},
+                "p5",
+            ),
+            tool_turn(
+                "transon_authoring",
                 {"argv": ["validate", "--template", "missing.json"]},
                 "p3",
             ),
@@ -250,6 +255,12 @@ def test_fr_017_oq_017_transon_authoring_argv_paths_confined():
     assert results["p2"][1] is True and "--samples" in results["p2"][0]["error"]
     # The argparse "--flag=value" form is confined too.
     assert results["p4"][1] is True and "--template" in results["p4"][0]["error"]
+    # Abbreviated flags (--temp aliasing --template) cannot slip past the
+    # confinement: the CLI runs with allow_abbrev=False and rejects them as a
+    # usage error (exit 2) instead of resolving them to the path flag.
+    assert results["p5"][1] is False
+    assert results["p5"][0]["exit_code"] == 2
+    assert "--temp" in results["p5"][0]["stderr"]
     # Confined path reaches the real CLI (exit 2 for the missing file — the
     # subprocess actually ran).
     assert results["p3"][1] is False

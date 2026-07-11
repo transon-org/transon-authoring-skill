@@ -36,6 +36,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any
@@ -259,11 +260,17 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
         + "\n"
     )
     if args.force:
-        # Same-directory temp + atomic replace: write_text() would follow a
-        # symlinked .transon-authoring.json and redirect the write elsewhere.
-        tmp = target.with_name(target.name + f".tmp{os.getpid()}")
+        # Same-directory temp (mkstemp: O_EXCL, unpredictable name) + atomic
+        # replace: write_text() would follow a symlinked .transon-authoring.json
+        # and redirect the write elsewhere, and a predictable temp name could
+        # be pre-planted as a symlink.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=target.parent, prefix=target.name + ".", suffix=".tmp"
+        )
+        tmp = Path(tmp_name)
         try:
-            tmp.write_text(payload, encoding="utf-8")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
             os.replace(tmp, target)
         finally:
             tmp.unlink(missing_ok=True)
@@ -301,6 +308,14 @@ def _positive_int(text: str) -> int:
     return value
 
 
+class _StrictParser(argparse.ArgumentParser):
+    """Subparser class with flag abbreviation disabled (see _build_parser)."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
+
 def _add_reserved_knobs(subparser: argparse.ArgumentParser) -> None:
     for _attr, flag in _RESERVED_KNOBS:
         subparser.add_argument(
@@ -320,8 +335,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "transon-authoring module CLI (SPEC §11.6). stdout carries exactly"
             " one JSON result document; stderr is human diagnostics only."
         ),
+        # No flag abbreviation: §11.6 defines exact flags only, and sandboxed
+        # callers (OQ-017b) confine path flags by their exact spelling — an
+        # abbreviation like --temp= aliasing --template would bypass that.
+        allow_abbrev=False,
     )
-    subcommands = parser.add_subparsers(dest="subcommand", required=True)
+    subcommands = parser.add_subparsers(
+        dest="subcommand", required=True, parser_class=_StrictParser
+    )
 
     metadata_parser = subcommands.add_parser(
         "metadata",
