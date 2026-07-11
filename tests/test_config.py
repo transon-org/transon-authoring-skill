@@ -168,6 +168,29 @@ def test_fr_022_custom_without_pattern_exit_2(tmp_path):
     assert not (tmp_path / CONFIG_FILENAME).exists()
 
 
+def test_fr_022_pattern_on_non_custom_layout_exit_2(tmp_path):
+    # §11.9 "pattern required IFF layout=custom": a stray pattern on a
+    # non-custom layout is a schema error, not silently persisted.
+    result = run_cli(
+        "init-config", "--layout", "sibling", "--pattern", "{dir}/{stem}.json",
+        "--non-interactive", cwd=tmp_path,
+    )
+    assert_schema_error(result)
+    assert not (tmp_path / CONFIG_FILENAME).exists()
+
+
+def test_ac_014_collision_check_precedes_layout_prompt(tmp_path):
+    # AC-014: with a config already present, init-config refuses at the
+    # collision check before ever reaching the layout prompt — observable
+    # non-TTY as the overwrite refusal (not the layout-required error) when
+    # --layout is omitted.
+    assert run_cli("init-config", "--layout", "sibling", cwd=tmp_path).returncode == 0
+    result = run_cli("init-config", cwd=tmp_path)
+    document = assert_schema_error(result)
+    assert "--force" in document["explanation"]
+    assert "layout is required" not in document["explanation"]
+
+
 def test_fr_022_repair_attempts_out_of_range_exit_2(tmp_path):
     for bad in ("0", "11"):
         result = run_cli(

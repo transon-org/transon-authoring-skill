@@ -379,9 +379,11 @@ transon-authoring/
 ├── adapters/claude/ … cursor/
 ├── install/claude.py cursor.py
 ├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
+│                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
-│   ├── targets.json               # NFR-010 rates
+│   ├── targets.json               # NFR-010 rates (OQ-016e)
+│   ├── baseline.json              # fixture-regression record (OQ-016f)
 │   └── cases/
 └── docs/
     ├── SPEC.md

@@ -264,17 +264,26 @@ def run_fixture(
     workspace = Path(tempfile.mkdtemp(prefix="transon-eval-"))
     tool_calls = 0
     try:
-        # OQ-017a: system prompt = verbatim SKILL.md bytes + fixed preamble.
-        skill_md = (repo_root / "SKILL.md").read_bytes().decode("utf-8")
-        system = skill_md + HARNESS_PREAMBLE
+        try:
+            # OQ-017a: system prompt = verbatim SKILL.md bytes + fixed preamble.
+            skill_md = (repo_root / "SKILL.md").read_bytes().decode("utf-8")
+            system = skill_md + HARNESS_PREAMBLE
 
-        user_message = fixture["intent_nl"]
-        if fixture.get("samples") is not None:
-            (workspace / "samples.json").write_text(
-                json.dumps(fixture["samples"], ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            user_message = fixture["intent_nl"]
+            if fixture.get("samples") is not None:
+                (workspace / "samples.json").write_text(
+                    json.dumps(fixture["samples"], ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                user_message += (
+                    "\n\nA confirmed SampleSet is available at samples.json."
+                )
+        except Exception as exc:  # workspace/SKILL.md fault = infra (OQ-016d)
+            return _episode_result(
+                outcome="infra_error",
+                tool_calls=tool_calls,
+                error=f"harness setup fault: {type(exc).__name__}: {exc}",
             )
-            user_message += "\n\nA confirmed SampleSet is available at samples.json."
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
         tool_budget = runner_cfg["tool_budget"]
@@ -321,12 +330,22 @@ def run_fixture(
                         outcome="submitted",
                         tool_calls=tool_calls,
                     )
-                if tool_use.name == "write_file":
-                    payload = _tool_write_file(workspace, tool_use.input)
-                elif tool_use.name == "transon_authoring":
-                    payload = _tool_transon_authoring(workspace, tool_use.input)
-                else:
-                    payload = {"error": f"unknown tool: {tool_use.name}"}
+                # A harness fault (tool timeout, OS error) is infra_error per
+                # OQ-016d — never a crash of the whole multi-fixture run.
+                try:
+                    if tool_use.name == "write_file":
+                        payload = _tool_write_file(workspace, tool_use.input)
+                    elif tool_use.name == "transon_authoring":
+                        payload = _tool_transon_authoring(workspace, tool_use.input)
+                    else:
+                        payload = {"error": f"unknown tool: {tool_use.name}"}
+                except Exception as exc:
+                    return _episode_result(
+                        outcome="infra_error",
+                        tool_calls=tool_calls,
+                        error=f"harness fault in {tool_use.name}: "
+                        f"{type(exc).__name__}: {exc}",
+                    )
                 tool_results.append(
                     {
                         "type": "tool_result",

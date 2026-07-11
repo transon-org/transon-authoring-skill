@@ -14,6 +14,7 @@ Anthropic SDK is never exercised.
 import copy
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -207,6 +208,24 @@ def test_fr_017_oq_017_provider_exception_is_infra_error():
     assert episode["submitted"] is None
     assert "ConnectionError" in episode["error"]
     assert "api unreachable" in episode["error"]
+
+
+def test_fr_017_oq_016d_tool_fault_is_infra_error(monkeypatch):
+    # OQ-016d — a harness fault during tool execution (e.g. subprocess
+    # timeout) scores the episode infra_error instead of crashing the whole
+    # multi-fixture run.
+    def exploding_tool(workspace, tool_input):
+        raise subprocess.TimeoutExpired(cmd="transon_authoring", timeout=300)
+
+    monkeypatch.setattr(harness, "_tool_transon_authoring", exploding_tool)
+    provider = FakeProvider([tool_turn("transon_authoring", {"argv": ["metadata"]})])
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "anything"}, RUNNER_CFG, provider, REPO_ROOT
+    )
+    assert episode["outcome"] == "infra_error"
+    assert episode["submitted"] is None
+    assert "harness fault in transon_authoring" in episode["error"]
+    assert "TimeoutExpired" in episode["error"]
 
 
 def test_fr_017_oq_017_samples_written_and_skill_md_injected(monkeypatch):

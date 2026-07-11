@@ -216,6 +216,18 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
     ``.transon-authoring.json`` to the CURRENT WORKING DIRECTORY, emit the
     ProjectConfig document on stdout, exit 0. Input/validation problems are
     ``CliError`` ``schema-error`` envelopes, exit 2."""
+    # §11.9 collision check comes FIRST: an existing config means no layout
+    # prompt is ever shown (AC-014), even on a TTY.
+    target = Path.cwd() / CONFIG_FILENAME
+    if target.exists() and not args.force:
+        raise IngressError(
+            [
+                preflight_error(
+                    f"init-config: refusing to overwrite existing"
+                    f" {CONFIG_FILENAME} (use --force) (SPEC 11.9 collisions)"
+                )
+            ]
+        )
     layout = args.layout
     if layout is None:
         if not args.non_interactive and sys.stdin.isatty():
@@ -239,16 +251,6 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
         )
     except PatternError as exc:
         raise IngressError([preflight_error(f"init-config: {exc}")]) from exc
-    target = Path.cwd() / CONFIG_FILENAME
-    if target.exists() and not args.force:
-        raise IngressError(
-            [
-                preflight_error(
-                    f"init-config: refusing to overwrite existing"
-                    f" {CONFIG_FILENAME} (use --force) (SPEC 11.9 collisions)"
-                )
-            ]
-        )
     target.write_text(
         json.dumps(
             config, ensure_ascii=False, allow_nan=False, separators=(",", ":")

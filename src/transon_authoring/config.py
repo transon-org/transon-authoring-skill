@@ -102,8 +102,9 @@ def build_config(
     """Build a validated §11.9 ProjectConfig document.
 
     Schema problems (bad layout, out-of-range ``repair_attempts``, ``custom``
-    without ``pattern``) raise ``IngressError`` (PreflightError semantics);
-    a pattern violating §11.9 raises :class:`PatternError`.
+    without ``pattern``, ``pattern`` on a non-custom layout — §11.9 "required
+    iff") raise ``IngressError`` (PreflightError semantics); a pattern
+    violating §11.9 raises :class:`PatternError`.
     """
     config: dict[str, Any] = {
         "schema_version": "1.0",
