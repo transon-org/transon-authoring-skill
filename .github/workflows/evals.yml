@@ -7,6 +7,12 @@ name: Evals
 on:
   workflow_dispatch:
 
+# One eval run at a time: duplicate manual dispatches queue instead of
+# spending provider budget concurrently.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # Read-only everywhere: the eval gate never writes to the repo or uses the token.
 permissions:
   contents: read

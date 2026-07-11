@@ -1,13 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EvalRunner",
-  "description": "SPEC 11.8 evals/runner.json (AD-020, FR-017). Committed values are gate identity; changing any is an explicit eval-policy commit (OQ-017f pins the initial values).",
+  "description": "SPEC 11.8 evals/runner.json (AD-020, FR-017). Committed values are gate identity; changing any is an explicit eval-policy commit (OQ-017f pins the initial values). rev 2026-07-12: temperature removed — the harness sends no sampling parameters (the pinned model rejects non-default ones with a 400).",
   "type": "object",
   "required": [
     "schema_version",
     "provider",
     "model_id",
-    "temperature",
     "max_output_tokens",
     "tool_budget",
     "runs_per_fixture",
@@ -25,15 +24,12 @@
     "model_id": {
       "type": "string"
     },
-    "temperature": {
-      "const": 0
-    },
     "max_output_tokens": {
-      "type": "number"
+      "type": "integer"
     },
     "tool_budget": {
       "description": "caps total tool calls per run (OQ-017c)",
-      "type": "number"
+      "type": "integer"
     },
     "runs_per_fixture": {
       "const": 3

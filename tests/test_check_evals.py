@@ -376,6 +376,21 @@ def test_nfr_010_infra_cap_trips_bucket():
     assert all("below target" not in r for r in report["red"])
 
 
+def test_nfr_010_empty_gating_bucket_is_red():
+    # NFR-010 / SPEC §11.8 — a gating bucket with zero fixtures (corpus drift,
+    # accidental deletion) is red, never silently green: the gate cannot
+    # certify a rate it never measured. The reported rate is None.
+    fixtures = [{"id": "refuse-0", "expect": "refuse"}]
+    per_fixture = {"refuse-0": [episode(refuse_result()) for _ in range(3)]}
+    report = aggregate(fixtures, per_fixture, DEFAULT_TARGETS, EMPTY_BASELINE)
+    assert report["rates"]["authoring"] is None
+    assert any(
+        "no fixtures in the authoring bucket" in reason for reason in report["red"]
+    ), report
+    # The empty correction bucket stays non-gating (OQ-016c).
+    assert not any("correction" in reason for reason in report["red"])
+
+
 def test_fr_017_oq_016_correction_bucket_reported_not_gating(
     monkeypatch, tmp_repo, capsys
 ):

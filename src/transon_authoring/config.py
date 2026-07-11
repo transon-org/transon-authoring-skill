@@ -73,6 +73,19 @@ def _expand(pattern: str, stem: str, dir_: str) -> str:
     return pattern.replace("{stem}", stem).replace("{dir}", dir_)
 
 
+def _check_expansion_safety(expanded: str) -> None:
+    """§11.9 path-safety checks on an expanded pattern (single source)."""
+    if os.path.isabs(expanded) or Path(expanded).drive:
+        raise PatternError(
+            "pattern must not expand to an absolute path (SPEC 11.9)"
+        )
+    normalized = os.path.normpath(expanded)
+    if normalized == ".." or normalized.startswith(".." + os.sep):
+        raise PatternError(
+            "pattern expansion escapes the repo root (SPEC 11.9)"
+        )
+
+
 def validate_pattern(pattern: str) -> None:
     """Validate a custom-layout pattern without a concrete template (§11.9).
 
@@ -81,16 +94,7 @@ def validate_pattern(pattern: str) -> None:
     (e.g. ``../{stem}.samples.json``). Raises :class:`PatternError`.
     """
     _check_pattern_text(pattern)
-    probe = _expand(pattern, "probe", ".")
-    if os.path.isabs(probe) or Path(probe).drive:
-        raise PatternError(
-            "pattern must not expand to an absolute path (SPEC 11.9)"
-        )
-    normalized = os.path.normpath(probe)
-    if normalized == ".." or normalized.startswith(".." + os.sep):
-        raise PatternError(
-            "pattern expansion escapes the repo root (SPEC 11.9)"
-        )
+    _check_expansion_safety(_expand(pattern, "probe", "."))
 
 
 def build_config(
@@ -182,10 +186,7 @@ def resolve_samples_path(
                 "template path is outside the repo root (SPEC 11.9)"
             ) from exc
         expanded = _expand(pattern, stem, template_dir.as_posix())
-        if os.path.isabs(expanded) or Path(expanded).drive:
-            raise PatternError(
-                "pattern must not expand to an absolute path (SPEC 11.9)"
-            )
+        _check_expansion_safety(expanded)
         candidate = root / expanded
     else:
         raise PatternError(

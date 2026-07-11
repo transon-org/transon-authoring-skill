@@ -879,7 +879,6 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
   "schema_version": "1.0",
   "provider": string,
   "model_id": string,
-  "temperature": 0,
   "max_output_tokens": number,
   "tool_budget": number,
   "runs_per_fixture": 3,
@@ -888,7 +887,9 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
 }
 ```
 Initial committed values are chosen at A2 standup and become part of the gate identity; changing
-them is an explicit eval-policy commit.
+them is an explicit eval-policy commit. *(rev 2026-07-12: `temperature` removed from the shape —
+the pinned `claude-sonnet-5` rejects non-default sampling parameters with a 400; the harness
+never sends sampling parameters, and determinism steering lives in the prompt.)*
 
 **EvalFixture** (`evals/cases/*.json`, schema_version `"1.0"`):
 ```
@@ -1188,8 +1189,9 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   network tool, no absolute paths.
   (c) **Budget & pinning:** `evals/runner.json` (AD-020) pins provider/model/settings;
   `tool_budget` caps total tool calls per run — exceeding it, or ending without `submit_result`,
-  scores the run as bucket-failure (not infra). `temperature: 0`; `seed` passed through when the
-  provider supports it.
+  scores the run as bucket-failure (not infra). No sampling parameters are sent (rev 2026-07-12:
+  the pinned model rejects non-default `temperature`/`top_p`/`top_k` with a 400); `seed` passed
+  through when the provider supports it.
   (d) **Provider client:** selected by `runner.json.provider`; v1 implements `"anthropic"` via
   the `anthropic` SDK, declared as the optional extra `transon-authoring[evals]` — never a
   runtime dependency (NFR-003 is unaffected: evals are inherently online and are not part of the
@@ -1200,9 +1202,10 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   NFR-011) and the scoring/harness unit tests, which use an injected fake provider
   (NFR-002-style determinism for the gate logic itself).
   (f) **Initial committed `runner.json` values (gate identity per AD-020):**
-  `provider: "anthropic"`, `model_id: "claude-sonnet-5"`, `temperature: 0`,
+  `provider: "anthropic"`, `model_id: "claude-sonnet-5"`,
   `max_output_tokens: 8192`, `tool_budget: 32`, `runs_per_fixture: 3`,
-  `pass_rule: "majority"`, `seed: null`. Changing any is an explicit eval-policy commit.
+  `pass_rule: "majority"`, `seed: null` (rev 2026-07-12: `temperature` pin dropped — see §11.8).
+  Changing any is an explicit eval-policy commit.
 - **OQ-018** — **Resolved (2026-07-11, A2 standup):** all edges resolved to the A1-implemented
   behavior, now normative in §11.1 ("Edge semantics"):
   (a) **Placeholder:** `Confirmation.content_fingerprint` is required; the normative

@@ -61,7 +61,6 @@ def test_fr_017_runner_values_are_oq_017f_pin():
         "schema_version": "1.0",
         "provider": "anthropic",
         "model_id": "claude-sonnet-5",
-        "temperature": 0,
         "max_output_tokens": 8192,
         "tool_budget": 32,
         "runs_per_fixture": 3,

@@ -149,7 +149,6 @@ class AnthropicProvider:
 
         self._client = anthropic.Anthropic()
         self._model = runner_cfg["model_id"]
-        self._temperature = runner_cfg["temperature"]
         self._max_tokens = runner_cfg["max_output_tokens"]
         # OQ-017c: seed is passed through only when the provider supports it;
         # the Anthropic Messages API has no seed parameter, so a non-null seed
@@ -162,10 +161,11 @@ class AnthropicProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Turn:
+        # No sampling parameters (SPEC §11.8 rev 2026-07-12): the pinned
+        # model rejects non-default temperature/top_p/top_k with a 400.
         response = self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            temperature=self._temperature,
             system=system,
             messages=messages,
             tools=tools,
@@ -215,12 +215,25 @@ def _tool_write_file(workspace: Path, tool_input: dict[str, Any]) -> dict[str, A
     return {"ok": True, "path": raw_path}
 
 
+#: CLI flags whose value is a filesystem path (§11.6) — confined to the
+#: workspace like write_file paths (OQ-017b: no absolute paths, no escapes).
+_PATH_FLAGS = frozenset({"--template", "--samples", "--input", "--includes"})
+
+
 def _tool_transon_authoring(
     workspace: Path, tool_input: dict[str, Any]
 ) -> dict[str, Any]:
     argv = tool_input.get("argv")
     if not isinstance(argv, list) or not all(isinstance(a, str) for a in argv):
         return {"error": "transon_authoring requires 'argv' as a list of strings"}
+    for flag, value in zip(argv, argv[1:]):
+        if flag in _PATH_FLAGS and _confine(workspace, value) is None:
+            return {
+                "error": (
+                    f"path rejected for {flag}: must be a relative path that "
+                    f"stays inside the workspace (got {value!r})"
+                )
+            }
     completed = subprocess.run(
         [sys.executable, "-m", "transon_authoring", *argv],
         cwd=workspace,

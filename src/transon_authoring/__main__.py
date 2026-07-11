@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -251,13 +252,32 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
         )
     except PatternError as exc:
         raise IngressError([preflight_error(f"init-config: {exc}")]) from exc
-    target.write_text(
+    payload = (
         json.dumps(
             config, ensure_ascii=False, allow_nan=False, separators=(",", ":")
         )
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
+    if args.force:
+        target.write_text(payload, encoding="utf-8")
+    else:
+        # Atomic create (O_EXCL): the early exists() check above orders the
+        # refusal before any prompt (AC-014) but is not race-free — two
+        # concurrent init-config runs must not both pass it and clobber each
+        # other (SPEC 11.9 collisions).
+        try:
+            fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            raise IngressError(
+                [
+                    preflight_error(
+                        f"init-config: refusing to overwrite existing"
+                        f" {CONFIG_FILENAME} (use --force) (SPEC 11.9 collisions)"
+                    )
+                ]
+            ) from None
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
     _emit(config)
     return 0
 

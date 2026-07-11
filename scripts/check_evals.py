@@ -364,6 +364,15 @@ def aggregate(
         # Correction gates nothing (OQ-016c) — no rate/infra red for it.
         if bucket == "correction":
             continue
+        # A gating bucket with zero fixtures is red, never silently green —
+        # the gate cannot certify a rate it never measured (SPEC §11.8;
+        # scripts/** honesty rule).
+        if not members:
+            red.append(
+                f"no fixtures in the {bucket} bucket — gate cannot certify "
+                "its rate with zero coverage (SPEC §11.8 / NFR-010)"
+            )
+            continue
         if members and len(infra_skipped) > INFRA_CAP * len(members):
             red.append(
                 f"infra-skipped fixtures exceed 10% of the {bucket} bucket "

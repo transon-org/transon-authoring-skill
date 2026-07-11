@@ -210,6 +210,45 @@ def test_fr_017_oq_017_provider_exception_is_infra_error():
     assert "api unreachable" in episode["error"]
 
 
+def test_fr_017_oq_017_transon_authoring_argv_paths_confined():
+    # OQ-017b — the transon_authoring tool confines path-bearing argv values
+    # (--template/--samples/--input/--includes) to the workspace: absolute or
+    # ..-escaping paths are rejected as an error tool result, no subprocess
+    # spawned; confined relative paths still run.
+    provider = FakeProvider(
+        [
+            tool_turn(
+                "transon_authoring",
+                {"argv": ["verify", "--template", "/etc/passwd", "--samples", "s.json"]},
+                "p1",
+            ),
+            tool_turn(
+                "transon_authoring",
+                {"argv": ["check-samples", "--samples", "../outside.json"]},
+                "p2",
+            ),
+            tool_turn(
+                "transon_authoring",
+                {"argv": ["validate", "--template", "missing.json"]},
+                "p3",
+            ),
+        ]
+    )
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "try path escapes"}, RUNNER_CFG, provider, REPO_ROOT
+    )
+    assert episode["outcome"] == "no_submit"
+    results = {
+        tid: (payload, is_err) for tid, payload, is_err in latest_tool_results(provider)
+    }
+    assert results["p1"][1] is True and "--template" in results["p1"][0]["error"]
+    assert results["p2"][1] is True and "--samples" in results["p2"][0]["error"]
+    # Confined path reaches the real CLI (exit 2 for the missing file — the
+    # subprocess actually ran).
+    assert results["p3"][1] is False
+    assert results["p3"][0]["exit_code"] == 2
+
+
 def test_fr_017_oq_016d_tool_fault_is_infra_error(monkeypatch):
     # OQ-016d — a harness fault during tool execution (e.g. subprocess
     # timeout) scores the episode infra_error instead of crashing the whole
@@ -277,5 +316,5 @@ def test_fr_017_oq_017_module_imports_without_anthropic_sdk(monkeypatch):
     # Only instantiating the real provider needs the SDK.
     with pytest.raises(ImportError):
         module.AnthropicProvider(
-            {"model_id": "m", "temperature": 0, "max_output_tokens": 1, "seed": None}
+            {"model_id": "m", "max_output_tokens": 1, "seed": None}
         )
