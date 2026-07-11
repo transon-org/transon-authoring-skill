@@ -20,7 +20,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-008 | AC-004, AC-012, AC-026 | A3 | failure envelope unit | [ ] | |
 | FR-009 | AC-006, AC-022 | A0 | snapshot gate | [ ] | |
 | FR-010 | AC-022 | A0 | examples unit | [ ] | |
-| FR-011 | AC-006 | A0 | sync + drift | [ ] | |
+| FR-011 | AC-006 | A0 | sync + drift | [x] | tests/test_sync_metadata.py (test_fr_011_sync_is_canonical_and_records_provenance, test_fr_011_sidecar_skeleton_created_when_absent, test_fr_011_existing_sidecar_never_overwritten, test_fr_011_pin_mismatch_exits_2) |
 | FR-012 | AC-005 | A4 | parity | [ ] | |
 | FR-014 | AC-021 | A1 | CLI unit | [ ] | |
 | FR-015 | AC-007, AC-009 | A4 | check_install | [ ] | |
