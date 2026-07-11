@@ -311,7 +311,7 @@ def _positive_int(text: str) -> int:
 class _StrictParser(argparse.ArgumentParser):
     """Subparser class with flag abbreviation disabled (see _build_parser)."""
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("allow_abbrev", False)
         super().__init__(*args, **kwargs)
 
