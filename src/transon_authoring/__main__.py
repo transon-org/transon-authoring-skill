@@ -1,11 +1,13 @@
 """Module CLI entry — ``python -m transon_authoring`` (SPEC §11.6; FR-003 /
 FR-014 / AC-021; §14 A1 DoD; AD-006).
 
-A1 surface: ``metadata`` (A0 behavior kept verbatim — bundled pinned snapshot
+Surface: ``metadata`` (A0 behavior kept verbatim — bundled pinned snapshot
 bytes on stdout, exit 0), ``examples search``, ``check-samples``, ``verify``
-(single-shot; **no** ``--repair-attempts``, FR-007), ``validate`` and
-``dry-run``. ``init-config`` is A2 scope and stays an unknown command
-(argparse usage error, exit 2).
+(single-shot; **no** ``--repair-attempts``, FR-007), ``validate``,
+``dry-run``, and ``init-config`` (A2, FR-022/AC-014: writes the §11.9
+``.transon-authoring.json`` to the current working directory and emits the
+ProjectConfig on stdout; prompts for layout only when stdin is a TTY and
+``--non-interactive`` is absent).
 
 Contract highlights implemented here:
 
@@ -34,6 +36,7 @@ import argparse
 import json
 import sys
 import traceback
+from pathlib import Path
 from typing import Any
 
 from transon_authoring import metadata
@@ -42,6 +45,11 @@ from transon_authoring._ingress import (
     load_document,
     load_json_file,
     preflight_error,
+)
+from transon_authoring.config import (
+    CONFIG_FILENAME,
+    PatternError,
+    build_config,
 )
 from transon_authoring.examples import search_examples
 from transon_authoring.samples import check_samples
@@ -181,6 +189,77 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     return 0 if envelope["ok"] else 1
 
 
+_LAYOUTS = ("sibling", "central", "custom")
+
+
+def _prompt_layout() -> str:
+    """FR-022 / §11.9: the ONLY interactive prompt — layout, and only when
+    stdin is a TTY and ``--non-interactive`` is absent. The prompt goes to
+    stderr (stdout carries exactly one JSON document, §11.6)."""
+    sys.stderr.write(f"layout ({'|'.join(_LAYOUTS)}): ")
+    sys.stderr.flush()
+    answer = sys.stdin.readline().strip()
+    if answer not in _LAYOUTS:
+        raise IngressError(
+            [
+                preflight_error(
+                    f"init-config: invalid layout {json.dumps(answer, ensure_ascii=False)}"
+                    f" (expected one of: {', '.join(_LAYOUTS)})"
+                )
+            ]
+        )
+    return answer
+
+
+def _cmd_init_config(args: argparse.Namespace) -> int:
+    """FR-022 (§11.9 write location, rev 2026-07-11): write
+    ``.transon-authoring.json`` to the CURRENT WORKING DIRECTORY, emit the
+    ProjectConfig document on stdout, exit 0. Input/validation problems are
+    ``CliError`` ``schema-error`` envelopes, exit 2."""
+    layout = args.layout
+    if layout is None:
+        if not args.non_interactive and sys.stdin.isatty():
+            layout = _prompt_layout()
+        else:
+            # Non-interactive (flag or non-TTY stdin): never prompt (AC-014).
+            raise IngressError(
+                [
+                    preflight_error(
+                        "init-config: --layout is required when not running"
+                        " interactively (SPEC 11.9 non-interactive rule)"
+                    )
+                ]
+            )
+    try:
+        config = build_config(
+            layout,
+            pattern=args.pattern,
+            samples_dir=args.samples_dir,
+            repair_attempts=args.repair_attempts,
+        )
+    except PatternError as exc:
+        raise IngressError([preflight_error(f"init-config: {exc}")]) from exc
+    target = Path.cwd() / CONFIG_FILENAME
+    if target.exists() and not args.force:
+        raise IngressError(
+            [
+                preflight_error(
+                    f"init-config: refusing to overwrite existing"
+                    f" {CONFIG_FILENAME} (use --force) (SPEC 11.9 collisions)"
+                )
+            ]
+        )
+    target.write_text(
+        json.dumps(
+            config, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _emit(config)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
@@ -294,6 +373,50 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_reserved_knobs(dry_run_parser)
     dry_run_parser.set_defaults(handler=_cmd_dry_run)
+
+    init_config_parser = subcommands.add_parser(
+        "init-config",
+        help=(
+            "write the §11.9 .transon-authoring.json ProjectConfig to the"
+            " current working directory and emit it on stdout (FR-022)"
+        ),
+    )
+    init_config_parser.add_argument(
+        "--layout",
+        choices=list(_LAYOUTS),
+        help=(
+            "samples layout; prompted for interactively only when stdin is a"
+            " TTY and --non-interactive is absent"
+        ),
+    )
+    init_config_parser.add_argument(
+        "--pattern",
+        metavar="STR",
+        help="custom-layout pattern ({stem}/{dir} placeholders only, §11.9)",
+    )
+    init_config_parser.add_argument(
+        "--samples-dir",
+        metavar="STR",
+        help='central-layout samples directory (default "transon-samples")',
+    )
+    init_config_parser.add_argument(
+        "--repair-attempts",
+        type=int,
+        default=3,
+        metavar="N",
+        help="repair budget, range 1..10 (default 3)",
+    )
+    init_config_parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="never prompt; all required fields must come from flags (§11.9)",
+    )
+    init_config_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing .transon-authoring.json (§11.9 collisions)",
+    )
+    init_config_parser.set_defaults(handler=_cmd_init_config)
 
     return parser
 

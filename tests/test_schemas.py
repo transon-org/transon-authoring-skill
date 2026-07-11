@@ -32,6 +32,7 @@ EXPECTED_SCHEMA_FILES = {
     "verdict.json",
     "authoring_result.json",
     "cli_error.json",
+    "project_config.json",  # §11.9 ProjectConfig (FR-022 / AC-014)
 }
 
 # §11.1 GapCode — full closed enum.

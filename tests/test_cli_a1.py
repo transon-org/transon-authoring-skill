@@ -492,17 +492,26 @@ def test_ac_027_rejection_is_deterministic_stable_text(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Usage errors stay argparse-native (§11.6 exit 2; A2 verb not yet known)
+# init-config is a known §11.6 verb since A2 (FR-022; conformance lives in
+# tests/test_config.py)
 # ---------------------------------------------------------------------------
 
 
-def test_ac_021_init_config_still_unknown_command():
-    # init-config is A2 scope: still an unknown command → argparse exit 2,
-    # usage message on stderr, nothing on stdout.
-    result = run_cli("init-config", "--layout", "sibling")
-    assert result.returncode == 2
-    assert result.stdout == b""
-    assert result.stderr != b""
+def test_ac_021_init_config_now_conforms(tmp_path):
+    # FR-022 landed in A2: init-config is a known subcommand that emits ONE
+    # JSON document (the ProjectConfig) on stdout per the §11.6 global
+    # contract; full behavior is covered by tests/test_config.py.
+    result = subprocess.run(
+        [sys.executable, "-m", "transon_authoring", "init-config",
+         "--layout", "sibling"],
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        cwd=str(tmp_path),
+        timeout=120,
+    )
+    assert result.returncode == 0
+    document = one_json_document(result)
+    assert document["layout"] == "sibling"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectConfig",
+  "description": "SPEC 11.9 ProjectConfig (.transon-authoring.json), schema_version 1.0 (FR-022/AC-014). pattern is required iff layout is custom.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "layout",
+    "repair_attempts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "layout": {
+      "enum": [
+        "sibling",
+        "central",
+        "custom"
+      ]
+    },
+    "pattern": {
+      "description": "custom-layout samples-path pattern; placeholders {stem} and {dir} only (SPEC 11.9)",
+      "type": "string"
+    },
+    "repair_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3
+    },
+    "samples_dir": {
+      "description": "for central layout; default \"transon-samples\"",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "layout": {
+            "const": "custom"
+          }
+        },
+        "required": [
+          "layout"
+        ]
+      },
+      "then": {
+        "required": [
+          "pattern"
+        ]
+      }
+    }
+  ]
+}
