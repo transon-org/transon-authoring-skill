@@ -224,19 +224,16 @@ def main(argv: list[str] | None = None) -> int:
                     "sidecar intents keys with no matching snapshot "
                     "docs.examples name (OQ-021): " + ", ".join(dangling)
                 )
-            uncovered = sorted(
-                name for name in example_names if name not in intents and name
+            uncovered = sorted(name for name in example_names if name not in intents)
+            # Allowed (gate stays green), but never silent (OQ-021 c).
+            print(
+                f"check-snapshot: note: {len(uncovered)} snapshot examples "
+                "are uncovered by the NL sidecar (allowed; OQ-021)",
+                file=sys.stderr,
             )
-            if uncovered:
-                # Allowed (gate stays green), but never silent (OQ-021 c).
-                print(
-                    f"check-snapshot: note: {len(uncovered)} snapshot examples "
-                    "are uncovered by the NL sidecar (allowed; OQ-021)",
-                    file=sys.stderr,
-                )
-                if args.verbose:
-                    for name in uncovered:
-                        print(f"check-snapshot:   uncovered: {name}", file=sys.stderr)
+            if args.verbose:
+                for name in uncovered:
+                    print(f"check-snapshot:   uncovered: {name}", file=sys.stderr)
 
     for message in failures:
         print(f"check-snapshot: FAIL: {message}", file=sys.stderr)

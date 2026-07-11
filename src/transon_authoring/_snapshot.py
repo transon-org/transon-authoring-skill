@@ -21,8 +21,13 @@ _JSON_BLOCK_RE = re.compile(r"```json\n(.*?)```", re.DOTALL)
 # Textual pin extraction from the pyproject dependency line, e.g.
 #   dependencies = ["transon==0.1.7"]
 # PEP 440 version charset in the capture so quotes/brackets stay out of it.
+# Anchored to the ``dependencies`` line so a version string in a comment
+# elsewhere in the file can never repoint the pin.
 # Textual on purpose: no ``tomllib`` — the Python floor is 3.10 (OQ-019).
-PIN_RE = re.compile(r"transon==([0-9A-Za-z.!+*-]+)")
+PIN_RE = re.compile(
+    r"^dependencies\s*=\s*\[[^\]]*[\"']transon==([0-9A-Za-z.!+*-]+)[\"']",
+    re.MULTILINE,
+)
 
 
 def extract_pin(pyproject_text: str) -> str | None:
