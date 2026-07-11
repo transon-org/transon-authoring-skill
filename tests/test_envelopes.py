@@ -730,23 +730,22 @@ def test_nfr_005_ac_026_authoring_result_negative_rejected(real_documents, mutat
     assert schema_violations(fixture, "authoring_result.json")
 
 
-# --- documented schema-looser-than-spec finding ------------------------------
+# --- §11.5 ok/status/template coupling (schema tightened per PR review) ------
 
 
-def test_nfr_005_report_schema_gap_ok_true_with_non_matched_status_accepted(
-    real_documents,
-):
-    """FINDING (reported, not fixed here): §11.5's status table implies
-    ``ok: true`` occurs only with ``status: "matched"`` (AC-026 pins the
-    failure side only), but authoring_result.json carries no ok/status
-    coupling — the document below VALIDATES. Same family: ``template`` with
-    ``ok: false`` also validates ("template?: only when ok" is prose-only).
-    Tightening the schema is an FR-026 spec/schema change for spec-review,
-    not something this conformance sweep may invent (AGENTS.md rule 1); this
-    test documents the current accepted-by-schema behavior and must be
-    updated if the schema is tightened."""
+def test_nfr_005_ok_status_template_coupling_enforced(real_documents):
+    """§11.5's status table: ``ok: true`` occurs only with
+    ``status: "matched"`` and ``template`` only when ``ok``. The schema now
+    enforces this via allOf/if-then (the earlier accepted-loose behavior this
+    test used to document was tightened during PR review)."""
     fixtures = authoring_result_fixtures(real_documents)
     ok_true_aborted = dict(fixtures["aborted"], ok=True)
-    assert schema_violations(ok_true_aborted, "authoring_result.json") == []
+    assert schema_violations(ok_true_aborted, "authoring_result.json")
     template_with_failure = dict(fixtures["aborted"], template={"$": "this"})
-    assert schema_violations(template_with_failure, "authoring_result.json") == []
+    assert schema_violations(template_with_failure, "authoring_result.json")
+    matched_with_ok_false = dict(fixtures["matched"], ok=False)
+    matched_with_ok_false.pop("template", None)  # isolate the status/ok branch
+    assert schema_violations(matched_with_ok_false, "authoring_result.json")
+    # The legal pairings still validate.
+    assert schema_violations(fixtures["matched"], "authoring_result.json") == []
+    assert schema_violations(fixtures["aborted"], "authoring_result.json") == []

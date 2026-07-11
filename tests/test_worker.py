@@ -15,6 +15,8 @@ import subprocess
 import sys
 import time
 
+import pytest
+
 from transon_authoring import dry_run
 from transon_authoring.verify import DRY_RUN_TIMEOUT_SECONDS, run_dry_run_case
 
@@ -291,3 +293,38 @@ def test_fr_028_run_dry_run_case_errors_carry_no_case_id():
     envelope = run_dry_run_case({"$": "nosuchrule"}, {})
     (error,) = envelope["errors"]
     assert "case_id" not in error
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"ok": False, "errors": []},  # failure without errors
+        {"ok": True, "errors": []},  # success missing result+writes
+        {"ok": True, "result": 1, "errors": []},  # success missing writes
+        {  # failure carrying result/writes
+            "ok": False,
+            "errors": [{"type": "TransformationError", "message": "x"}],
+            "result": 1,
+            "writes": {},
+        },
+    ],
+)
+def test_fr_028_malformed_worker_envelope_is_dead_worker(
+    monkeypatch, tmp_path, payload
+):
+    # §11.6/OQ-014b shape enforced at the host boundary: an envelope that is
+    # valid JSON but violates the success/failure contract (failure needs
+    # non-empty errors and no result/writes; success needs both result and
+    # writes) is treated as a dead worker — stable library text, never
+    # trusted by the stage runner (which indexes errors[0] / result).
+    (tmp_path / "fake_worker.py").write_text(
+        "import os\nprint(os.environ['FAKE_WORKER_OUTPUT'])\n"
+    )
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.setenv("FAKE_WORKER_OUTPUT", json.dumps(payload))
+    monkeypatch.setattr(verify_module, "_WORKER_MODULE", "fake_worker")
+    envelope = run_dry_run_case({"$": "this"}, 1)
+    assert envelope["ok"] is False
+    (error,) = envelope["errors"]
+    assert error["type"] == "TransformationError"
+    assert error["message"] == "dry-run worker exited without a result (exit code 0)"

@@ -113,10 +113,23 @@ def run_dry_run_case(
     except (UnicodeDecodeError, ValueError):
         _log_worker_stderr(stderr_bytes)
         return _dead_worker_envelope(proc.returncode)
+    # §11.6 envelope contract: failure carries non-empty errors and no
+    # result/writes; success carries both result and writes. A worker
+    # emitting anything looser is treated as dead — downstream code indexes
+    # errors[0] on failure and result/writes on success (OQ-014b).
     if not (
         isinstance(response, dict)
         and isinstance(response.get("ok"), bool)
         and isinstance(response.get("errors"), list)
+        and (
+            ("result" in response and "writes" in response)
+            if response["ok"]
+            else (
+                len(response["errors"]) > 0
+                and "result" not in response
+                and "writes" not in response
+            )
+        )
     ):
         _log_worker_stderr(stderr_bytes)
         return _dead_worker_envelope(proc.returncode)

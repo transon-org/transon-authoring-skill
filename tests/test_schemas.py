@@ -410,9 +410,12 @@ def test_fr_026_invalid_fixture_errors_deterministically_sorted():
         "explanation": 7,
     }
     violations = schema_violations(fixture, "authoring_result.json")
-    assert len(violations) == 3
+    # /ok appears twice: the type violation plus the §11.5 status/ok coupling
+    # (a non-"matched" status forces ok const false).
+    assert len(violations) == 4
     assert [pointer for pointer, _ in violations] == [
         "/explanation",
+        "/ok",
         "/ok",
         "/status",
     ]
@@ -421,6 +424,7 @@ def test_fr_026_invalid_fixture_errors_deterministically_sorted():
         validate_schema(fixture, "authoring_result.json")
     assert [e["path"] for e in excinfo.value.errors] == [
         "/explanation",
+        "/ok",
         "/ok",
         "/status",
     ]

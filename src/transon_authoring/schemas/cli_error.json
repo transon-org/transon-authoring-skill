@@ -3,23 +3,46 @@
   "title": "CliError",
   "description": "SPEC 11.6 CliError, schema_version 1.0 (FR-026, AC-021/AC-026, OQ-014a). Failure envelope: ok is always false.",
   "type": "object",
-  "required": ["schema_version", "ok", "status", "explanation", "errors"],
+  "required": [
+    "schema_version",
+    "ok",
+    "status",
+    "explanation",
+    "errors"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "ok": {"const": false},
-    "status": {"enum": ["schema-error", "profile-rejected", "internal-error"]},
-    "explanation": {"type": "string"},
+    "schema_version": {
+      "const": "1.0"
+    },
+    "ok": {
+      "const": false
+    },
+    "status": {
+      "enum": [
+        "schema-error",
+        "profile-rejected",
+        "internal-error"
+      ]
+    },
+    "explanation": {
+      "type": "string"
+    },
     "errors": {
       "description": "may be empty for \"internal-error\"",
       "type": "array",
-      "items": {"$ref": "#/$defs/engineError"}
+      "items": {
+        "$ref": "#/$defs/engineError"
+      }
     }
   },
   "$defs": {
     "engineError": {
       "type": "object",
-      "required": ["type", "message"],
+      "required": [
+        "type",
+        "message"
+      ],
       "additionalProperties": false,
       "properties": {
         "type": {
@@ -31,11 +54,74 @@
             "PreflightError"
           ]
         },
-        "message": {"type": "string"},
-        "engine_type": {"type": "string"},
-        "path": {"type": "string"},
-        "case_id": {"type": "string"}
+        "message": {
+          "type": "string"
+        },
+        "engine_type": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "schema-error"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "minItems": 1,
+            "items": {
+              "properties": {
+                "type": {
+                  "const": "PreflightError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "profile-rejected"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "properties": {
+                "type": {
+                  "const": "ProfileError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
