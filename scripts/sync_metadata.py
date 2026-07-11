@@ -20,6 +20,7 @@ Exit codes: 0 success, 2 pin/config error.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
@@ -43,6 +44,28 @@ except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
     )
 
 SIDECAR_SKELETON = {"schema_version": "1.0", "intents": {}}
+
+
+def _publish(path: Path, data: bytes) -> None:
+    """Atomically replace *path* with *data* (write tmp + rename), so readers
+    and crashes never observe a partially written file."""
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def _publish_no_replace(path: Path, data: bytes) -> None:
+    """Atomically create *path* with *data* only if it does not exist yet
+    (first-writer-wins via hard link; the file is never visible partially
+    written and an existing file is never touched)."""
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
+    tmp.write_bytes(data)
+    try:
+        os.link(tmp, path)
+    except FileExistsError:
+        pass
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -98,16 +121,14 @@ def main(argv: list[str] | None = None) -> int:
     resources.mkdir(parents=True, exist_ok=True)
 
     snapshot_path = resources / "metadata-snapshot.json"
-    snapshot_path.write_bytes(canonical_bytes(metadata))
+    _publish(snapshot_path, canonical_bytes(metadata))
 
+    # Skeleton only on first sync; atomic first-writer-wins creation so
+    # authored intents are never clobbered and no reader (including a
+    # concurrent sync hashing for provenance) can observe a partial file
+    # (FR-010/OQ-021).
     sidecar_path = resources / "nl-intents.json"
-    try:
-        # Skeleton only on first sync; exclusive create so authored intents
-        # are never clobbered, even by a concurrent sync (FR-010/OQ-021).
-        with sidecar_path.open("xb") as sidecar:
-            sidecar.write(canonical_bytes(SIDECAR_SKELETON))
-    except FileExistsError:
-        pass
+    _publish_no_replace(sidecar_path, canonical_bytes(SIDECAR_SKELETON))
 
     provenance = {
         "schema_version": "1.0",
@@ -119,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         "synced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     provenance_path = resources / "metadata-snapshot.md"
-    provenance_path.write_bytes(render_provenance(provenance).encode("utf-8"))
+    _publish(provenance_path, render_provenance(provenance).encode("utf-8"))
     return 0
 
 

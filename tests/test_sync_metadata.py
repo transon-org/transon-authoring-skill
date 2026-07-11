@@ -65,6 +65,10 @@ def test_fr_011_sync_is_canonical_and_records_provenance(tmp_root: Path):
     assert second.returncode == 0, second.stderr
     second_bytes = snapshot_path.read_bytes()
 
+    # Atomic publication leaves no temp-file litter next to the outputs.
+    litter = [p.name for p in (tmp_root / "resources").iterdir() if ".tmp-" in p.name]
+    assert litter == []
+
     # Deterministic, canonical serialization: identical bytes across runs,
     # trailing LF, and a byte-exact round trip through the canonical dump.
     assert first_bytes == second_bytes
