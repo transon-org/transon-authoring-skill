@@ -1,0 +1,223 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit — external review gate for the transon-authoring repo.
+# The product contract is docs/SPEC.md (SPEC-first, §12 governance; requirement
+# IDs append-only). The operating contract for agents is AGENTS.md. Review
+# against those documents, not against general taste.
+
+language: en-US
+
+tone_instructions: >-
+  Be concise and evidence-based. This repo is contract-driven: docs/SPEC.md is
+  normative. Cite the SPEC section or requirement ID (FR/NFR/AC/AD/OQ) a finding
+  violates when applicable. Prefer a few high-confidence findings over volume.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "harness/README.md"
+
+reviews:
+  profile: assertive
+  high_level_summary: true
+  changed_files_summary: true
+  sequence_diagrams: false
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  # The bot formally requests changes until its findings are resolved and the
+  # pre-merge checks below pass — it acts as a blocking external checker.
+  request_changes_workflow: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+    ignore_title_keywords:
+      - "WIP"
+
+  pre_merge_checks:
+    # Failing checks can only be overridden by requested reviewers, never by
+    # the PR author (maker ≠ checker, SPEC §12).
+    override_requested_reviewers_only: true
+    description:
+      mode: error
+    title:
+      mode: warning
+      requirements: >-
+        Concise imperative summary of the change. PRs that implement
+        requirements should make the slice recognizable (milestone or
+        requirement IDs in the title or body).
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: "SPEC IDs paired with ledger"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/SPEC.md or docs/id-ledger.json.
+          The pairing rule takes effect when docs/id-ledger.json exists on the
+          base branch: if it does not, the project is pre-A0 and this check
+          passes — including the PR that first introduces the ledger.
+          Otherwise fail if:
+          - docs/SPEC.md introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
+            that did not appear in the file before, and docs/id-ledger.json in
+            this same PR does not add exactly that number to the matching
+            family array; or
+          - docs/id-ledger.json removes any number from any family array; or
+          - docs/id-ledger.json changes without any corresponding docs/SPEC.md
+            change in the PR.
+          Otherwise pass.
+      - name: "No renumbered or deleted requirement IDs"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/SPEC.md. The ID lock takes effect
+          when docs/id-ledger.json exists: if the base branch has no
+          docs/id-ledger.json, the project is pre-A0 and this check passes.
+          Otherwise fail if a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>) that
+          existed in the base version of the file is deleted, renumbered,
+          reassigned to a different requirement/decision, or reused for new
+          content — even when the same set of ID numbers remains present.
+          Deprecation must keep the ID and its entry in place (see FR-013 for
+          the pattern). Otherwise pass.
+      - name: "Traceability done-rows cite tests"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/traceability.md. Fail if any row
+          changes its Status column to [x] and either (a) the row's Tests
+          column is empty, or (b) no test file in this PR's diff contains the
+          row's requirement ID as a test-name fragment or comment. Rows that
+          were already [x] in the base version are exempt. Otherwise pass.
+      - name: "Gates and hooks not weakened"
+        mode: error
+        instructions: |
+          Applies when the diff touches harness/scripts/, harness/githooks/,
+          .github/workflows/, scripts/check_*.py, or scripts/sync_metadata.py.
+          Fail if the change
+          removes a check invocation, adds a skip/bypass path, narrows the
+          files or ID families a gate scans, or deletes a failing condition,
+          UNLESS the PR description contains a section explicitly titled
+          "Gate change justification" explaining why the gate must change.
+          Pure additions of new checks pass. Otherwise pass.
+
+  path_filters:
+    - "!.venv/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!**/__pycache__/**"
+
+  path_instructions:
+    - path: "docs/SPEC.md"
+      instructions: |
+        This file is the normative product contract (governance in §12).
+        - Requirement IDs (FR/NFR/AC/UC/AD/OQ) are append-only from A0: flag any
+          renumbering, deletion, or reuse of an ID. Removed behavior must be
+          deprecated in place (see FR-013 for the pattern).
+        - New/changed requirements must keep the SPEC self-consistent in the
+          same edit: §7–§9 requirement text, §11 normative contracts, §13
+          gates, §14 milestone DoDs, §17 traceability matrix, §18 readiness.
+        - A resolved open question (§15) must be marked "Resolved (date)" and
+          the decision reflected in the relevant AD/FR text in the same edit.
+        - New IDs must appear in docs/id-ledger.json in the same PR.
+    - path: "docs/id-ledger.json"
+      instructions: |
+        Generated by `harness/scripts/check_append_only_ids.py --update`;
+        never hand-edited. Only additions are legitimate — flag any removal of
+        an ID number, and flag edits that arrive without a matching docs/SPEC.md
+        change introducing those IDs.
+    - path: "docs/traceability.md"
+      instructions: |
+        Working coverage tracker mirroring SPEC §17. A row flipped to [x] must
+        list test references, and the same PR must contain tests citing that
+        requirement ID. Flag rows marked done without tests in the diff.
+    - path: "src/**"
+      instructions: |
+        Library code implementing SPEC §11 contracts. Check against the cited
+        section, not general style:
+        - Exact JSON envelope shapes, schema_version handling, and CLI exit
+          codes (0/1/2/3) per §11.6 / FR-026.
+        - Determinism (NFR-002): no wall-clock, randomness, env or dict-order
+          dependence in check_samples/verify/match paths (the AD-017 5s
+          dry-run timeout is the specified exception).
+        - Sandbox invariants (AD-015/AD-017): no real filesystem or network
+          I/O in dry-run paths; includes resolved from the SampleSet map only;
+          always base Transformer with marker "$"; reserved profile knobs
+          rejected with ProfileError.
+        - The library must never set confirmed: true on a SampleSet (§11.1),
+          and success requires verify ok + assurance "matched" (AD-004).
+        - Engine error messages must be passed through verbatim, never
+          paraphrased (§11.6).
+    - path: "tests/**"
+      instructions: |
+        Tests are the traceability anchor: each test should cite the
+        requirement ID it covers (in the test name or a comment). Expected
+        values for engine behavior must come from the pinned engine
+        (transon==0.1.7) or the SPEC's normative text — flag assertions that
+        weaken a §11 contract (e.g. approximate matching where §11.4 requires
+        type-sensitive deep equality).
+    - path: "harness/**"
+      instructions: |
+        Tool-neutral implementation-harness core (see harness/README.md).
+        - Gate scripts must stay pure-stdlib, deterministic, and must not be
+          weakened: flag any diff that relaxes a check, adds a skip path, or
+          removes a gate from the pre-commit hook without justification.
+        - Command/agent bodies live only here; flag copies of body text into
+          .claude/ or .cursor/.
+    - path: ".claude/**"
+      instructions: |
+        Thin adapter only: tool frontmatter plus a pointer to the harness/
+        body. Flag any adapter that inlines procedure text instead of
+        referencing harness/, and any new harness capability that lands here
+        without a .cursor/ counterpart (or a documented exclusion in
+        harness/README.md).
+    - path: ".cursor/**"
+      instructions: |
+        Thin adapter only: tool frontmatter plus a pointer to the harness/
+        body. Flag any adapter that inlines procedure text instead of
+        referencing harness/, and any new harness capability that lands here
+        without a .claude/ counterpart (or a documented exclusion in
+        harness/README.md).
+    - path: "scripts/**"
+      instructions: |
+        Product gates (SPEC §13: check_snapshot, check_parity, check_evals,
+        check_install, sync_metadata). They must be deterministic and honest:
+        flag wording that claims host "discoverability" where FR-019/NFR-009
+        allow only install-integrity + runtime-smoke claims, and any gate
+        that can silently pass on missing inputs.
+    - path: "evals/**"
+      instructions: |
+        Eval fixtures and runner policy (SPEC §11.8, AD-020, NFR-011).
+        Real-use fixtures must have redacted: true and a consent record —
+        flag anything resembling secrets or PII in fixture payloads. Changes
+        to evals/runner.json or evals/targets.json are eval-policy changes:
+        they must be deliberate and never lower a ratcheted target silently.
+    - path: "resources/**"
+      instructions: |
+        Pinned grounding artifacts (metadata snapshot + provenance + NL
+        sidecar). The snapshot is generated by sync-metadata from the pinned
+        engine — flag hand-edits to metadata-snapshot.json, and snapshot
+        changes that arrive without a matching provenance update.
+    - path: "pyproject.toml"
+      instructions: |
+        The transon engine pin (AD-007) is a deliberate, reviewed decision:
+        flag any change to the transon version that does not also refresh the
+        metadata snapshot and provenance in the same PR.
+
+  tools:
+    ruff:
+      enabled: true
+    shellcheck:
+      enabled: true
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    gitleaks:
+      enabled: true
