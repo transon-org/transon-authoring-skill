@@ -259,7 +259,14 @@ def _cmd_init_config(args: argparse.Namespace) -> int:
         + "\n"
     )
     if args.force:
-        target.write_text(payload, encoding="utf-8")
+        # Same-directory temp + atomic replace: write_text() would follow a
+        # symlinked .transon-authoring.json and redirect the write elsewhere.
+        tmp = target.with_name(target.name + f".tmp{os.getpid()}")
+        try:
+            tmp.write_text(payload, encoding="utf-8")
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
     else:
         # Atomic create (O_EXCL): the early exists() check above orders the
         # refusal before any prompt (AC-014) but is not race-free — two

@@ -879,8 +879,8 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
   "schema_version": "1.0",
   "provider": string,
   "model_id": string,
-  "max_output_tokens": number,
-  "tool_budget": number,
+  "max_output_tokens": integer,
+  "tool_budget": integer,
   "runs_per_fixture": 3,
   "pass_rule": "majority",
   "seed": number | null

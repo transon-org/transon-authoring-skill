@@ -226,8 +226,15 @@ def _tool_transon_authoring(
     argv = tool_input.get("argv")
     if not isinstance(argv, list) or not all(isinstance(a, str) for a in argv):
         return {"error": "transon_authoring requires 'argv' as a list of strings"}
-    for flag, value in zip(argv, argv[1:]):
-        if flag in _PATH_FLAGS and _confine(workspace, value) is None:
+    # Both argparse forms are confined: "--flag value" and "--flag=value".
+    pairs = [(flag, value) for flag, value in zip(argv, argv[1:]) if flag in _PATH_FLAGS]
+    pairs += [
+        tuple(arg.split("=", 1))
+        for arg in argv
+        if "=" in arg and arg.split("=", 1)[0] in _PATH_FLAGS
+    ]
+    for flag, value in pairs:
+        if _confine(workspace, value) is None:
             return {
                 "error": (
                     f"path rejected for {flag}: must be a relative path that "

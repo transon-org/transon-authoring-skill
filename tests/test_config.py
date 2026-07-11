@@ -168,6 +168,21 @@ def test_fr_022_custom_without_pattern_exit_2(tmp_path):
     assert not (tmp_path / CONFIG_FILENAME).exists()
 
 
+def test_fr_022_force_write_replaces_symlink_not_its_target(tmp_path):
+    # §11.9 collisions hardening: --force must replace the config path itself
+    # atomically, never follow a symlinked .transon-authoring.json and write
+    # through it into another file.
+    victim = tmp_path / "victim.json"
+    victim.write_text("original", encoding="utf-8")
+    (tmp_path / CONFIG_FILENAME).symlink_to(victim)
+    result = run_cli("init-config", "--layout", "sibling", "--force", cwd=tmp_path)
+    assert result.returncode == 0
+    assert victim.read_text(encoding="utf-8") == "original"
+    config_path = tmp_path / CONFIG_FILENAME
+    assert not config_path.is_symlink()
+    assert json.loads(config_path.read_text(encoding="utf-8"))["layout"] == "sibling"
+
+
 def test_fr_022_pattern_on_non_custom_layout_exit_2(tmp_path):
     # §11.9 "pattern required IFF layout=custom": a stray pattern on a
     # non-custom layout is a schema error, not silently persisted.
