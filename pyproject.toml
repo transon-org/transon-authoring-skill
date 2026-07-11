@@ -18,5 +18,10 @@ dev = ["pytest>=8"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/transon_authoring"]
 
+# SPEC §10 — repo-root resources/ is canonical; the wheel maps it into the
+# package so the installed library serves the snapshot offline (NFR-003).
+[tool.hatch.build.targets.wheel.force-include]
+"resources" = "transon_authoring/resources"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
