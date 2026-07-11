@@ -101,9 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     snapshot_path.write_bytes(canonical_bytes(metadata))
 
     sidecar_path = resources / "nl-intents.json"
-    if not sidecar_path.exists():
-        # Skeleton only on first sync; authored intents are never clobbered.
-        sidecar_path.write_bytes(canonical_bytes(SIDECAR_SKELETON))
+    try:
+        # Skeleton only on first sync; exclusive create so authored intents
+        # are never clobbered, even by a concurrent sync (FR-010/OQ-021).
+        with sidecar_path.open("xb") as sidecar:
+            sidecar.write(canonical_bytes(SIDECAR_SKELETON))
+    except FileExistsError:
+        pass
 
     provenance = {
         "schema_version": "1.0",
