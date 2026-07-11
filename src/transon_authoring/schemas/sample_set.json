@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SampleSet",
+  "description": "SPEC 11.1 SampleSet, schema_version 1.0 (FR-026). AuthoringTag validity in output/writes values is enforced procedurally per 11.0 decoding rules, not structurally here.",
+  "type": "object",
+  "required": ["schema_version", "coverage", "cases", "waivers", "confirmation"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "intent_nl": {"type": "string"},
+    "coverage": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/coverageObligation"}
+    },
+    "cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sampleCase"}
+    },
+    "waivers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/waiver"}
+    },
+    "includes": {
+      "description": "include name -> template JSON (plain Transon JSON, any value)",
+      "type": "object"
+    },
+    "confirmation": {"$ref": "#/$defs/confirmation"}
+  },
+  "$defs": {
+    "coverageObligation": {
+      "type": "object",
+      "required": ["id", "kind", "description", "acceptance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {
+          "enum": [
+            "happy_path",
+            "optional_present",
+            "optional_absent",
+            "list_empty",
+            "list_singleton",
+            "list_many",
+            "mode_choice",
+            "custom"
+          ]
+        },
+        "target": {
+          "description": "JSON pointer for structural kinds, or mode label for mode_choice; presence/validity per kind is checked procedurally (11.1 table)",
+          "type": "string"
+        },
+        "description": {"type": "string"},
+        "acceptance": {"enum": ["proposed", "accepted", "rejected"]}
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "required": ["id", "clears_obligation_ids", "reason", "acceptance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "clears_obligation_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "reason": {"type": "string"},
+        "acceptance": {"enum": ["proposed", "accepted", "rejected"]}
+      }
+    },
+    "sampleCase": {
+      "type": "object",
+      "required": ["id", "input", "output", "satisfies"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "input": true,
+        "output": {
+          "description": "JsonValue | AuthoringTag (tag decoding per 11.0 is procedural)"
+        },
+        "writes": {
+          "description": "write name -> JsonValue | AuthoringTag",
+          "type": "object"
+        },
+        "satisfies": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "required": ["confirmed", "content_fingerprint"],
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {"type": "boolean"},
+        "confirmed_by": {"enum": ["user", "ci"]},
+        "confirmed_at": {"type": "string"},
+        "note": {"type": "string"},
+        "content_fingerprint": {"type": "string"}
+      }
+    }
+  }
+}

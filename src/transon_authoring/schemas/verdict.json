@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verdict",
+  "description": "SPEC 11.2 Verdict, schema_version 1.0 (FR-026, OQ-011/OQ-013).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ok",
+    "errors"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "assurance": {
+      "const": "matched"
+    },
+    "failed_stage": {
+      "enum": [
+        "samples",
+        "validate",
+        "dry_run",
+        "match"
+      ]
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/engineError"
+      }
+    },
+    "gaps": {
+      "description": "present when failed_stage === \"samples\"",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gap"
+      }
+    },
+    "json": {
+      "description": "candidate template on success (any JsonValue)"
+    },
+    "diff": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diffEntry"
+      }
+    },
+    "writes": {
+      "description": "reserved; never emitted by verify in v1 (OQ-011)",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "engineError": {
+      "type": "object",
+      "required": [
+        "type",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "DefinitionError",
+            "TransformationError",
+            "ProfileError",
+            "TimeoutError",
+            "PreflightError"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "engine_type": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "case_id": {
+          "description": "optional: present only when attributable to one dry-run case (OQ-011)",
+          "type": "string"
+        }
+      }
+    },
+    "diffEntry": {
+      "type": "object",
+      "required": [
+        "path",
+        "kind",
+        "case_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "missing",
+            "extra",
+            "value_mismatch",
+            "type_mismatch",
+            "writes_mismatch"
+          ]
+        },
+        "expected": true,
+        "actual": true,
+        "case_id": {
+          "type": "string"
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "schema_invalid",
+            "missing_happy_path",
+            "optional_present_unmet",
+            "optional_absent_unmet",
+            "list_empty_unmet",
+            "list_singleton_unmet",
+            "list_many_unmet",
+            "mode_choice_unmet",
+            "custom_unmet",
+            "obligation_not_accepted",
+            "waiver_invalid",
+            "unconfirmed",
+            "fingerprint_mismatch",
+            "no_cases",
+            "case_satisfies_unknown",
+            "duplicate_id",
+            "target_invalid",
+            "target_required"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "obligation_id": {
+          "type": "string"
+        },
+        "case_id": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "required": [
+          "assurance"
+        ],
+        "properties": {
+          "failed_stage": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "required": [
+          "failed_stage"
+        ],
+        "properties": {
+          "assurance": false
+        }
+      }
+    }
+  ]
+}

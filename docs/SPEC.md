@@ -415,14 +415,39 @@ AuthoringTag =
 3. Otherwise treat as ordinary `JsonValue` (including objects that happen to use other keys).
 
 Tagged forms MUST NOT appear inside **templates** or **include** map templates (those are plain
-Transon JSON). They are SampleSet expectation encoding only.
+Transon JSON; the library does not reject such keys at ingress — a template object using
+`"$transon_authoring"` is ordinary data to the engine and is faithfully re-encoded on output).
+AuthoringTags appear in exactly two places (rev 2026-07-11, OQ-012):
+
+1. **SampleSet expectation values** (`output`, `writes` values), decoded per the rules above.
+   **Decoding applies recursively at every nesting level** of an expected value.
+2. **Library output positions** that echo raw engine values — the `dry-run` envelope `result` and
+   `writes` values, and `DiffEntry.actual` — produced by the **engine-value encoding**
+   (normative):
+
+```
+enc(v):
+  engine NO_CONTENT sentinel                     -> NoContentRef
+  array                                          -> [ enc(x) for x in v ]
+  object containing the key "$transon_authoring" -> { "$transon_authoring": "lit",
+                                                      "value": { k: enc(v[k]) … } }
+  other object                                   -> { k: enc(v[k]) … }
+  scalar                                         -> v
+```
+
+`enc` is injective: in encoded output a bare `NoContentRef` node always denotes the engine
+sentinel, and a `LitRef` node always wraps literal data. If a raw engine value is not
+JSON-representable (non-string object key, non-finite number, or a non-JSON Python type), the
+affected dry-run case fails with a stable library-text `EngineError`
+(`type: "TransformationError"`, `engine_type` omitted).
+
 **Serialization (stdout):** UTF-8 JSON objects; `json.dumps` with `allow_nan=False`,
 `separators=(",", ":")` optional for compactness in CI, pretty-print allowed for humans; **object
 key order is not significant** for equality of results; parsers MUST reject duplicate object keys
 and non-finite numbers (`NaN`/`Infinity`) at ingress.
 
 **Schema versions:** documents carry `schema_version` string. v1 library understands `"1.0"` for
-SampleSet, SampleCheck, Verdict, AuthoringResult, ProjectConfig, NlIntents, EvalRunner,
+SampleSet, SampleCheck, Verdict, AuthoringResult, CliError, ProjectConfig, NlIntents, EvalRunner,
 EvalFixture.
 
 ### 11.1 SampleSet & `check_samples`
@@ -515,7 +540,9 @@ SampleCheck = {
 
 **`check_samples` algorithm (normative):**
 
-1. Validate SampleSet against JSON Schema `1.0` (including AuthoringTag decoding rules in §11.0).
+1. Validate SampleSet against JSON Schema `1.0` (including AuthoringTag decoding rules in §11.0 —
+   the §11.0 rule-2 unknown-tag check is procedural in this step, not part of the bundled JSON
+   Schema, and reports as a `schema_invalid` **gap** on an otherwise schema-valid document).
    On failure: all flags false; gap `schema_invalid`.
 2. Reject duplicate `coverage.id` / `cases.id` / `waivers.id` → `duplicate_id`.
 3. Consider only obligations with `acceptance === "accepted"`. If any remain `proposed`,
@@ -549,6 +576,13 @@ SampleCheck = {
 
 All steps are deterministic given the SampleSet alone (NFR-002).
 
+**Gap order (normative, OQ-013):** `gaps[]` is emitted in algorithm-step order: (1)
+`schema_invalid`, sorted by (JSON instance path, message); (2) `duplicate_id`, in document order
+`coverage` → `cases` → `waivers`; (3) obligation gaps in `coverage[]` document order — within one
+obligation `obligation_not_accepted`, then `target_required` / `target_invalid`, then its
+`*_unmet` code; (4) `waiver_invalid` in `waivers[]` order; (5) `case_satisfies_unknown` in
+`cases[]` order; (6) `no_cases`; (7) `unconfirmed`, then `fingerprint_mismatch`.
+
 **Skill responsibilities:** propose obligations (`acceptance: "proposed"`); propose cases/waivers;
 present gaps; on user approval set obligations/waivers to `accepted` and set `confirmation` with
 fresh fingerprint. Library never sets `confirmed: true`.
@@ -558,16 +592,21 @@ fresh fingerprint. Library never sets `confirmed: true`.
 ```
 EngineError = {
   type: "DefinitionError" | "TransformationError" | "ProfileError" | "TimeoutError" | "PreflightError",
+                            # taxonomy bucket; non-engine exceptions leaked by the pinned
+                            # engine during dry-run map to "TransformationError" (OQ-014)
   message: string,          # verbatim engine str(exc) when from engine; stable library text otherwise
-  engine_type?: string,     # Python exception class name when applicable
-  path?: string
+  engine_type?: string,     # actual Python exception class name when an exception was caught
+  path?: string,
+  case_id?: string          # SampleCase.id when the error is attributable to one dry-run
+                            # case; absent for validate/preflight/profile errors (OQ-011)
 }
 
 DiffEntry = {
   path: string,             # JSON pointer
   kind: "missing" | "extra" | "value_mismatch" | "type_mismatch" | "writes_mismatch",
   expected?: JsonValue | AuthoringTag | { "writes": { [name: string]: JsonValue | AuthoringTag } },
-  actual?: JsonValue | AuthoringTag | { "writes": { [name: string]: JsonValue | AuthoringTag } }
+  actual?: JsonValue | AuthoringTag | { "writes": { [name: string]: JsonValue | AuthoringTag } },
+  case_id: string           # SampleCase.id of the mismatching case (OQ-011)
 }
 
 Verdict = {
@@ -580,6 +619,7 @@ Verdict = {
   json?: JsonValue,         # candidate on success
   diff?: DiffEntry[],
   writes?: { [name: string]: JsonValue | AuthoringTag }
+                            # reserved; never emitted by verify in v1 (OQ-011)
 }
 ```
 
@@ -591,12 +631,42 @@ Verdict = {
 2. **`validate`** — construct `Transformer(candidate)` **only** with AD-017 defaults; call
    `validate()`. There is no JSON-level “custom marker” detector. `ProfileError` occurs only when
    the caller requested a non-default profile via rejected API/CLI/config knobs (AC-027).
+   An exception raised by construction/`validate()` that is **not** `DefinitionError` (the pinned
+   engine leaks e.g. `TypeError` for `{"$": 5}`) is reported like the dry-run leak closure
+   (OQ-014c) but in the “template invalid” class: `type: "DefinitionError"`, `engine_type` = the
+   actual Python exception class name, `message` = verbatim `str(exc)`,
+   `failed_stage: "validate"` (rev 2026-07-11).
 3. **`dry_run`** — per case, execute in a **worker subprocess** (AD-017) with
    `transform(input, no_content=Transformer.NO_CONTENT)`, sandboxed delegates, timeout 5s,
-   `max_include_depth=50`, `includes` from SampleSet only.
+   `max_include_depth=50`, `includes` from SampleSet only. Cases execute **sequentially in
+   `cases[]` document order**; every case runs even after earlier failures; each failing case
+   contributes exactly one `EngineError` carrying its `case_id`. If any case fails,
+   `failed_stage: "dry_run"` and `match` is not entered; results of passing cases are not
+   included in the `Verdict` (OQ-011).
 4. **`match`** — §11.4 comparing outputs and writes (AuthoringTag decoding on expected values).
+   All cases are compared; every `DiffEntry` carries `case_id`; entries are grouped by case in
+   `cases[]` order. `match` produces no `EngineError`s — a match failure is expressed by `diff`
+   alone (OQ-011).
 
 `ok === true` iff all stages pass; then `assurance` is always `"matched"`.
+
+**Array order (normative, OQ-013):** `errors[]`: one element for `validate` failures; one per
+failing case in `cases[]` document order for `dry_run`. `diff[]`: cases in `cases[]` order;
+within a case, output entries precede the writes entry.
+
+**Diff construction (normative, OQ-013):** output diffs come from a recursive walk of
+`dec(expected)` vs `enc(actual)` (§11.0): when both nodes are objects, visit the union of keys in
+Unicode code-point ascending order — a key present only in expected emits `missing`, only in
+actual emits `extra`, present in both recurses; when both are arrays, visit indices ascending —
+pairwise recursion, an index beyond the shorter side emits `missing`/`extra`; when node types
+differ (`NoContentRef` counts as its own type; `int` and `float` are distinct types), emit
+`type_mismatch` with both snapshots; same-type scalars that differ emit `value_mismatch`. An
+emitted entry terminates recursion at that node. `path` is the RFC 6901 JSON pointer within the
+case’s **encoded** output document (§11.0; inside a `LitRef` wrapper the pointer traverses
+`/value/…` segments of the encoded form) (root = `""`). Writes mismatches emit exactly one entry
+per case:
+`kind: "writes_mismatch"`, `path: ""`, `expected: {"writes": dec(case.writes ?? {})}`,
+`actual: {"writes": {name: enc(content)…}}`.
 
 ### 11.3 Execution profile details (AD-017 / AD-015)
 
@@ -615,6 +685,11 @@ Verdict = {
 | Trust | trusted local agent/CI only |
 
 ### 11.4 Matching (§5 / FR-005)
+
+Matching compares `dec(expected)` against `enc(actual)` over a common encoded domain (OQ-012):
+`dec` maps `NoContentRef` to itself, `LitRef(value)` to `enc(value)` (literal data contains no
+sentinel), recurses into plain arrays/objects, and rejects unknown tags per §11.0 rule 2. Rules
+1–8 below are the observable consequences and remain normative.
 
 **Deep equality** on JSON values (and `NoContentRef`):
 
@@ -685,33 +760,78 @@ primary machine result on stderr.
 | Subcommand | Inputs | stdout | exit |
 |---|---|---|---|
 | `metadata` | none | snapshot JSON (`JsonValue`) | 0 |
-| `examples search <query>` | query string | `{ "hits": [ example objects… ] }` | 0 |
+| `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
-| `validate` | `--template PATH` | `{ ok, errors }` debug | 0/1 |
-| `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ ok, result, writes, errors }` | 0/1 |
+| `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
+| `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
 | `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--non-interactive`] | `ProjectConfig` | 0/2 |
 
 **Exit codes:** `0` success; `1` semantic check/verify failure on **schema-valid** inputs; `2`
-usage / **schema** / config error; `3` internal unexpected error.
+usage / **schema** / config error; `3` internal unexpected error — emits the `CliError`
+`internal-error` envelope on stdout (best effort, single write; traceback on stderr only)
+(OQ-014).
+
+**Envelope notes (OQ-014):** on `dry-run` success `result` and `writes` are both present (values
+per §11.0 `enc`; `writes` may be `{}`); on failure both are omitted and `errors` is non-empty.
+The `metadata` subcommand is exempt from `schema_version`: it emits the pinned snapshot document
+verbatim (an engine document with its own `metadata_version`), not a library envelope.
+`--includes PATH` is a bare JSON object of the `SampleSet.includes` shape (include name →
+template JSON), no `schema_version` wrapper; any other JSON value → exit 2 `schema-error`.
 
 **Schema vs semantic failures (FR-026):** If `--samples` or `--template` (or `--input` /
 `--includes`) cannot be parsed as JSON, fails SampleSet/template schema validation, or carries an
 unsupported `schema_version`:
 
 - exit **`2`**
-- stdout envelope:
-  `{ "schema_version": "1.0", "ok": false, "status": "schema-error", "explanation": string, "errors": EngineError[] }`
+- stdout: a `CliError` with `status: "schema-error"` and `errors` of `type: "PreflightError"`
   (not a `SampleCheck` / `Verdict` body)
+
+```
+CliError = {
+  schema_version: "1.0",
+  ok: false,
+  status: "schema-error" | "profile-rejected" | "internal-error",
+  explanation: string,
+  errors: EngineError[]      # may be empty for "internal-error"
+}
+```
+
+`"internal-error"` is CLI-level only and is **not** an `AuthoringResult.status` value (OQ-014).
+
+**`PreflightError` (OQ-014):** the `EngineError.type` for ingress failures detected before any
+engine construction — JSON parse failure, duplicate object keys or non-finite numbers (§11.0
+ingress), JSON-Schema validation failure, unsupported `schema_version`, unreadable input file.
+Message is stable library text; `engine_type` omitted; it appears only in `CliError` envelopes
+with `status: "schema-error"` (exit 2). An exception raised during dry-run execution that is
+neither `DefinitionError` nor `TransformationError` (the pinned engine leaks e.g. `ValueError`
+from `call int`, `ZeroDivisionError` from `expr /`) is reported as
+`type: "TransformationError"` — the engine SPECIFICATION §2.4 class “template valid, data
+incompatible” — with `engine_type` = the actual Python exception class name and `message` =
+verbatim `str(exc)`.
+
+**JSON Schema draft (OQ-014):** all documents under `src/transon_authoring/schemas/` are authored
+in **draft 2020-12** (each declares `$schema`); runtime validation uses the `jsonschema` Python
+package (runtime dependency `jsonschema>=4.18`); `schema_invalid` gap / `PreflightError`
+messages derive from validator errors sorted by (JSON instance path, message) for determinism
+(OQ-013). Because message text originates in `jsonschema`, NFR-002's byte-determinism for these
+messages is scoped to a **fixed environment** (same `jsonschema` version); cross-version message
+drift is possible and acceptable (rev 2026-07-11).
 
 If the SampleSet is schema-valid but `ok_for_verify` is false, `check-samples` exits **`1`** with a
 normal `SampleCheck`. If schema-valid but verify stages fail, `verify` exits **`1`** with a normal
 `Verdict` (`failed_stage` set).
 
+**Exit-2 boundary (rev 2026-07-11):** exit 2 covers failures of the **bundled JSON Schema** (plus
+parse/version/read failures). The procedural §11.0 rule-2 unknown-AuthoringTag check is a
+`schema_invalid` **gap** on a schema-valid document — reported in a normal `SampleCheck` /
+`Verdict` with exit **1**, not a `CliError`.
+
 **No repair loop on CLI:** `verify` runs once. There is **no** `--repair-attempts` flag (FR-007).
 
 **Reserved profile knobs:** flags such as `--marker` / `--transformer` are rejected (exit **2**,
-`ProfileError` in the schema-error/profile envelope) even if present for forward-compat parsing.
+`CliError` with `status: "profile-rejected"` and a single `ProfileError`) even if present for
+forward-compat parsing.
 
 **Engine errors:** `EngineError.message` is the **exact** `str(exception)` from the engine when
 applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
@@ -902,30 +1022,84 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 - **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
 - **OQ-010** — *(open; A4 only)* Claude Code headless skill listing. Until resolved, CI asserts
   **install integrity** only for Claude (FR-019 / AC-009). Does **not** block A0–A3.
-- **OQ-011** — *(open; resolve during A1 design, before A1 DoD)* Per-case attribution in
-  `Verdict`: `EngineError` / `DiffEntry` carry no `case_id`, so multi-case `dry_run` / `match`
-  failures are ambiguous — this degrades the verbatim-error repair loop (FR-007). Also decide the
-  reporting policy: fail-fast at first failing case vs run all cases and report all failures.
-- **OQ-012** — *(open; A1)* Encoding of engine `NO_CONTENT` **outside** SampleSet expectations:
-  `dry-run` `result`, `DiffEntry.actual`, and root-level `Verdict.writes` values. §11.0 currently
-  scopes AuthoringTag to "SampleSet expectation encoding only", which read literally forbids the
-  natural answer (emit `NoContentRef`). Needs an explicit carve-out or alternative encoding.
-- **OQ-013** — *(open; A1)* Deterministic ordering of `gaps[]`, `errors[]`, `diff[]`. AC-018
-  requires identical semantic content and §11.4 makes array order significant, so these arrays
-  need a defined sort (e.g., source-document order, then code) or a per-field
-  order-insensitivity carve-out.
-- **OQ-014** — *(open; A1)* Envelope closure: stdout envelope for exit **3**; missing
-  `schema_version` on the `examples search` / `validate` / `dry-run` envelopes vs FR-026 / §11.0;
-  `PreflightError` is declared in `EngineError.type` but never referenced — define when it occurs
-  or drop it; schema of the `--includes PATH` file (presumably the `SampleSet.includes` map
-  shape); which JSON Schema draft "JSON Schema `1.0` validation" (§11.1 step 1) uses.
+- **OQ-011** — **Resolved (2026-07-11):** Per-case attribution: `EngineError` gains optional
+  `case_id` (present when the error is attributable to a single `SampleCase`; absent for
+  `validate`, preflight, and profile errors); `DiffEntry` gains **required** `case_id`.
+  Reporting policy: stages stay fail-fast **between** stages; **within** `dry_run` and `match`
+  every case is processed sequentially in `cases[]` document order and **every** failure is
+  reported — one `EngineError` per failing dry-run case, all `DiffEntry`s per mismatching case.
+  This maximizes verbatim-error yield per repair round (FR-007) at bounded cost (≤ 5 s × case
+  count). Root-level `Verdict.writes` is **never emitted** in v1 (a single map is unattributable
+  across cases; per-case writes are visible via the `dry-run` debug verb); the field stays in the
+  schema as optional/reserved. §11.2 amended.
+- **OQ-012** — **Resolved (2026-07-11):** Library outputs echo raw engine values through the
+  normative **engine-value encoding `enc`** added to §11.0: the `NO_CONTENT` sentinel encodes as
+  `NoContentRef`; arrays/objects encode recursively; any object containing the key
+  `"$transon_authoring"` is wrapped as `LitRef` (member values encoded); scalars pass through.
+  `enc` is injective, so in encoded output a bare `NoContentRef` always denotes the sentinel and
+  never literal data. Applies to the `dry-run` envelope `result` and `writes` values and to
+  `DiffEntry.actual` (root `Verdict.writes` is not emitted — OQ-011). §11.0's "SampleSet
+  expectation encoding only" sentence is replaced, and expected-value decoding is clarified to
+  apply **recursively at every nesting level** (nested sentinels are reachable in pinned-engine
+  results: plain list/dict template nodes pass `NO_CONTENT` through). Engine values that are not
+  JSON-representable (non-string object keys — reachable via `map` key mode; non-finite
+  numbers — reachable via `call float`; non-JSON Python types) fail that case at `dry_run` with a
+  stable library-text `EngineError`; such values are equally inexpressible as expectations, so
+  nothing representable is lost. §11.4 matching is defined over the encoded domain (equivalent to
+  raw-domain matching by injectivity).
+- **OQ-013** — **Resolved (2026-07-11):** No order-insensitivity carve-out. `gaps[]`, `errors[]`,
+  and `diff[]` get a **defined emission order** (document-order primary; §11.1/§11.2 amended),
+  and AC-018 equality is plain structural equality — arrays ordered, object key order
+  insignificant (§11.0). Orders: **gaps** follow the §11.1 algorithm steps (see §11.1 "Gap
+  order"); **errors**: `validate` emits exactly one; `dry_run` emits one per failing case in
+  `cases[]` order; preflight/profile envelopes carry a single error; **diff**: cases in `cases[]`
+  order; within a case, output entries first (deterministic recursive walk defined in §11.2),
+  then the single `writes_mismatch` entry if any.
+- **OQ-014** — **Resolved (2026-07-11):**
+  (a) **Exit 3** emits a best-effort `CliError` envelope on stdout —
+  `{"schema_version":"1.0","ok":false,"status":"internal-error","explanation":"<ExceptionClass>: <message>","errors":[]}` —
+  as a single write, with the traceback on stderr only. The CLI error envelope is formalized as
+  the **`CliError`** document, `status ∈ {"schema-error","profile-rejected","internal-error"}`,
+  added to the §11.0 schema-version list; `"internal-error"` is CLI-level only and is **not**
+  added to `AuthoringResult.status`.
+  (b) **`schema_version` on all envelopes:** `examples search` →
+  `{"schema_version":"1.0","hits":[…]}`; `validate` → `{"schema_version":"1.0","ok":…,"errors":[…]}`;
+  `dry-run` → `{"schema_version":"1.0","ok":…,"result"?,"writes"?,"errors":[…]}` — on success
+  `result` and `writes` are both present (values per §11.0 `enc`; `writes` may be `{}`), on
+  failure both omitted and `errors` non-empty. The `metadata` subcommand is exempt: it emits the
+  pinned snapshot document verbatim (an engine document with its own `metadata_version`), not a
+  library envelope.
+  (c) **`PreflightError` kept and defined:** the `EngineError.type` for ingress failures detected
+  before any engine construction — JSON parse failure, duplicate object keys or non-finite
+  numbers (§11.0 ingress), JSON-Schema validation failure, unsupported `schema_version`,
+  unreadable input file. Message is stable library text; `engine_type` omitted; it appears only
+  in `CliError` envelopes with `status:"schema-error"` (exit 2). `ProfileError` remains the type
+  for reserved-knob rejection (`status:"profile-rejected"`, exit 2). **`EngineError.type`
+  closure:** an exception raised during dry-run execution that is neither `DefinitionError` nor
+  `TransformationError` (the pinned engine leaks e.g. `ValueError` from `call int`,
+  `ZeroDivisionError` from `expr /`) is reported as `type:"TransformationError"` — the engine
+  SPECIFICATION §2.4 class "template valid, data incompatible" — with `engine_type` = the actual
+  Python exception class name and `message` = verbatim `str(exc)`.
+  (d) **`--includes` file schema:** exactly the `SampleSet.includes` map shape — a bare JSON
+  object `{ [name: string]: JsonValue }` (include name → template JSON), no `schema_version`
+  wrapper; any other JSON value → exit 2 `schema-error`.
+  (e) **JSON Schema draft:** all documents under `src/transon_authoring/schemas/` are authored in
+  **draft 2020-12** (each declares `$schema`); runtime validation uses the `jsonschema` Python
+  package (new runtime dependency, `jsonschema>=4.18`); `schema_invalid`
+  gap/`PreflightError` messages derive from validator errors sorted by (JSON instance path,
+  message) for determinism (OQ-013).
 - **OQ-015** — *(open; resolve at A2 standup, before `check_samples` lands)* Byte-precise
   `content_fingerprint` canonicalization: separators, `ensure_ascii`/unicode policy, number
   formatting (`1` vs `1.0`), and whether an absent `includes` key hashes as omitted or as `{}`.
   Any divergence between producers yields spurious `fingerprint_mismatch`, silently invalidating
   confirmations. Also make the acquisition path normative: the skill obtains the fingerprint from
   `SampleCheck.content_fingerprint` (via `check-samples` on the unconfirmed set), never computes
-  it by hand.
+  it by hand. *A1 note (2026-07-11):* A1 ships a **provisional-internal** canonicalization,
+  isolated in the single function `samples.content_fingerprint` (sha256 hex over `json.dumps` of
+  the §11.1 subset with `sort_keys=True`, `separators=(",",":")`, `ensure_ascii=False`,
+  `allow_nan=False`; absent `includes` omitted) — the default candidate for this resolution.
+  Committed fixtures record their regeneration recipe and MUST be regenerated if the A2
+  resolution diverges.
 - **OQ-016** — *(open; A2 standup)* Mechanical eval scoring for two buckets: which
   `AuthoringResult.status` values count as **refuse-success** for `expect: "refuse"`; and how
   `matched_correction` scoring differs from plain `matched` (or whether the bucket label is
