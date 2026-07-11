@@ -312,7 +312,9 @@ No console-script product; no MCP.
 - **AC-009** — CI: Cursor structural install + module smoke; Claude structural install (listing
   only if OQ-010 allows). No false “discoverability” claims.
 - **AC-010** — Unmet obligations → gap codes; skill presents waivers; user accepts/rejects.
-- **AC-011** — Conversational confirm writes `confirmation` + binds `content_fingerprint`.
+- **AC-011** — *(rev 2026-07-11, OQ-023 split — conversational half, A3)* Conversational confirm
+  (skill body) writes `confirmation` and binds `content_fingerprint` via the OQ-015 acquisition
+  path. The schema-testable half is AC-029.
 - **AC-012** — Defer → `deferred`; abort → `aborted`; no template.
 - **AC-013** — Success ⇒ `verdict.ok && assurance === "matched"` only.
 - **AC-014** — CI fixtures with `confirmed` + `coverage_complete`; no layout prompt when config
@@ -342,6 +344,11 @@ No console-script product; no MCP.
   JSON that merely *would* need another marker is **not** detectable as a profile violation — it
   runs under `"$"` and fails or succeeds via normal validate/dry_run/match.
 - **AC-028** — Per-case dry-run exceeding 5s fails `dry_run` with timeout error.
+- **AC-029** — *(OQ-023 split — schema half, A2)* Persisting a SampleSet per FR-021/§11.1 and
+  setting `confirmation` with `confirmed: true`, a valid `confirmed_by`, and the
+  `content_fingerprint` obtained via the OQ-015 acquisition path yields `check_samples` →
+  `confirmed: true`; any subsequent edit to the hashed content subset flips it back via
+  `fingerprint_mismatch`.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → PR with template + SampleSet.
@@ -487,6 +494,9 @@ Confirmation = {
                                     # schema_version, coverage, waivers, cases, includes
                                     # intent_nl is DELIBERATELY EXCLUDED: it is human context only
                                     # and must not invalidate confirmation when prose is edited
+                                    # canonicalization + acquisition path per OQ-015: obtained
+                                    # from SampleCheck.content_fingerprint, never hand-computed;
+                                    # pre-confirmation placeholder is "" (OQ-018a)
 }
 
 SampleSet = {
@@ -583,9 +593,21 @@ obligation `obligation_not_accepted`, then `target_required` / `target_invalid`,
 `*_unmet` code; (4) `waiver_invalid` in `waivers[]` order; (5) `case_satisfies_unknown` in
 `cases[]` order; (6) `no_cases`; (7) `unconfirmed`, then `fingerprint_mismatch`.
 
+**Edge semantics (OQ-018, normative):** (a) pre-confirmation `content_fingerprint` placeholder is
+`""`; (b) `fingerprint_mismatch` is emitted alongside `unconfirmed` whenever the recorded
+fingerprint differs from the recomputed one, even when `confirmed === false`; (c)
+`confirmed: true` with missing/invalid `confirmed_by` → gap `unconfirmed` (message names
+`confirmed_by`); (d) a waiver referencing a **rejected** obligation is not `waiver_invalid` — the
+clear has no effect; (e) `proposed`/`rejected` waivers never clear and emit no gap; dangling
+references are `waiver_invalid` regardless of the waiver's acceptance, and remaining valid refs
+of an accepted waiver still clear; (f) `target` on `happy_path`/`mode_choice`/`custom` is
+ignored, never validated; (g) an invalid `includes` template fails at the `dry_run` stage
+(include-load error on the including case), never at `samples`.
+
 **Skill responsibilities:** propose obligations (`acceptance: "proposed"`); propose cases/waivers;
 present gaps; on user approval set obligations/waivers to `accepted` and set `confirmation` with
-fresh fingerprint. Library never sets `confirmed: true`.
+fresh fingerprint (obtained per the OQ-015 acquisition path). Library never sets
+`confirmed: true`.
 
 ### 11.2 `verify`
 
@@ -745,7 +767,7 @@ AuthoringResult = {
 | `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` |
 | `need-samples` | stopped with incomplete coverage / need more cases |
 | `deferred` | user chose defer |
-| `aborted` | user chose abort |
+| `aborted` | user chose abort, **or the skill aborted after determining the request cannot be grounded in the pinned metadata (refusal — AC-003; rev 2026-07-11, OQ-016b)** |
 | `repair-exhausted` | skill consumed all `repair_attempts` without a matched verdict |
 | `samples-rejected` | `check_samples` / verify `samples` stage failed on a schema-valid SampleSet |
 | `verify-failed` | validate, dry_run, or match failed and the skill stopped without scheduling another repair |
@@ -765,7 +787,7 @@ primary machine result on stderr.
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
-| `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--non-interactive`] | `ProjectConfig` | 0/2 |
+| `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (rev 2026-07-11: flags aligned with §11.9) | `ProjectConfig` | 0/2 |
 
 **Exit codes:** `0` success; `1` semantic check/verify failure on **schema-valid** inputs; `2`
 usage / **schema** / config error; `3` internal unexpected error — emits the `CliError`
@@ -902,8 +924,19 @@ EvalFixture = {
 - **Ratchet:** let `T` be declared authoring target (starts 0.80). After release R with achieved
   rate `A`, set `T' = max(T, min(A, 0.95))` by explicit commit to `evals/targets.json`. Never
   decrease `T` silently.
+- **`evals/targets.json` (OQ-016e):** `{ "schema_version": "1.0", "authoring_target": number,
+  "adversarial_target": 1.0 }` — initial `authoring_target` 0.80; `adversarial_target` constant.
 - **Fixture regression:** any previously passing captured fixture (any expect bucket) that fails
-  majority → gate fail regardless of aggregate rate.
+  majority → gate fail regardless of aggregate rate. The normative record of "previously
+  passing" is the committed `evals/baseline.json` (OQ-016f):
+  `{ "schema_version": "1.0", "passing": [fixture ids…] }`; ids are added only by explicit
+  `check_evals --update-baseline` commits.
+- **Harness (OQ-017):** raw provider-API tool loop in `scripts/eval_harness.py`, driven by
+  `scripts/check_evals.py`; system prompt = repo-root `SKILL.md` verbatim + fixed preamble; tools
+  `write_file` / `transon_authoring` / `submit_result` only; per-episode temp workspace;
+  provider client behind the optional extra `transon-authoring[evals]`; full runs live in a
+  credential-holding dispatch workflow, per-PR CI runs `check_evals --lint` + fake-provider unit
+  tests.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
 
@@ -929,6 +962,12 @@ inside the repo root (no `..` escape).
 
 **Collisions:** `init-config` refuses to overwrite unless `--force`. Sample file write refuses
 overwrite unless user/CI confirms or `--force`.
+
+**Write location (rev 2026-07-11):** `init-config` writes `.transon-authoring.json` to the
+**current working directory** (the skill runs `init-config` at the repo root) and emits the
+`ProjectConfig` document on stdout. Interactive prompting (layout only) happens only when stdin
+is a TTY and `--non-interactive` is absent; `check-samples`/`verify` never read config and never
+prompt.
 
 **Non-interactive:** `--non-interactive` requires all fields on CLI or existing config; else exit 2.
 
@@ -963,7 +1002,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020 |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) |
 | `check_parity` | NFR-007 / AC-005 |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
@@ -1088,33 +1127,102 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   package (new runtime dependency, `jsonschema>=4.18`); `schema_invalid`
   gap/`PreflightError` messages derive from validator errors sorted by (JSON instance path,
   message) for determinism (OQ-013).
-- **OQ-015** — *(open; resolve at A2 standup, before `check_samples` lands)* Byte-precise
-  `content_fingerprint` canonicalization: separators, `ensure_ascii`/unicode policy, number
-  formatting (`1` vs `1.0`), and whether an absent `includes` key hashes as omitted or as `{}`.
-  Any divergence between producers yields spurious `fingerprint_mismatch`, silently invalidating
-  confirmations. Also make the acquisition path normative: the skill obtains the fingerprint from
-  `SampleCheck.content_fingerprint` (via `check-samples` on the unconfirmed set), never computes
-  it by hand. *A1 note (2026-07-11):* A1 ships a **provisional-internal** canonicalization,
-  isolated in the single function `samples.content_fingerprint` (sha256 hex over `json.dumps` of
-  the §11.1 subset with `sort_keys=True`, `separators=(",",":")`, `ensure_ascii=False`,
-  `allow_nan=False`; absent `includes` omitted) — the default candidate for this resolution.
-  Committed fixtures record their regeneration recipe and MUST be regenerated if the A2
-  resolution diverges.
-- **OQ-016** — *(open; A2 standup)* Mechanical eval scoring for two buckets: which
-  `AuthoringResult.status` values count as **refuse-success** for `expect: "refuse"`; and how
-  `matched_correction` scoring differs from plain `matched` (or whether the bucket label is
-  reporting-only). `check_evals` cannot be implemented without this.
-- **OQ-017** — *(open; A2 standup)* Eval harness shape: how the runner pinned by
-  `evals/runner.json` actually drives the skill (headless coding agent vs raw API tool loop),
-  which tools are exposed, and how `SKILL.md` is injected. AD-020 pins the *values*; the harness
-  *architecture* is still unspecified and sits on the AD-011 critical path.
-- **OQ-018** — *(open; A2)* `check_samples` edge semantics: valid placeholder for the required
-  `Confirmation.content_fingerprint` before first confirmation, and whether `fingerprint_mismatch`
-  is emitted alongside `unconfirmed` when `confirmed === false`; gap code when `confirmed: true`
-  but `confirmed_by` is missing; whether a waiver clearing a **rejected** obligation is
-  `waiver_invalid`; handling of `proposed` (unaccepted) waivers; whether `target` on
-  `mode_choice` / `custom` is validated (`target_invalid`) or ignored; stage attribution when an
-  `includes` template is itself invalid (`samples` vs `dry_run`).
+- **OQ-015** — **Resolved (2026-07-11, A2 standup):** The A1 provisional canonicalization is
+  adopted **unchanged** as normative (committed fixtures need no regeneration).
+  `content_fingerprint` = lowercase hex SHA-256 of the UTF-8 encoding of
+  `json.dumps(subset, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)`,
+  where `subset` is the object containing exactly those of the keys `schema_version`, `coverage`,
+  `waivers`, `cases`, `includes` that are **present** in the SampleSet document — an absent
+  `includes` is omitted, **not** hashed as `{}`; `intent_nl` and `confirmation` stay excluded
+  (§11.1). Number formatting follows the parsed document: integers serialize with no fraction
+  part, floats by Python shortest-round-trip `repr` — consistent with §11.4 (`1` ≠ `1.0`);
+  non-finite numbers are already rejected at ingress (§11.0). Non-ASCII is emitted unescaped and
+  hashed as UTF-8. **Acquisition path (normative):** agents/skill NEVER compute or reimplement
+  the fingerprint. They obtain it exclusively from `SampleCheck.content_fingerprint` by running
+  `check-samples` on the not-yet-confirmed SampleSet (the exit-1 `SampleCheck` still carries the
+  recomputed fingerprint) and copy that value into `confirmation.content_fingerprint` at
+  confirmation time. `transon_authoring.samples.content_fingerprint` is the single
+  implementation; its "provisional-internal" marker is removed.
+- **OQ-016** — **Resolved (2026-07-11, A2 standup):** Mechanical scoring per run, over the final
+  `AuthoringResult` submitted by the skill under test (§11.8 harness, OQ-017):
+  (a) **matched-success** (for `expect: "matched"` **and** `expect: "matched_correction"`): the
+  submitted `AuthoringResult` validates against the bundled schema, `ok === true`,
+  `status === "matched"`, `template` present, `verdict.ok === true` with
+  `assurance === "matched"`, **and** the harness independently re-runs
+  `python -m transon_authoring verify --template <submitted> --samples <fixture SampleSet>` with
+  exit 0 (the skill's claim is never trusted — AD-004).
+  (b) **refuse-success** (for `expect: "refuse"`): the submitted `AuthoringResult` validates
+  against the schema, `ok === false`, `template` absent, and `status` ∈ {`need-samples`,
+  `deferred`, `aborted`, `samples-rejected`, `verify-failed`, `repair-exhausted`,
+  `profile-rejected`}. `status: "schema-error"` and a missing/invalid submission are scored as
+  refuse-**failure** (not infra). The §11.5 `aborted` row is reworded to include skill-initiated
+  refusal (AC-003).
+  (c) **`matched_correction` is reporting-only:** scored with rule (a); its pass rate is reported
+  as a separate *correction rate* but gates nothing (per §11.8 buckets); its fixtures still
+  participate in the fixture-regression rule.
+  (d) **`infra_error`:** provider/API transport failure, harness fault, or provider-side
+  refusal-to-serve — never model behavior; excluded from denominators per §11.8 with the 10% cap.
+  (e) **`evals/targets.json` (normative shape; §11.8):** `{ "schema_version": "1.0",
+  "authoring_target": number (initial 0.80), "adversarial_target": 1.0 }` — the ratchet edits
+  `authoring_target` by explicit commit; `adversarial_target` is constant 1.0.
+  (f) **Fixture-regression baseline (normative; §11.8):** committed `evals/baseline.json` —
+  `{ "schema_version": "1.0", "passing": [fixture ids…] }`, the set of fixture ids that have
+  achieved majority-pass in a previously accepted gate run. `check_evals` fails if any baseline
+  id fails its majority, regardless of aggregate rates; ids are added only via explicit
+  `check_evals --update-baseline` commits (append-only in practice; removals require deleting the
+  fixture).
+- **OQ-017** — **Resolved (2026-07-11, A2 standup):** The runner is a **raw API tool loop** owned
+  by this repo (no headless coding-agent dependency, no MCP): `scripts/eval_harness.py`, driven
+  by `scripts/check_evals.py`.
+  (a) **Prompting:** the system prompt is the verbatim bytes of the repo-root `SKILL.md` plus a
+  fixed harness preamble (workspace rules, tool descriptions, "finish by calling `submit_result`
+  exactly once"). The user message carries the fixture's `intent_nl` and, when the fixture
+  supplies `samples`, the workspace-relative path where the harness wrote it (`samples.json`).
+  (b) **Tools (exactly three, provider tool-use API):** `write_file(path, content)` — write a
+  UTF-8 file at a relative path confined to the per-run temp workspace;
+  `transon_authoring(argv: string[])` — run `python -m transon_authoring <argv…>` with
+  cwd = workspace, returning `{exit_code, stdout, stderr}` (stdout/stderr truncated at a fixed
+  byte cap); `submit_result(result: AuthoringResult)` — ends the episode. No shell tool, no
+  network tool, no absolute paths.
+  (c) **Budget & pinning:** `evals/runner.json` (AD-020) pins provider/model/settings;
+  `tool_budget` caps total tool calls per run — exceeding it, or ending without `submit_result`,
+  scores the run as bucket-failure (not infra). `temperature: 0`; `seed` passed through when the
+  provider supports it.
+  (d) **Provider client:** selected by `runner.json.provider`; v1 implements `"anthropic"` via
+  the `anthropic` SDK, declared as the optional extra `transon-authoring[evals]` — never a
+  runtime dependency (NFR-003 is unaffected: evals are inherently online and are not part of the
+  offline surface).
+  (e) **CI shape:** full `check_evals` runs in a separate manually-dispatched (and later
+  scheduled) workflow holding the provider secret — never in per-PR CI. Per-PR CI runs the
+  credential-free parts: `check_evals --lint` (fixture/runner/targets/baseline structural checks,
+  NFR-011) and the scoring/harness unit tests, which use an injected fake provider
+  (NFR-002-style determinism for the gate logic itself).
+  (f) **Initial committed `runner.json` values (gate identity per AD-020):**
+  `provider: "anthropic"`, `model_id: "claude-sonnet-5"`, `temperature: 0`,
+  `max_output_tokens: 8192`, `tool_budget: 32`, `runs_per_fixture: 3`,
+  `pass_rule: "majority"`, `seed: null`. Changing any is an explicit eval-policy commit.
+- **OQ-018** — **Resolved (2026-07-11, A2 standup):** all edges resolved to the A1-implemented
+  behavior, now normative in §11.1 ("Edge semantics"):
+  (a) **Placeholder:** `Confirmation.content_fingerprint` is required; the normative
+  pre-confirmation placeholder is the empty string `""`.
+  (b) `fingerprint_mismatch` **is** emitted alongside `unconfirmed` whenever the recorded
+  fingerprint differs from the recomputed one, including when `confirmed === false`
+  (deterministic; harmless because `confirmed` is already false). Order per §11.1 gap order:
+  `unconfirmed` then `fingerprint_mismatch`.
+  (c) `confirmed: true` with missing or invalid `confirmed_by` → gap **`unconfirmed`** (message
+  names `confirmed_by`); no new gap code.
+  (d) A waiver referencing a **rejected** obligation is **not** `waiver_invalid`: any
+  `coverage[].id` is a valid reference; the clear simply has no effect (rejected obligations are
+  ignored at step 3).
+  (e) `proposed`/`rejected` waivers never clear obligations and emit no gap by themselves;
+  `waiver_invalid` is per dangling reference (any acceptance), and the remaining valid refs of an
+  **accepted** waiver still clear.
+  (f) `target` on `happy_path` / `mode_choice` / `custom` is **ignored, never validated** —
+  `target_required`/`target_invalid` apply only to the five pointer kinds; bundled-schema typing
+  still applies.
+  (g) An invalid template inside `includes` fails at **`dry_run`** stage (include-load error on
+  the including case), never at `samples`: `check_samples` is engine-free and checks the artifact
+  only (AD-016 / NFR-002); §11.1 step 1 validates `includes` values only as `JsonValue`s.
 - **OQ-019** — **Resolved (2026-07-11):** Python floor is **`>=3.10`** in `pyproject.toml`. The
   pinned engine's actual marker is `>=3.9` (checked in the `transon==0.1.7` checkout), so any
   floor ≥3.9 is dependency-compatible; 3.10 is chosen because 3.9 is past end-of-life
@@ -1145,9 +1253,14 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   `tags`, `doc`, and sidecar NL text (FR-010), but hit *content* other than `nl` comes only from
   the snapshot (this is what AC-022's "sidecar enriches display only" means). Ranking beyond
   (a)–(c) is unspecified.
-- **OQ-023** — *(open; A2/A3)* Traceability tension on AC-011: FR-021 maps to AC-011 at **A2**,
-  but "conversational confirm" is skill-body behavior (**A3**). Split AC-011 into a schema half
-  (FR-021, A2-testable) and a conversational half (FR-024, A3), or re-map the matrix.
+- **OQ-023** — **Resolved (2026-07-11, A2 standup):** AC-011 is split. New **AC-029** (schema
+  half, A2, FR-021): persisting a SampleSet per FR-021/§11.1 and setting `confirmation` with
+  `confirmed: true`, a valid `confirmed_by`, and the `content_fingerprint` obtained via the
+  OQ-015 acquisition path yields `check_samples` → `confirmed: true`; any subsequent edit to the
+  hashed content subset flips it back via `fingerprint_mismatch`. **AC-011** is reworded to the
+  conversational half only ("conversational confirm (skill body) writes `confirmation` and binds
+  `content_fingerprint` via the OQ-015 acquisition path") and remains mapped to FR-024 at A3.
+  §17: FR-021 row → `AC-029, AC-017`; FR-024 row unchanged (`AC-010, AC-011`).
 
 ---
 
@@ -1193,7 +1306,7 @@ excluded from active coverage.
 | FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review |
 | FR-019 | AC-009 | A4 | check_install |
 | FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit |
-| FR-021 | AC-011, AC-017 | A2 | schema unit |
+| FR-021 | AC-029, AC-017 | A2 | schema unit |
 | FR-022 | AC-014 | A2 | config unit |
 | FR-023 | AC-012 | A3 | sample-loop evals |
 | FR-024 | AC-010, AC-011 | A3 | sample-loop evals |
@@ -1221,7 +1334,7 @@ excluded from active coverage.
 |---|---|---|
 | **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
 | **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
-| **A2** | **Yes, after standup decisions** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. OQ-015–018 must close at standup before the affected code (in DoD). |
-| A3 | After A2 green | Skill body only. Entry: OQ-023 resolved. |
+| **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
+| A3 | After A2 green | Skill body only. Entry: OQ-023 resolved (2026-07-11). |
 | A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. |
 | A5 | After A4 | Optional editor sink demo. |

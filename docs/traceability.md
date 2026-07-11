@@ -29,7 +29,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | |
 | FR-019 | AC-009 | A4 | check_install | [ ] | |
 | FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [ ] | |
-| FR-021 | AC-011, AC-017 | A2 | schema unit | [ ] | |
+| FR-021 | AC-029, AC-017 | A2 | schema unit | [ ] | |
 | FR-022 | AC-014 | A2 | config unit | [ ] | |
 | FR-023 | AC-012 | A3 | sample-loop evals | [ ] | |
 | FR-024 | AC-010, AC-011 | A3 | sample-loop evals | [ ] | |
