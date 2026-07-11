@@ -18,6 +18,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# OQ-017d — provider SDK for the eval harness only; never a runtime
+# dependency (evals are inherently online; NFR-003 is unaffected).
+evals = ["anthropic>=0.40"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/transon_authoring"]
