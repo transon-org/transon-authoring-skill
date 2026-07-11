@@ -44,8 +44,11 @@ jobs:
   # NFR-003 / AC-020 — offline after install: verify/check/metadata need no
   # network once the pinned engine and package are installed. Install runs
   # WITH network (NFR-003 begins "after install"); the surface then runs
-  # inside `unshare -rn` — an unprivileged user + network namespace whose only
-  # interface is a DOWN loopback — so any network attempt fails immediately.
+  # inside `sudo unshare -n` — a network namespace whose only interface is a
+  # DOWN loopback — so any network attempt fails immediately. Root (sudo) is
+  # required because the runner's Ubuntu image blocks unprivileged user
+  # namespaces (`unshare -rn` dies writing /proc/self/uid_map); `env PATH=...`
+  # keeps the setup-python interpreter across sudo's env reset.
   # Fixtures: tests/fixtures/offline/ (see its README for OQ-015 regeneration).
   offline:
     name: Offline surface (NFR-003 / AC-020)
@@ -65,8 +68,9 @@ jobs:
         # The namespace covers child processes too, so `verify`'s sandboxed
         # worker subprocesses and pytest's CLI subprocesses run network-cut.
         run: |
-          unshare -rn python3 -m transon_authoring metadata > /dev/null
-          unshare -rn python3 -m transon_authoring examples search "join" > /dev/null
-          unshare -rn python3 -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
-          unshare -rn python3 -m transon_authoring verify --template tests/fixtures/offline/template.json --samples tests/fixtures/offline/sample_set.json
-          unshare -rn python3 -m pytest tests/test_offline.py -q
+          offline() { sudo env "PATH=$PATH" "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" unshare -n "$@"; }
+          offline python3 -m transon_authoring metadata > /dev/null
+          offline python3 -m transon_authoring examples search "join" > /dev/null
+          offline python3 -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
+          offline python3 -m transon_authoring verify --template tests/fixtures/offline/template.json --samples tests/fixtures/offline/sample_set.json
+          offline python3 -m pytest tests/test_offline.py -q
