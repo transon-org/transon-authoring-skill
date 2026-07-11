@@ -9,14 +9,18 @@ Engine-behavior expectations are derived by *running* the pinned engine
 (``transon==0.1.7``) in-process, never from memory (AD-018 / NFR-001).
 """
 
+import importlib
 import json
 import subprocess
 import sys
 import time
 
-import transon_authoring.verify as verify_module
 from transon_authoring import dry_run
 from transon_authoring.verify import DRY_RUN_TIMEOUT_SECONDS, run_dry_run_case
+
+# The package re-exports the `verify` FUNCTION under the same name as the
+# submodule (AD-006 surface), so resolve the module itself for monkeypatching.
+verify_module = importlib.import_module("transon_authoring.verify")
 
 TAG_KEY = "$transon_authoring"
 

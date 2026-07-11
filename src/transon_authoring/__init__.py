@@ -8,8 +8,8 @@ metadata snapshot, the examples corpus with its NL-intents sidecar, and the
 """
 
 from .samples import check_samples
-from .verify import dry_run
+from .verify import dry_run, validate, verify
 
-__all__ = ["check_samples", "dry_run"]
+__all__ = ["check_samples", "dry_run", "validate", "verify"]
 
 __version__ = "0.0.1"
