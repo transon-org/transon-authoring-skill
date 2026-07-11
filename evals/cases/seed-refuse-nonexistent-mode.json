@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "id": "seed-refuse-nonexistent-mode",
+  "expect": "refuse",
+  "intent_nl": "Map over the input list using the map operator's 'telepathic' mode so each item is transformed without specifying an item template.",
+  "notes": "Synthetic AC-003 seed: the map operator has no 'telepathic' mode in the pinned metadata snapshot; the skill must refuse rather than invent it.",
+  "redacted": false
+}

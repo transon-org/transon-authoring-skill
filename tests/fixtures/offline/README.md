@@ -10,12 +10,13 @@ these exact files inside a network-cut namespace (`unshare -rn`).
 | `input.json`      | Dry-run input; yields `"hello"` under the template above.                |
 | `sample_set.json` | Confirmed, coverage-complete §11.1 SampleSet that MATCHES the template — `check-samples` exits 0 and `verify` reaches `ok: true`, `assurance: "matched"`. |
 
-## Regeneration — required if OQ-015 changes canonicalization
+## Regeneration — only if a future spec change alters canonicalization
 
 `sample_set.json` embeds `confirmation.content_fingerprint`, produced by
-`transon_authoring.samples.content_fingerprint()` — currently the **provisional-internal
-canonicalization pending OQ-015** (open; resolves at the A2 standup). If OQ-015 lands a different
-byte-level rule, the recorded fingerprint stops matching, `check-samples` starts failing with
+`transon_authoring.samples.content_fingerprint()`. The OQ-015 resolution (2026-07-11, A2 standup;
+SPEC §15) adopted the A1 canonicalization **unchanged** as normative, so no regeneration was
+needed — the recorded fingerprint remains valid. Should a future spec change ever alter the
+byte-level rule, the recorded fingerprint would stop matching, `check-samples` would fail with
 `fingerprint_mismatch`, and these fixtures MUST be regenerated. Recompute with the library (never
 by hand):
 

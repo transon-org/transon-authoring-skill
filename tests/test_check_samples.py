@@ -1,4 +1,4 @@
-"""FR-027 — `check_samples` samples core (SPEC §11.1; supports AC-016, AC-017).
+"""FR-027 / FR-020 — `check_samples` (SPEC §11.1; AC-010, AC-016, AC-017, AC-018).
 
 Covers the §11.1 normative algorithm steps 1–7, the kind-specific obligation
 table, the normative gap emission order (§11.1 "Gap order", OQ-013), and the
@@ -8,6 +8,7 @@ table, the normative gap emission order (§11.1 "Gap order", OQ-013), and the
 """
 
 import copy
+import json
 
 from transon_authoring import check_samples
 from transon_authoring._ingress import schema_violations
@@ -829,7 +830,7 @@ def test_ac_018_deterministic_samplecheck():
 
 
 # ---------------------------------------------------------------------------
-# content_fingerprint (§11.1 Confirmation; provisional OQ-015 canonicalization)
+# content_fingerprint (§11.1 Confirmation; OQ-015 canonicalization, resolved)
 # ---------------------------------------------------------------------------
 
 
@@ -871,7 +872,7 @@ def test_fr_027_fingerprint_covers_content_subset():
 
 
 def test_fr_027_fingerprint_absent_includes_differs_from_empty_includes():
-    # Provisional OQ-015 rule: absent `includes` is omitted from the hashed
+    # Normative OQ-015 rule: absent `includes` is omitted from the hashed
     # subset, not hashed as {}.
     assert content_fingerprint(sample_set()) != content_fingerprint(
         sample_set(includes={})
@@ -881,3 +882,183 @@ def test_fr_027_fingerprint_absent_includes_differs_from_empty_includes():
 def test_fr_027_fingerprint_matches_samplecheck_field():
     ss = sample_set()
     assert check_samples(ss)["content_fingerprint"] == content_fingerprint(ss)
+
+
+# ---------------------------------------------------------------------------
+# FR-020 — `check_samples` complete (A2): AC-010 waiver flow, the §11.1
+# "Edge semantics (OQ-018)" block, AC-017 flag independence, AC-018 determinism
+# ---------------------------------------------------------------------------
+
+
+def test_fr_020_ac_010_gap_codes_and_waiver_flow():
+    # AC-010: unmet obligations yield gap codes; the (skill-mediated) waiver
+    # flow clears them only when the waiver is accepted.
+    def with_waiver(waivers):
+        return sample_set(
+            coverage=[
+                obligation("happy", "happy_path"),
+                obligation("empty", "list_empty", target="/items"),
+            ],
+            cases=[sample_case("c1", input={"items": [1]}, satisfies=["happy"])],
+            waivers=waivers,
+        )
+
+    # No waiver: the unmet obligation surfaces as its gap code.
+    unmet = check_samples(with_waiver([]))
+    assert gap_codes(unmet) == ["list_empty_unmet"]
+    assert unmet["gaps"][0]["obligation_id"] == "empty"
+    assert unmet["coverage_complete"] is False
+    assert unmet["ok_for_verify"] is False
+
+    # User accepts the waiver: the gap clears, coverage completes.
+    accepted = check_samples(with_waiver([waiver("w1", ["empty"])]))
+    assert accepted["gaps"] == []
+    assert accepted["coverage_complete"] is True
+    assert accepted["ok_for_verify"] is True
+
+    # User rejects the waiver: nothing clears (OQ-018e), gap remains.
+    rejected = check_samples(
+        with_waiver([waiver("w1", ["empty"], acceptance="rejected")])
+    )
+    assert gap_codes(rejected) == ["list_empty_unmet"]
+    assert rejected["coverage_complete"] is False
+    assert rejected["ok_for_verify"] is False
+
+
+def test_fr_020_oq_018_placeholder_fingerprint_both_gaps():
+    # OQ-018a: the normative pre-confirmation placeholder is "".
+    # OQ-018b: fingerprint_mismatch is emitted alongside unconfirmed even when
+    # confirmed === false, in the §11.1 gap order (unconfirmed first).
+    ss = sample_set(confirmed=False, confirmed_by=None, fingerprint="")
+    check = check_samples(ss)
+    assert gap_codes(check) == ["unconfirmed", "fingerprint_mismatch"]
+    assert check["confirmed"] is False
+    assert check["ok_for_verify"] is False
+    # The SampleCheck still carries the recomputed fingerprint — the OQ-015
+    # acquisition path for the skill's later confirmation write.
+    assert check["content_fingerprint"] == content_fingerprint(ss)
+    assert check["content_fingerprint"] != ""
+
+
+def test_fr_020_oq_018_confirmed_true_missing_confirmed_by_is_unconfirmed():
+    # OQ-018c: confirmed: true with missing confirmed_by -> gap `unconfirmed`
+    # (message names confirmed_by); no new gap code.
+    ss = sample_set(confirmed=True, confirmed_by=None)  # fingerprint correct
+    check = check_samples(ss)
+    assert check["confirmed"] is False
+    assert gap_codes(check) == ["unconfirmed"]
+    assert "confirmed_by" in check["gaps"][0]["message"]
+    assert check["ok_for_verify"] is False
+
+
+def test_fr_020_oq_018_waiver_on_rejected_obligation_not_invalid():
+    # OQ-018d: any coverage[].id is a valid waiver reference — a waiver
+    # clearing a REJECTED obligation is not waiver_invalid; the clear simply
+    # has no effect (rejected obligations are already ignored at step 3).
+    ss = sample_set(
+        coverage=[
+            obligation("happy", "happy_path"),
+            obligation("rej", "custom", acceptance="rejected"),
+        ],
+        waivers=[waiver("w1", ["rej"])],
+    )
+    check = check_samples(ss)
+    assert check["gaps"] == []
+    assert check["coverage_complete"] is True
+    assert check["ok_for_verify"] is True
+
+
+def test_fr_020_oq_018_proposed_waiver_inert_dangling_ref_invalid():
+    # OQ-018e: a proposed waiver never clears and emits no gap by itself,
+    # but its dangling references are waiver_invalid regardless of acceptance.
+    ss = sample_set(
+        coverage=[
+            obligation("happy", "happy_path"),
+            obligation("many", "list_many", target="/xs"),
+        ],
+        cases=[sample_case("c1", input={"xs": []}, satisfies=["happy"])],
+        waivers=[waiver("w1", ["many", "ghost"], acceptance="proposed")],
+    )
+    check = check_samples(ss)
+    # Obligation gap first (coverage[] order), then the dangling-ref gap.
+    assert gap_codes(check) == ["list_many_unmet", "waiver_invalid"]
+    assert "ghost" in check["gaps"][1]["message"]
+    assert check["coverage_complete"] is False
+
+
+def test_fr_020_oq_018_mode_choice_and_custom_target_ignored():
+    # OQ-018f: target on happy_path / mode_choice / custom is ignored, never
+    # validated — no target_required / target_invalid even for non-pointer
+    # strings; a satisfies claim alone meets each obligation.
+    ss = sample_set(
+        coverage=[
+            obligation("happy", "happy_path", target="not-a-pointer"),
+            obligation("mode", "mode_choice", target="compact"),  # mode label
+            obligation("free", "custom", target="~~broken~~escape"),
+        ],
+        cases=[
+            sample_case("c1", input={"n": 1}, satisfies=["happy", "mode", "free"])
+        ],
+    )
+    check = check_samples(ss)
+    assert check["gaps"] == []
+    assert check["coverage_complete"] is True
+    assert check["ok_for_verify"] is True
+
+    # Without the claims the *_unmet codes fire — but still no target gaps.
+    unmet = check_samples(
+        sample_set(
+            coverage=[
+                obligation("mode", "mode_choice", target="compact"),
+                obligation("free", "custom", target="not/a/pointer"),
+            ],
+            cases=[sample_case("c1", input={"n": 1})],
+        )
+    )
+    assert gap_codes(unmet) == ["mode_choice_unmet", "custom_unmet"]
+
+
+def test_fr_020_ac_017_flags_independent():
+    # AC-017: coverage_complete and confirmed are computed independently;
+    # ok_for_verify requires both (§11.1 steps 5-7).
+    incomplete_kwargs = dict(
+        coverage=[
+            obligation("happy", "happy_path"),
+            obligation("opt", "optional_present", target="/x"),
+        ],
+        cases=[sample_case("c1", input={}, satisfies=["happy", "opt"])],
+    )
+    for build, expected_flags in (
+        (lambda: sample_set(), (True, True)),
+        (lambda: sample_set(confirmed=False), (True, False)),
+        (lambda: sample_set(**incomplete_kwargs), (False, True)),
+        (lambda: sample_set(confirmed=False, **incomplete_kwargs), (False, False)),
+    ):
+        check = check_samples(build())
+        assert (check["coverage_complete"], check["confirmed"]) == expected_flags
+        assert check["ok_for_verify"] is (expected_flags == (True, True))
+
+
+def test_fr_020_ac_018_sample_check_byte_deterministic():
+    # AC-018 / NFR-002: same SampleSet => identical SampleCheck, down to the
+    # serialized bytes under the §11.0 canonical dumps, across repeated runs.
+    ss = sample_set(
+        coverage=[
+            obligation("happy", "happy_path"),
+            obligation("opt", "optional_present", target="/missing"),
+            obligation("prop", "custom", acceptance="proposed"),
+        ],
+        cases=[sample_case("c1", input={"n": 1}, satisfies=["happy", "ghost"])],
+        waivers=[waiver("w1", ["nope"], acceptance="proposed")],
+        includes={"inc": {"$": "this"}},
+        confirmed=False,
+        fingerprint="",
+    )
+    baseline = json.dumps(
+        check_samples(copy.deepcopy(ss)), sort_keys=True, separators=(",", ":")
+    )
+    for _ in range(3):
+        rerun = json.dumps(
+            check_samples(copy.deepcopy(ss)), sort_keys=True, separators=(",", ":")
+        )
+        assert rerun == baseline

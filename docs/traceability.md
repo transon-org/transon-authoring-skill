@@ -11,7 +11,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | ID | AC(s) | Milestone | Gate / test category | Status | Tests |
 |---|---|---|---|---|---|
 | FR-001 | AC-001, AC-002 | A3 | authoring evals | [ ] | |
-| FR-002 | AC-001, AC-014, AC-017 | A2–A3 | sample-loop + unit | [ ] | |
+| FR-002 | AC-001, AC-014, AC-017 | A2–A3 | sample-loop + unit | [ ] | tests/test_fr002_ci_path.py (test_fr_002_ac_014_preconfirmed_fixture_ci_path, test_fr_002_ac_014_config_never_read_by_check_or_verify, test_fr_002_ac_017_flag_independence_on_ci_fixture) (A2 slice; AC-001 at A3) |
 | FR-003 | AC-021 | A1 | CLI unit | [x] | tests/test_cli_a1.py (test_fr_003_no_repair_flag, test_ac_021_examples_search_envelope_exit_0, test_ac_021_metadata_still_verbatim_snapshot, test_ac_021_init_config_still_unknown_command) |
 | FR-004 | AC-001, AC-018 | A1 | verify unit | [x] | tests/test_verify.py (test_fr_004_validate_failure_verbatim_engine_error_no_case_id, test_fr_004_validate_debug_api_shape, test_fr_004_verdict_never_has_root_writes), tests/test_ac001_path.py (test_ac_001_fr_004_library_verify_matched, test_ac_001_fr_004_cli_verify_exit_0_matched_envelope, test_ac_001_wrong_template_fails_at_match_with_case_ids), tests/test_determinism.py (test_ac_018_deterministic_verdict_matched) |
 | FR-005 | AC-015, AC-023, AC-024 | A1 | sandbox + match unit | [x] | tests/test_tags.py (test_fr_005_oq_012_enc_sentinel_is_no_content_ref, test_fr_005_oq_012_enc_injective_sentinel_vs_lookalike_dict, test_fr_005_oq_012_dec_recurses_at_every_nesting_level), tests/test_match.py (test_ac_023_no_content_not_null, test_ac_024_declared_writes_matched, test_fr_005_oq_013_object_key_visit_order_is_code_point_ascending, test_fr_005_oq_011_case_id_on_every_entry), tests/test_sandbox.py (test_ac_015_file_writes_captured_no_fs) |
@@ -25,12 +25,12 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-014 | AC-021 | A1 | CLI unit | [x] | tests/test_cli_a1.py (test_fr_014_check_samples_ok_exit_0, test_fr_014_check_samples_unconfirmed_exit_1, test_fr_014_verify_matched_exit_0, test_fr_014_verify_failed_stage_exit_1, test_fr_014_validate_ok_exit_0, test_fr_014_dry_run_success_has_result_and_writes) |
 | FR-015 | AC-007, AC-009 | A4 | check_install | [ ] | |
 | FR-016 | AC-007 | A4 | check_install | [ ] | |
-| FR-017 | AC-008 | A2 | check_evals | [ ] | |
-| FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | |
+| FR-017 | AC-008 | A2 | check_evals | [x] | tests/test_check_evals.py (test_fr_017_ac_008_matched_scoring_requires_independent_reverify, test_fr_017_oq_016_scoring_rules_without_reverify, test_fr_017_oq_016_correction_bucket_reported_not_gating, test_fr_017_missing_credentials_exit_2, test_fr_017_red_lint_blocks_full_run_exit_1, test_fr_017_oq_016_update_baseline_writes_sorted_ids, test_fr_017_ac_008_green_path_exit_0), tests/test_eval_harness.py (test_fr_017_oq_017_tool_loop_write_run_submit and siblings), .github/workflows/evals.yml (dispatch workflow) |
+| FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | tests/test_check_evals.py (test_nfr_011_ac_025_consent_requires_redaction) (A2 slice: lint; real-use corpus at A3) |
 | FR-019 | AC-009 | A4 | check_install | [ ] | |
-| FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [ ] | |
-| FR-021 | AC-011, AC-017 | A2 | schema unit | [ ] | |
-| FR-022 | AC-014 | A2 | config unit | [ ] | |
+| FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [x] | tests/test_check_samples.py (test_fr_020_ac_010_gap_codes_and_waiver_flow, test_fr_020_oq_018_placeholder_fingerprint_both_gaps, test_fr_020_oq_018_confirmed_true_missing_confirmed_by_is_unconfirmed, test_fr_020_oq_018_waiver_on_rejected_obligation_not_invalid, test_fr_020_oq_018_proposed_waiver_inert_dangling_ref_invalid, test_fr_020_oq_018_mode_choice_and_custom_target_ignored, test_fr_020_ac_017_flags_independent, test_fr_020_ac_018_sample_check_byte_deterministic), tests/test_verify.py (test_fr_020_oq_018_invalid_include_fails_dry_run_stage) |
+| FR-021 | AC-029, AC-017 | A2 | schema unit | [x] | tests/test_sample_persistence.py (test_fr_021_ac_029_persisted_confirmation_round_trips, test_ac_029_content_edit_flips_fingerprint_mismatch, test_fr_021_oq_015_fingerprint_only_from_sample_check, test_fr_021_oq_015_cli_acquisition_route, test_fr_021_ac_017_confirmation_alone_insufficient) |
+| FR-022 | AC-014 | A2 | config unit | [x] | tests/test_config.py (test_fr_022_init_config_writes_cwd_file_and_emits_valid_project_config, test_fr_022_init_config_refuses_overwrite_without_force, test_fr_022_init_config_force_overwrites, test_fr_022_non_interactive_missing_layout_exit_2, test_fr_022_custom_without_pattern_exit_2, test_fr_022_init_config_rejects_11_9_pattern_violations, test_fr_022_resolve_sibling, test_fr_022_resolve_central_default_and_custom_dir, test_fr_022_resolve_custom_expands_stem_and_dir, test_fr_022_resolve_custom_rejects_unsafe_patterns, test_ac_014_no_prompt_when_config_present_or_samples_given), tests/test_cli_a1.py (test_ac_021_init_config_now_conforms) |
 | FR-023 | AC-012 | A3 | sample-loop evals | [ ] | |
 | FR-024 | AC-010, AC-011 | A3 | sample-loop evals | [ ] | |
 | FR-025 | AC-010, AC-017 | A3 | sample-loop evals | [ ] | |
@@ -46,5 +46,5 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | NFR-007 | AC-005 | A4 | check_parity | [ ] | |
 | NFR-008 | AC-006, AC-007 | A4–A5 | release checklist | [ ] | |
 | NFR-009 | AC-007, AC-009 | A4 | check_install | [ ] | |
-| NFR-010 | AC-008 | A2 | check_evals | [ ] | |
-| NFR-011 | AC-025 | A2 | fixture lint | [ ] | |
+| NFR-010 | AC-008 | A2 | check_evals | [x] | tests/test_check_evals.py (test_nfr_010_ac_008_rate_below_target_exit_1, test_nfr_010_refuse_below_100_exit_1, test_nfr_010_ac_008_baseline_regression_exit_1, test_nfr_010_infra_cap_trips_bucket) |
+| NFR-011 | AC-025 | A2 | fixture lint | [x] | tests/test_check_evals.py (test_nfr_011_ac_025_committed_fixtures_lint_green, test_nfr_011_ac_025_consent_requires_redaction, test_nfr_011_secret_pattern_is_red, test_nfr_011_bad_sample_set_is_red, test_nfr_011_id_mismatch_and_dangling_baseline_red, test_nfr_011_missing_policy_file_and_invalid_fixture_red) |

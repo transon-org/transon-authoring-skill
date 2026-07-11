@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalFixture",
+  "description": "SPEC 11.8 EvalFixture (evals/cases/*.json), schema_version 1.0 (AD-020, FR-017). samples is required when expect is matched or matched_correction (the fixture supplies the SampleSet rather than driving the full sample loop); consent is required when sourced from real use (NFR-011) - enforced procedurally, not structurally.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "expect",
+    "intent_nl",
+    "redacted"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string"
+    },
+    "expect": {
+      "enum": [
+        "matched",
+        "refuse",
+        "matched_correction"
+      ]
+    },
+    "intent_nl": {
+      "type": "string"
+    },
+    "samples": {
+      "$ref": "#/$defs/sampleSet"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "consent": {
+      "type": "object",
+      "required": [
+        "by",
+        "at",
+        "note"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "at": {
+          "description": "ISO-8601",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "redacted": {
+      "description": "true if privacy redaction applied",
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "expect": {
+            "enum": [
+              "matched",
+              "matched_correction"
+            ]
+          }
+        },
+        "required": [
+          "expect"
+        ]
+      },
+      "then": {
+        "required": [
+          "samples"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "sampleSet": {
+      "description": "SPEC 11.1 SampleSet, schema_version 1.0 (FR-026). AuthoringTag validity in output/writes values is enforced procedurally per 11.0 decoding rules, not structurally here.",
+      "type": "object",
+      "required": ["schema_version", "coverage", "cases", "waivers", "confirmation"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "intent_nl": {"type": "string"},
+        "coverage": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/coverageObligation"}
+        },
+        "cases": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/sampleCase"}
+        },
+        "waivers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/waiver"}
+        },
+        "includes": {
+          "description": "include name -> template JSON (plain Transon JSON, any value)",
+          "type": "object"
+        },
+        "confirmation": {"$ref": "#/$defs/confirmation"}
+      }
+    },
+    "coverageObligation": {
+      "type": "object",
+      "required": ["id", "kind", "description", "acceptance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {
+          "enum": [
+            "happy_path",
+            "optional_present",
+            "optional_absent",
+            "list_empty",
+            "list_singleton",
+            "list_many",
+            "mode_choice",
+            "custom"
+          ]
+        },
+        "target": {
+          "description": "JSON pointer for structural kinds, or mode label for mode_choice; presence/validity per kind is checked procedurally (11.1 table)",
+          "type": "string"
+        },
+        "description": {"type": "string"},
+        "acceptance": {"enum": ["proposed", "accepted", "rejected"]}
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "required": ["id", "clears_obligation_ids", "reason", "acceptance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "clears_obligation_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "reason": {"type": "string"},
+        "acceptance": {"enum": ["proposed", "accepted", "rejected"]}
+      }
+    },
+    "sampleCase": {
+      "type": "object",
+      "required": ["id", "input", "output", "satisfies"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "input": true,
+        "output": {
+          "description": "JsonValue | AuthoringTag (tag decoding per 11.0 is procedural)"
+        },
+        "writes": {
+          "description": "write name -> JsonValue | AuthoringTag",
+          "type": "object"
+        },
+        "satisfies": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "required": ["confirmed", "content_fingerprint"],
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {"type": "boolean"},
+        "confirmed_by": {"enum": ["user", "ci"]},
+        "confirmed_at": {"type": "string"},
+        "note": {"type": "string"},
+        "content_fingerprint": {"type": "string"}
+      }
+    }
+  }
+}

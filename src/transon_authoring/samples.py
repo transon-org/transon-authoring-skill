@@ -73,14 +73,15 @@ _MISSING = object()
 def content_fingerprint(sample_set: Any) -> str:
     """Hex sha256 fingerprint over the SampleSet content subset (§11.1).
 
-    .. note:: **Provisional-internal canonicalization pending OQ-015** (open;
-       resolves at the A2 standup). This single function is the OQ-015
-       *default candidate* and the only place the byte-level rules live:
-       ``json.dumps`` of the subset ``{schema_version, coverage, waivers,
-       cases, includes}`` with ``sort_keys=True``, ``separators=(",", ":")``,
-       ``ensure_ascii=False``, ``allow_nan=False``, hashed as UTF-8. An
-       absent ``includes`` key is omitted from the subset — it is **not**
-       hashed as ``{}``.
+    Normative canonicalization per the OQ-015 resolution (2026-07-11, A2
+    standup; SPEC §15). This single function is the only implementation and
+    the only place the byte-level rules live: ``json.dumps`` of the subset
+    ``{schema_version, coverage, waivers, cases, includes}`` with
+    ``sort_keys=True``, ``separators=(",", ":")``, ``ensure_ascii=False``,
+    ``allow_nan=False``, hashed as UTF-8. An absent ``includes`` key is
+    omitted from the subset — it is **not** hashed as ``{}``. Agents/skill
+    NEVER recompute this: they acquire the value from
+    ``SampleCheck.content_fingerprint`` (OQ-015 acquisition path).
 
     ``intent_nl`` and ``confirmation`` are deliberately excluded (§11.1
     Confirmation comment): editing human prose or the confirmation itself

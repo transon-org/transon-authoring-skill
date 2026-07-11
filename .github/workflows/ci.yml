@@ -39,6 +39,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 -m pip install -e ".[dev]"
+      # NFR-011 / AC-025 — credential-free fixture privacy lint; per-PR CI
+      # runs `check_evals --lint` (OQ-017e). Full eval runs live in a
+      # separate credential-holding dispatch workflow (FR-017).
+      - run: python3 scripts/check_evals.py --lint
       - run: python3 -m pytest -q
 
   # NFR-003 / AC-020 — offline after install: verify/check/metadata need no

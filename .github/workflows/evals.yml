@@ -1,0 +1,39 @@
+name: Evals
+
+# FR-017 / NFR-010 / AC-008 — full eval gate (SPEC §11.8). Per OQ-017e the
+# credential-holding full run lives in this manually-dispatched workflow only;
+# per-PR CI runs the credential-free `check_evals --lint` and the
+# fake-provider unit tests (see ci.yml).
+on:
+  workflow_dispatch:
+
+# One eval run at a time: duplicate manual dispatches queue instead of
+# spending provider budget concurrently.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# Read-only everywhere: the eval gate never writes to the repo or uses the token.
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: Eval gate (check_evals)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      # Installs the pinned engine (transon==0.1.7, AD-007) plus the optional
+      # provider SDK extra ([evals], OQ-017d — never a runtime dependency).
+      - run: python3 -m pip install -e ".[evals]"
+      # Full red/green run: lint, provider tool loop (runs_per_fixture
+      # episodes per fixture), OQ-016 scoring, §11.8 aggregation. Exit 0
+      # green, 1 red gate, 2 config/credential errors.
+      - run: python3 scripts/check_evals.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -32,6 +32,11 @@ EXPECTED_SCHEMA_FILES = {
     "verdict.json",
     "authoring_result.json",
     "cli_error.json",
+    "project_config.json",  # §11.9 ProjectConfig (FR-022 / AC-014)
+    "eval_fixture.json",  # §11.8 EvalFixture (AD-020 / FR-017)
+    "eval_runner.json",  # §11.8 evals/runner.json (AD-020 / FR-017)
+    "eval_targets.json",  # §11.8 evals/targets.json (OQ-016e / FR-017)
+    "eval_baseline.json",  # §11.8 evals/baseline.json (OQ-016f / FR-017)
 }
 
 # §11.1 GapCode — full closed enum.
@@ -458,6 +463,11 @@ def _strip_descriptions(node):
         ("engineError", ["verdict.json", "authoring_result.json", "cli_error.json"]),
         ("gap", ["verdict.json", "authoring_result.json", "sample_check.json"]),
         ("diffEntry", ["verdict.json", "authoring_result.json"]),
+        # §11.8 EvalFixture embeds the §11.1 SampleSet shape (FR-017).
+        ("coverageObligation", ["sample_set.json", "eval_fixture.json"]),
+        ("waiver", ["sample_set.json", "eval_fixture.json"]),
+        ("sampleCase", ["sample_set.json", "eval_fixture.json"]),
+        ("confirmation", ["sample_set.json", "eval_fixture.json"]),
     ],
 )
 def test_fr_026_shared_defs_identical_across_schema_files(def_name, schema_files):
@@ -490,3 +500,18 @@ def test_fr_026_embedded_document_defs_match_standalone_schemas(
     assert embedded == standalone, (
         f"$defs/{def_name} drifted from {standalone_file}"
     )
+
+
+def test_fr_017_eval_fixture_embedded_sample_set_matches_standalone_schema():
+    # eval_fixture.json embeds the whole SampleSet document shape the same
+    # way authoring_result.json embeds Verdict; keep it in lockstep with
+    # sample_set.json (FR-017 / §11.8 "samples?: SampleSet").
+    embedded = _strip_descriptions(load_schema("eval_fixture.json")["$defs"]["sampleSet"])
+    standalone = _strip_descriptions(
+        {
+            key: value
+            for key, value in load_schema("sample_set.json").items()
+            if key not in ("$schema", "title", "$defs")
+        }
+    )
+    assert embedded == standalone, "$defs/sampleSet drifted from sample_set.json"
