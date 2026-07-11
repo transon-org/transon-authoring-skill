@@ -138,3 +138,24 @@ def test_fr_011_pin_mismatch_exits_2(tmp_path: Path):
     assert "0.1.7" in result.stderr
     # Nothing gets written on pin mismatch.
     assert not (tmp_path / "resources").exists()
+
+
+def test_fr_011_missing_engine_exits_2(tmp_root: Path, monkeypatch, capsys):
+    # FR-011 / AC-006 — a missing pinned engine is a pin/config error (exit 2
+    # with a diagnostic on stderr), never a traceback.
+    import importlib.metadata
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("sync_metadata_script", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def missing(_name: str) -> str:
+        raise importlib.metadata.PackageNotFoundError("transon")
+
+    monkeypatch.setattr(module, "installed_version", missing)
+    assert module.main(["--root", str(tmp_root)]) == 2
+    stderr = capsys.readouterr().err
+    assert "not installed" in stderr
+    assert "0.1.7" in stderr
+    assert not (tmp_root / "resources").exists()

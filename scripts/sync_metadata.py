@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as installed_version
 from pathlib import Path
 
@@ -71,7 +72,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    installed = installed_version("transon")
+    try:
+        installed = installed_version("transon")
+    except PackageNotFoundError:
+        print(
+            f"sync-metadata: pinned engine transon=={pin} is not installed; "
+            "install it and re-run (SPEC §11.7).",
+            file=sys.stderr,
+        )
+        return 2
     if installed != pin:
         print(
             f"sync-metadata: installed transon=={installed} does not match the "

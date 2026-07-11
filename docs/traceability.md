@@ -20,7 +20,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-008 | AC-004, AC-012, AC-026 | A3 | failure envelope unit | [ ] | |
 | FR-009 | AC-006, AC-022 | A0 | snapshot gate | [x] | tests/test_metadata.py (test_fr_009_bundled_snapshot_is_grounding_catalog, test_fr_009_get_metadata_is_cached, test_fr_009_resource_bytes_match_repo_file, test_fr_009_missing_resource_raises_with_sync_hint), tests/test_cli_metadata.py (test_a0_dod_metadata_subcommand, test_a0_dod_metadata_path_never_imports_engine) |
 | FR-010 | AC-022 | A0 | examples unit | [x] | tests/test_examples.py (test_fr_010_ac_022_exact_name_match_first_and_verbatim, test_fr_010_ac_022_limit_bound_and_validation, test_fr_010_ac_022_deterministic_and_deep_copied, test_fr_010_ac_022_multi_hit_truncated_in_corpus_order, test_fr_010_ac_022_sidecar_enriches_nl_and_is_searchable, test_fr_010_ac_022_score_zero_query_returns_empty_list, test_fr_010_sidecar_loads_committed_file) |
-| FR-011 | AC-006 | A0 | sync + drift | [x] | tests/test_sync_metadata.py (test_fr_011_sync_is_canonical_and_records_provenance, test_fr_011_sidecar_skeleton_created_when_absent, test_fr_011_existing_sidecar_never_overwritten, test_fr_011_pin_mismatch_exits_2) |
+| FR-011 | AC-006 | A0 | sync + drift | [x] | tests/test_sync_metadata.py (test_fr_011_sync_is_canonical_and_records_provenance, test_fr_011_sidecar_skeleton_created_when_absent, test_fr_011_existing_sidecar_never_overwritten, test_fr_011_pin_mismatch_exits_2, test_fr_011_missing_engine_exits_2) |
 | FR-012 | AC-005 | A4 | parity | [ ] | |
 | FR-014 | AC-021 | A1 | CLI unit | [ ] | |
 | FR-015 | AC-007, AC-009 | A4 | check_install | [ ] | |
