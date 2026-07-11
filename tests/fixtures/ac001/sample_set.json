@@ -1,0 +1,177 @@
+{
+  "schema_version": "1.0",
+  "intent_nl": "Flatten each order's line items with the customer name: emit one flat list with a row per line item, each row carrying the owning order's id and customer name; keep an optional per-item note when present.",
+  "coverage": [
+    {
+      "id": "ob-happy",
+      "kind": "happy_path",
+      "description": "Multiple orders with populated line items flatten into one list; every row carries customer_name and order_id.",
+      "acceptance": "accepted"
+    },
+    {
+      "id": "ob-orders-many",
+      "kind": "list_many",
+      "target": "/orders",
+      "description": "At least one case has two or more orders.",
+      "acceptance": "accepted"
+    },
+    {
+      "id": "ob-orders-empty",
+      "kind": "list_empty",
+      "target": "/orders",
+      "description": "An empty orders list yields an empty flat list.",
+      "acceptance": "accepted"
+    },
+    {
+      "id": "ob-items-empty",
+      "kind": "list_empty",
+      "target": "/orders/0/line_items",
+      "description": "An order with no line items contributes no rows.",
+      "acceptance": "accepted"
+    },
+    {
+      "id": "ob-note-present",
+      "kind": "optional_present",
+      "target": "/orders/0/line_items/0/note",
+      "description": "A line item note is carried through when present.",
+      "acceptance": "accepted"
+    },
+    {
+      "id": "ob-note-absent",
+      "kind": "optional_absent",
+      "target": "/orders/0/line_items/0/note",
+      "description": "A line item without a note yields a row without a note key.",
+      "acceptance": "accepted"
+    }
+  ],
+  "cases": [
+    {
+      "id": "c-two-orders",
+      "input": {
+        "orders": [
+          {
+            "id": "SO-1",
+            "customer": {
+              "name": "Ada"
+            },
+            "line_items": [
+              {
+                "sku": "DESK-01",
+                "qty": 2
+              },
+              {
+                "sku": "LAMP-22",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "id": "SO-2",
+            "customer": {
+              "name": "Bob"
+            },
+            "line_items": [
+              {
+                "sku": "USB-03",
+                "qty": 5
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "customer_name": "Ada",
+          "order_id": "SO-1",
+          "sku": "DESK-01",
+          "qty": 2
+        },
+        {
+          "customer_name": "Ada",
+          "order_id": "SO-1",
+          "sku": "LAMP-22",
+          "qty": 1
+        },
+        {
+          "customer_name": "Bob",
+          "order_id": "SO-2",
+          "sku": "USB-03",
+          "qty": 5
+        }
+      ],
+      "satisfies": [
+        "ob-happy",
+        "ob-orders-many",
+        "ob-note-absent"
+      ]
+    },
+    {
+      "id": "c-no-orders",
+      "input": {
+        "orders": []
+      },
+      "output": [],
+      "satisfies": [
+        "ob-orders-empty"
+      ]
+    },
+    {
+      "id": "c-empty-line-items",
+      "input": {
+        "orders": [
+          {
+            "id": "SO-3",
+            "customer": {
+              "name": "Cid"
+            },
+            "line_items": []
+          }
+        ]
+      },
+      "output": [],
+      "satisfies": [
+        "ob-items-empty"
+      ]
+    },
+    {
+      "id": "c-note-present",
+      "input": {
+        "orders": [
+          {
+            "id": "SO-4",
+            "customer": {
+              "name": "Dee"
+            },
+            "line_items": [
+              {
+                "sku": "MON-27",
+                "qty": 1,
+                "note": "gift wrap"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "customer_name": "Dee",
+          "order_id": "SO-4",
+          "sku": "MON-27",
+          "qty": 1,
+          "note": "gift wrap"
+        }
+      ],
+      "satisfies": [
+        "ob-note-present"
+      ]
+    }
+  ],
+  "waivers": [],
+  "confirmation": {
+    "confirmed": true,
+    "confirmed_by": "user",
+    "confirmed_at": "2026-07-11T00:00:00Z",
+    "note": "Hand-confirmed fixture authoring the AC-001 intent (fixture author acting as user).",
+    "content_fingerprint": "2a30b37d196c15cda57e881994dd8eb5efbe5cf9d285d6602d6e35e053ac0c8b"
+  }
+}

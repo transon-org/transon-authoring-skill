@@ -29,3 +29,6 @@ packages = ["src/transon_authoring"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "subprocess: spawns real `python -m transon_authoring` subprocesses (e.g. the NFR-003/AC-020 offline sanity checks)",
+]

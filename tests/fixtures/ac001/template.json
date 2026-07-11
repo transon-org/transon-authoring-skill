@@ -1,0 +1,81 @@
+{
+  "$": "chain",
+  "funcs": [
+    {
+      "$": "attr",
+      "name": "orders"
+    },
+    {
+      "$": "map",
+      "item": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "set",
+            "name": "order"
+          },
+          {
+            "$": "attr",
+            "name": "line_items"
+          },
+          {
+            "$": "map",
+            "item": {
+              "$": "object",
+              "fields": {
+                "customer_name": {
+                  "$": "chain",
+                  "funcs": [
+                    {
+                      "$": "get",
+                      "name": "order"
+                    },
+                    {
+                      "$": "attr",
+                      "names": [
+                        "customer",
+                        "name"
+                      ]
+                    }
+                  ]
+                },
+                "order_id": {
+                  "$": "chain",
+                  "funcs": [
+                    {
+                      "$": "get",
+                      "name": "order"
+                    },
+                    {
+                      "$": "attr",
+                      "name": "id"
+                    }
+                  ]
+                },
+                "sku": {
+                  "$": "attr",
+                  "name": "sku"
+                },
+                "qty": {
+                  "$": "attr",
+                  "name": "qty"
+                },
+                "note": {
+                  "$": "attr",
+                  "name": "note"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$": "join",
+      "default": [],
+      "items": {
+        "$": "this"
+      }
+    }
+  ]
+}

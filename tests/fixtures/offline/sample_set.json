@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "coverage": [
+    {
+      "id": "happy",
+      "kind": "happy_path",
+      "description": "attr x on a populated object",
+      "acceptance": "accepted"
+    }
+  ],
+  "cases": [
+    {
+      "id": "c1",
+      "input": {
+        "x": "hello"
+      },
+      "output": "hello",
+      "satisfies": [
+        "happy"
+      ]
+    }
+  ],
+  "waivers": [],
+  "confirmation": {
+    "confirmed": true,
+    "confirmed_by": "user",
+    "content_fingerprint": "d2b5cf56d58c450b0c6652d04ccd0124114ceca97fce7ede41aa5ce7afe725bc"
+  }
+}

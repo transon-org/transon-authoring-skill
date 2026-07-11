@@ -41,5 +41,32 @@ jobs:
       - run: python3 -m pip install -e ".[dev]"
       - run: python3 -m pytest -q
 
-  # NFR-003 / AC-020 (offline verify/check/metadata) gets a dedicated job that cuts
-  # network access after install — added at A1 when the surface under test exists.
+  # NFR-003 / AC-020 — offline after install: verify/check/metadata need no
+  # network once the pinned engine and package are installed. Install runs
+  # WITH network (NFR-003 begins "after install"); the surface then runs
+  # inside `unshare -rn` — an unprivileged user + network namespace whose only
+  # interface is a DOWN loopback — so any network attempt fails immediately.
+  # Fixtures: tests/fixtures/offline/ (see its README for OQ-015 regeneration).
+  offline:
+    name: Offline surface (NFR-003 / AC-020)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (network allowed — NFR-003 is post-install)
+        run: python3 -m pip install -e ".[dev]"
+      - name: Run the §11.6 surface and offline tests with the network cut
+        # Default GitHub shell is `bash -e -o pipefail`: any non-zero exit
+        # code from any verb fails the job (AC-020 exit-code assertions).
+        # The namespace covers child processes too, so `verify`'s sandboxed
+        # worker subprocesses and pytest's CLI subprocesses run network-cut.
+        run: |
+          unshare -rn python3 -m transon_authoring metadata > /dev/null
+          unshare -rn python3 -m transon_authoring examples search "join" > /dev/null
+          unshare -rn python3 -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
+          unshare -rn python3 -m transon_authoring verify --template tests/fixtures/offline/template.json --samples tests/fixtures/offline/sample_set.json
+          unshare -rn python3 -m pytest tests/test_offline.py -q
