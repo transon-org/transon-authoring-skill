@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "id": "seed-matched-attr-dynamic-name",
+  "expect": "matched",
+  "intent_nl": "Look up an attribute of the input object whose name is stored in the input's own 'name' field, and return that attribute's value.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Look up an attribute of the input object whose name is stored in the input's own 'name' field, and return that attribute's value.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "The value named by the input's name field is returned.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-other-name",
+        "kind": "custom",
+        "description": "A different stored name selects a different attribute.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-name-a",
+        "input": {
+          "a": 1,
+          "b": 2,
+          "name": "a"
+        },
+        "output": 1,
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-name-b",
+        "input": {
+          "a": 1,
+          "b": 2,
+          "name": "b"
+        },
+        "output": 2,
+        "satisfies": [
+          "ob-other-name"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "confirmed_at": "2026-07-11T00:00:00Z",
+      "note": "Synthetic seed fixture; cases taken verbatim from the pinned snapshot docs.examples AttrDynamicReferenceName1/2. CI-confirmed for evals.",
+      "content_fingerprint": "37a4a6257a38a68d744afd39eed16116bd93a1004dacde15ea696d498e0df853"
+    }
+  },
+  "notes": "Synthetic seed grounded in the pinned snapshot docs.examples AttrDynamicReferenceName1/2.",
+  "redacted": false
+}

@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "id": "seed-matched-map-chain-attrs",
+  "expect": "matched",
+  "intent_nl": "For each record in the input list, produce an object whose 'key' comes from the record's a.b.c path and whose 'value' comes from its d.e.f path.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "For each record in the input list, produce an object whose 'key' comes from the record's a.b.c path and whose 'value' comes from its d.e.f path.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Each record maps to one {key, value} object.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-empty",
+        "kind": "custom",
+        "description": "An empty input list yields an empty list (the root value is the list itself, so no JSON-pointer list kind applies).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-two-records",
+        "input": [
+          {
+            "a": {
+              "b": {
+                "c": 1
+              }
+            },
+            "d": {
+              "e": {
+                "f": 2
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": 3
+              }
+            },
+            "d": {
+              "e": {
+                "f": 4
+              }
+            }
+          }
+        ],
+        "output": [
+          {
+            "key": 1,
+            "value": 2
+          },
+          {
+            "key": 3,
+            "value": 4
+          }
+        ],
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-empty-list",
+        "input": [],
+        "output": [],
+        "satisfies": [
+          "ob-empty"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "confirmed_at": "2026-07-11T00:00:00Z",
+      "note": "Synthetic seed fixture; happy case taken verbatim from the pinned snapshot docs.examples ChainWithAttr. CI-confirmed for evals.",
+      "content_fingerprint": "e03a77a79c552ee5fba295e9b3d3e67a82dbb967f650630a95c7eda8a33729a8"
+    }
+  },
+  "notes": "Synthetic seed grounded in the pinned snapshot docs.examples ChainWithAttr.",
+  "redacted": false
+}

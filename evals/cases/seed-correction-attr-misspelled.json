@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "id": "seed-correction-attr-misspelled",
+  "expect": "matched_correction",
+  "intent_nl": "Use the 'atr' operator to read the attribute named 'a' from the input object.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Use the 'atr' operator to read the attribute named 'a' from the input object.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "The value of the input's 'a' attribute is returned.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-attr-a",
+        "input": {
+          "a": 1
+        },
+        "output": 1,
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "confirmed_at": "2026-07-11T00:00:00Z",
+      "note": "Synthetic seed fixture; case taken verbatim from the pinned snapshot docs.examples AttrSimpleFixedName. CI-confirmed for evals.",
+      "content_fingerprint": "235973c3850069781b27e8f89fcc0137a66cf6fa8a56011b87d3154c7a744de1"
+    }
+  },
+  "notes": "Synthetic correction seed: 'atr' is a near-miss of the real snapshot operator 'attr'; the skill may map it to 'attr' and still reach matched (OQ-016c: reported as correction rate, gates nothing).",
+  "redacted": false
+}

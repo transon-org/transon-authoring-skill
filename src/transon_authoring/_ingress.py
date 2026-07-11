@@ -35,6 +35,10 @@ SUPPORTED_SCHEMA_VERSION = "1.0"
 SCHEMA_FILES = (
     "authoring_result.json",
     "cli_error.json",
+    "eval_baseline.json",
+    "eval_fixture.json",
+    "eval_runner.json",
+    "eval_targets.json",
     "project_config.json",
     "sample_check.json",
     "sample_set.json",

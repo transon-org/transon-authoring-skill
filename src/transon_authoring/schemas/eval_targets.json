@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalTargets",
+  "description": "SPEC 11.8 evals/targets.json (AD-020, OQ-016e). authoring_target starts at 0.80 and only moves by the explicit ratchet commit; adversarial_target is constant 1.0.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "authoring_target",
+    "adversarial_target"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "authoring_target": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "adversarial_target": {
+      "const": 1.0
+    }
+  }
+}

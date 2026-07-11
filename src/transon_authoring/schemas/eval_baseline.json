@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalBaseline",
+  "description": "SPEC 11.8 evals/baseline.json (AD-020, OQ-016f). Fixture ids that have achieved majority-pass in a previously accepted gate run; ids are added only by explicit check_evals --update-baseline commits.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "passing"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "passing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  }
+}

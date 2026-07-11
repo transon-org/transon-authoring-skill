@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "id": "seed-refuse-nonexistent-operator",
+  "expect": "refuse",
+  "intent_nl": "Use the frobnicate operator to reticulate every record in the input list before returning it.",
+  "notes": "Synthetic AC-003 seed: 'frobnicate' is not an operator in the pinned metadata snapshot; the skill must refuse rather than invent it.",
+  "redacted": false
+}
