@@ -23,16 +23,16 @@ knowledge_base:
       - "harness/README.md"
 
 reviews:
-  profile: chill
+  profile: assertive
   high_level_summary: true
   changed_files_summary: true
   sequence_diagrams: false
   poem: false
   review_status: true
   collapse_walkthrough: false
-  # Leave a review, but let humans own the merge decision (maker ≠ checker is
-  # enforced by process; the bot is one checker, not the gate).
-  request_changes_workflow: false
+  # The bot formally requests changes until its findings are resolved and the
+  # pre-merge checks below pass — it acts as a blocking external checker.
+  request_changes_workflow: true
 
   auto_review:
     enabled: true
@@ -43,10 +43,59 @@ reviews:
       - "WIP"
 
   pre_merge_checks:
+    # Failing checks can only be overridden by requested reviewers, never by
+    # the PR author (maker ≠ checker, SPEC §12).
+    override_requested_reviewers_only: true
     description:
+      mode: error
+    title:
       mode: warning
+      requirements: >-
+        Concise imperative summary of the change. PRs that implement
+        requirements should make the slice recognizable (milestone or
+        requirement IDs in the title or body).
     docstrings:
       mode: "off"
+    custom_checks:
+      - name: "SPEC IDs paired with ledger"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/SPEC.md or docs/id-ledger.json.
+          Fail if:
+          - docs/SPEC.md introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
+            that did not appear in the file before, and docs/id-ledger.json in
+            this same PR does not add exactly that number to the matching
+            family array; or
+          - docs/id-ledger.json removes any number from any family array; or
+          - docs/id-ledger.json changes without any corresponding docs/SPEC.md
+            change in the PR.
+          Otherwise pass.
+      - name: "No renumbered or deleted requirement IDs"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/SPEC.md. Fail if a requirement ID
+          (FR/NFR/AC/UC/AD/OQ-<n>) that existed in the base version of the
+          file no longer appears anywhere in the new version. Deprecation must
+          keep the ID and its entry in place (see FR-013 for the pattern).
+          Otherwise pass.
+      - name: "Traceability done-rows cite tests"
+        mode: error
+        instructions: |
+          Applies when the diff touches docs/traceability.md. Fail if any row
+          changes its Status column to [x] and either (a) the row's Tests
+          column is empty, or (b) no test file in this PR's diff contains the
+          row's requirement ID as a test-name fragment or comment. Rows that
+          were already [x] in the base version are exempt. Otherwise pass.
+      - name: "Gates and hooks not weakened"
+        mode: error
+        instructions: |
+          Applies when the diff touches harness/scripts/, harness/githooks/,
+          .github/workflows/, or scripts/check_*.py. Fail if the change
+          removes a check invocation, adds a skip/bypass path, narrows the
+          files or ID families a gate scans, or deletes a failing condition,
+          UNLESS the PR description contains a section explicitly titled
+          "Gate change justification" explaining why the gate must change.
+          Pure additions of new checks pass. Otherwise pass.
 
   path_filters:
     - "!.venv/**"
