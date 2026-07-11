@@ -126,14 +126,17 @@ def _validate_template(template: Any) -> dict | None:
     Returns ``None`` when the template validates, else one EngineError dict:
     ``type: "DefinitionError"``, verbatim ``str(exc)``, ``engine_type``, and
     NO ``case_id`` (OQ-011: validate errors are never case-attributable).
+    Non-``DefinitionError`` exceptions leaked by the pinned engine (e.g.
+    ``TypeError`` for ``{"$": 5}``) map to the same "template invalid" class
+    per §11.2 stage 2 (rev 2026-07-11), message kept verbatim.
     """
     # Engine import stays local so importing this module never loads the
     # engine (the samples stage must be able to reject engine-free, AD-019).
-    from transon.transformers import DefinitionError, Transformer
+    from transon.transformers import Transformer
 
     try:
         Transformer(template).validate()
-    except DefinitionError as exc:
+    except Exception as exc:
         return {
             "type": "DefinitionError",
             "message": str(exc),  # verbatim engine text (§11.6)

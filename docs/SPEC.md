@@ -540,7 +540,9 @@ SampleCheck = {
 
 **`check_samples` algorithm (normative):**
 
-1. Validate SampleSet against JSON Schema `1.0` (including AuthoringTag decoding rules in §11.0).
+1. Validate SampleSet against JSON Schema `1.0` (including AuthoringTag decoding rules in §11.0 —
+   the §11.0 rule-2 unknown-tag check is procedural in this step, not part of the bundled JSON
+   Schema, and reports as a `schema_invalid` **gap** on an otherwise schema-valid document).
    On failure: all flags false; gap `schema_invalid`.
 2. Reject duplicate `coverage.id` / `cases.id` / `waivers.id` → `duplicate_id`.
 3. Consider only obligations with `acceptance === "accepted"`. If any remain `proposed`,
@@ -629,6 +631,11 @@ Verdict = {
 2. **`validate`** — construct `Transformer(candidate)` **only** with AD-017 defaults; call
    `validate()`. There is no JSON-level “custom marker” detector. `ProfileError` occurs only when
    the caller requested a non-default profile via rejected API/CLI/config knobs (AC-027).
+   An exception raised by construction/`validate()` that is **not** `DefinitionError` (the pinned
+   engine leaks e.g. `TypeError` for `{"$": 5}`) is reported like the dry-run leak closure
+   (OQ-014c) but in the “template invalid” class: `type: "DefinitionError"`, `engine_type` = the
+   actual Python exception class name, `message` = verbatim `str(exc)`,
+   `failed_stage: "validate"` (rev 2026-07-11).
 3. **`dry_run`** — per case, execute in a **worker subprocess** (AD-017) with
    `transform(input, no_content=Transformer.NO_CONTENT)`, sandboxed delegates, timeout 5s,
    `max_include_depth=50`, `includes` from SampleSet only. Cases execute **sequentially in
@@ -655,7 +662,9 @@ pairwise recursion, an index beyond the shorter side emits `missing`/`extra`; wh
 differ (`NoContentRef` counts as its own type; `int` and `float` are distinct types), emit
 `type_mismatch` with both snapshots; same-type scalars that differ emit `value_mismatch`. An
 emitted entry terminates recursion at that node. `path` is the RFC 6901 JSON pointer within the
-case’s output document (root = `""`). Writes mismatches emit exactly one entry per case:
+case’s **encoded** output document (§11.0; inside a `LitRef` wrapper the pointer traverses
+`/value/…` segments of the encoded form) (root = `""`). Writes mismatches emit exactly one entry
+per case:
 `kind: "writes_mismatch"`, `path: ""`, `expected: {"writes": dec(case.writes ?? {})}`,
 `actual: {"writes": {name: enc(content)…}}`.
 
@@ -751,7 +760,7 @@ primary machine result on stderr.
 | Subcommand | Inputs | stdout | exit |
 |---|---|---|---|
 | `metadata` | none | snapshot JSON (`JsonValue`) | 0 |
-| `examples search <query>` | query string | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
+| `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
@@ -803,13 +812,20 @@ verbatim `str(exc)`.
 
 **JSON Schema draft (OQ-014):** all documents under `src/transon_authoring/schemas/` are authored
 in **draft 2020-12** (each declares `$schema`); runtime validation uses the `jsonschema` Python
-package (pinned runtime dependency `jsonschema>=4.18`); `schema_invalid` gap / `PreflightError`
+package (runtime dependency `jsonschema>=4.18`); `schema_invalid` gap / `PreflightError`
 messages derive from validator errors sorted by (JSON instance path, message) for determinism
-(OQ-013).
+(OQ-013). Because message text originates in `jsonschema`, NFR-002's byte-determinism for these
+messages is scoped to a **fixed environment** (same `jsonschema` version); cross-version message
+drift is possible and acceptable (rev 2026-07-11).
 
 If the SampleSet is schema-valid but `ok_for_verify` is false, `check-samples` exits **`1`** with a
 normal `SampleCheck`. If schema-valid but verify stages fail, `verify` exits **`1`** with a normal
 `Verdict` (`failed_stage` set).
+
+**Exit-2 boundary (rev 2026-07-11):** exit 2 covers failures of the **bundled JSON Schema** (plus
+parse/version/read failures). The procedural §11.0 rule-2 unknown-AuthoringTag check is a
+`schema_invalid` **gap** on a schema-valid document — reported in a normal `SampleCheck` /
+`Verdict` with exit **1**, not a `CliError`.
 
 **No repair loop on CLI:** `verify` runs once. There is **no** `--repair-attempts` flag (FR-007).
 
@@ -1069,7 +1085,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   wrapper; any other JSON value → exit 2 `schema-error`.
   (e) **JSON Schema draft:** all documents under `src/transon_authoring/schemas/` are authored in
   **draft 2020-12** (each declares `$schema`); runtime validation uses the `jsonschema` Python
-  package (new pinned runtime dependency, `jsonschema>=4.18`); `schema_invalid`
+  package (new runtime dependency, `jsonschema>=4.18`); `schema_invalid`
   gap/`PreflightError` messages derive from validator errors sorted by (JSON instance path,
   message) for determinism (OQ-013).
 - **OQ-015** — *(open; resolve at A2 standup, before `check_samples` lands)* Byte-precise
@@ -1078,7 +1094,12 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   Any divergence between producers yields spurious `fingerprint_mismatch`, silently invalidating
   confirmations. Also make the acquisition path normative: the skill obtains the fingerprint from
   `SampleCheck.content_fingerprint` (via `check-samples` on the unconfirmed set), never computes
-  it by hand.
+  it by hand. *A1 note (2026-07-11):* A1 ships a **provisional-internal** canonicalization,
+  isolated in the single function `samples.content_fingerprint` (sha256 hex over `json.dumps` of
+  the §11.1 subset with `sort_keys=True`, `separators=(",",":")`, `ensure_ascii=False`,
+  `allow_nan=False`; absent `includes` omitted) — the default candidate for this resolution.
+  Committed fixtures record their regeneration recipe and MUST be regenerated if the A2
+  resolution diverges.
 - **OQ-016** — *(open; A2 standup)* Mechanical eval scoring for two buckets: which
   `AuthoringResult.status` values count as **refuse-success** for `expect: "refuse"`; and how
   `matched_correction` scoring differs from plain `matched` (or whether the bucket label is

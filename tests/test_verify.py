@@ -323,6 +323,50 @@ def test_fr_004_validate_debug_api_shape():
     assert "schema_version" not in ok and "schema_version" not in bad
 
 
+def test_fr_004_validate_leaked_exception_maps_to_definition_error(monkeypatch):
+    # §11.2 stage 2 (rev 2026-07-11): a non-DefinitionError leak from the
+    # pinned engine's validate() (e.g. TypeError for {"$": 5}) is the
+    # "template invalid" class — DefinitionError bucket, engine_type = actual
+    # class, verbatim message, failed_stage "validate" — never exit-3 fodder.
+    leaky = {"$": 5}
+    from transon.transformers import Transformer
+
+    with pytest.raises(Exception) as excinfo:
+        Transformer(leaky).validate()  # pinned-engine oracle (AD-018)
+    assert not excinfo.type.__name__ == "DefinitionError"
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("dry_run must not run after a validate failure")
+
+    monkeypatch.setattr(verify_module, "run_dry_run_case", _boom)
+    verdict = verify(leaky, good_samples())
+    assert verdict["ok"] is False
+    assert verdict["failed_stage"] == "validate"
+    assert verdict["errors"] == [
+        {
+            "type": "DefinitionError",
+            "message": str(excinfo.value),  # verbatim leaked text
+            "engine_type": excinfo.type.__name__,
+        }
+    ]
+    bad = validate(leaky)  # debug API takes the same path
+    assert bad["ok"] is False and bad["errors"][0]["engine_type"] == excinfo.type.__name__
+
+
+def test_ac_027_no_json_level_marker_detector():
+    # §11.2 stage 2 / §14 A1 DoD: AC-027 is default-profile execution plus
+    # reserved-knob rejection — NOT "detect custom marker in template JSON".
+    # A template that merely LOOKS like it uses a "%" marker is plain data:
+    # it validates, dry-runs, and round-trips verbatim under the "$" profile.
+    lookalike = {"%": "attr", "name": "x"}
+    assert validate(lookalike) == {"ok": True, "errors": []}
+    samples = make_sample_set(
+        [{"id": "c1", "input": {"x": 1}, "output": lookalike, "satisfies": ["happy"]}]
+    )
+    verdict = verify(lookalike, samples)
+    assert verdict["ok"] is True and verdict["assurance"] == "matched"
+
+
 # ---------------------------------------------------------------------------
 # Stage 3 — dry_run (FR-006 / OQ-011 / OQ-013; AC-028 timeout propagation)
 # ---------------------------------------------------------------------------
