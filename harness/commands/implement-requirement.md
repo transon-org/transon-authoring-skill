@@ -1,6 +1,7 @@
 # Implement a single requirement
 
-Implement exactly one FR/NFR/AC I name from `docs/SPEC.md`, test-first, without scope creep.
+Implement exactly one requirement — the FR/NFR/AC ID given as the argument, defined in
+`docs/SPEC.md` — test-first, without scope creep.
 
 ## Procedure
 

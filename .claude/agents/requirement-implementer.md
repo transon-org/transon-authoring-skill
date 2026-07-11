@@ -1,6 +1,6 @@
 ---
 name: requirement-implementer
-description: Implement exactly one Transon-authoring requirement by ID, test-first, then run the deterministic gates. Use for well-specified FRs whose design is already locked.
+description: Implement exactly one `transon-authoring` requirement by ID, test-first, then run the deterministic gates. Use for well-specified FRs whose design is already locked.
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 

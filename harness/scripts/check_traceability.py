@@ -28,7 +28,9 @@ from typing import Dict, List, Set
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DOCS = PROJECT_ROOT / "docs"
 
-ID_RE = re.compile(r"\b(FR|NFR|AC|UC|AD|OQ)-(\d+)\b")
+# Accept the compact slash-separated citation form too (e.g. "AC-005/007/009"),
+# same semantics as check_append_only_ids.py.
+ID_RE = re.compile(r"\b(FR|NFR|AC|UC|AD|OQ)-(\d+(?:/\d+)*)\b")
 CONTRACT_DOCS = ("SPEC.md",)
 # Product-code directories per SPEC §10 (evals/ holds fixtures that may cite ACs).
 CODE_DIRS = ("src", "tests", "scripts", "evals", "install", "adapters")
@@ -38,7 +40,11 @@ DONE_ROW = re.compile(r"^\|.*\|\s*\[x\]\s*\|", re.IGNORECASE)
 
 
 def _ids(text: str) -> Set[str]:
-    return {f"{m.group(1)}-{m.group(2)}" for m in ID_RE.finditer(text)}
+    return {
+        f"{m.group(1)}-{number}"
+        for m in ID_RE.finditer(text)
+        for number in m.group(2).split("/")
+    }
 
 
 def _read(path: Path) -> str:

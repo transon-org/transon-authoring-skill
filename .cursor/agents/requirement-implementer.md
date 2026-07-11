@@ -1,6 +1,6 @@
 ---
 name: requirement-implementer
-description: Implement exactly one Transon-authoring requirement by ID, test-first, then run the deterministic gates.
+description: Implement exactly one `transon-authoring` requirement by ID, test-first, then run the deterministic gates.
 readonly: false
 ---
 

@@ -19,7 +19,7 @@ Implement the milestone I name (`A0`–`A5`) from SPEC §14, end to end, in a si
 ## Procedure
 
 1. Read the named milestone in SPEC §14, its DoD, and every requirement/AC it cites via §17.
-2. Create a branch `aX-short-name` and a todo list — one item per FR/AC in the slice. Delegate
+2. Create a branch `aX-short-name` and a todo list — one item per FR/NFR/AC in the slice. Delegate
    design to `milestone-planner` when the slice has open design decisions.
 3. For each requirement (delegate to `requirement-implementer`): write the pytest test **first**,
    citing the ID in the name/comment, then implement the minimal code per the SPEC §10 layout.

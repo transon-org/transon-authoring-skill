@@ -16,7 +16,8 @@ SPEC **first**, then code.
      delete the entry.
 3. Keep the SPEC self-consistent in the same edit: §7–§9 text, §11 contracts, §13 gates, §14
    milestone DoDs, §17 traceability rows, §18 readiness — whichever the change touches.
-4. Update `docs/traceability.md` for any new/changed FR/NFR (new rows start unchecked).
+4. Update `docs/traceability.md` for any new or changed FR/NFR/AC (new rows start unchecked;
+   AC edits update the AC(s) column of the rows that cite them).
 5. Register new IDs: `python3 harness/scripts/check_append_only_ids.py --update` — the ledger diff
    is the reviewable record that an ID was issued.
 6. Run both harness gates green; commit the SPEC + traceability + ledger together, before (or

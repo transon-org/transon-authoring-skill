@@ -5,12 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only everywhere: no job writes to the repo or uses the token.
+permissions:
+  contents: read
+
 jobs:
   harness-gates:
     name: Harness gates (traceability, append-only IDs)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -27,6 +33,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

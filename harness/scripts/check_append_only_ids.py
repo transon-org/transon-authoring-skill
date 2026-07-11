@@ -88,7 +88,10 @@ def check() -> List[str]:
     try:
         ledger = ledger_ids()
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        return [f"ID ledger unreadable ({exc}) — regenerate with --update"]
+        return [
+            f"ID ledger unreadable ({exc}) — restore docs/id-ledger.json from git history "
+            f"(never hand-edit; --update refuses to rebuild an existing ledger)"
+        ]
 
     problems: List[str] = []
     for family in FAMILIES:
@@ -108,12 +111,32 @@ def check() -> List[str]:
 def update() -> int:
     defined = defined_ids()
     if not LEDGER.exists():
+        # Initialization is the ID lock — refuse to bless a numbering gap as history.
+        gaps: List[str] = []
+        for family in FAMILIES:
+            values = sorted(defined[family])
+            expected = list(range(1, max(values, default=0) + 1))
+            if values != expected:
+                missing = sorted(set(expected) - set(values))
+                gaps.append(f"{family}: missing {['%s-%d' % (family, n) for n in missing]}")
+        if gaps:
+            print("id-ledger: refusing to initialize — IDs not contiguous from 1:")
+            for gap in gaps:
+                print(f"  - {gap}")
+            return 1
         _write_ledger(defined)
         total = sum(len(v) for v in defined.values())
         print(f"id-ledger: initialized {LEDGER.relative_to(PROJECT_ROOT)} with {total} IDs.")
         return 0
 
-    ledger = ledger_ids()
+    try:
+        ledger = ledger_ids()
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        print(
+            f"id-ledger: ledger unreadable ({exc}) — restore docs/id-ledger.json from git "
+            f"history; --update never rebuilds an existing ledger (append-only history)."
+        )
+        return 1
     problems: List[str] = []
     added: List[str] = []
     for family in FAMILIES:

@@ -18,7 +18,7 @@ Produce the plan an executor will implement. You do not write code or edit files
    decoder placement, match-diff construction; for A2: `check_samples` step order, config-prompt
    flow). Be concrete enough that an implementer needs no further design judgment. Where the SPEC
    already fixes the design (§11 is normative), cite it rather than re-deciding.
-3. Emit an **ordered task list, one entry per FR/AC**, each with: the requirement ID, a one-line
+3. Emit an **ordered task list, one entry per FR/NFR/AC**, each with: the requirement ID, a one-line
    intent, the target module (SPEC §10 layout), and the **test intent** (what the first pytest
    test should assert, citing the ID).
 4. Flag any blocker: SPEC ambiguity, an engine-behavior question that must be answered by running
