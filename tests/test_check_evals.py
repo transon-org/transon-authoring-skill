@@ -1,20 +1,31 @@
-"""NFR-011 / AC-025 — `check_evals --lint` fixture privacy lint (FR-018 A2 slice).
+"""FR-017 / NFR-010 / NFR-011 / AC-008 / AC-025 — the `check_evals` gate.
 
-Per-PR CI runs `check_evals --lint` (SPEC §15 OQ-017e; the §13 check_evals
-row carries the NFR-011 lint). The lint is credential-free, engine-free and
-deterministic: it validates the committed eval-policy files and every
-`evals/cases/*.json` fixture against the bundled schemas (AD-020), enforces
-id/filename agreement and baseline references (OQ-016f), requires supplied
-SampleSets to be `ok_for_verify` (FR-027 / OQ-017a), enforces the NFR-011
-consent⇒redaction invariant (FR-018), and red-flags obvious secrets in raw
-fixture bytes (AC-025).
+Two surfaces:
 
-Tests drive both the importable `lint_evals()` and the CLI via subprocess on
-tmp eval trees copied from the committed `evals/` corpus. The full eval-run
-mode is FR-017 (parallel work): invoking without `--lint` must exit 2.
+- `--lint` (NFR-011 / AC-025, FR-018 A2 slice): the credential-free,
+  engine-free, deterministic fixture privacy lint per-PR CI runs (SPEC §15
+  OQ-017e; the §13 check_evals row carries it): bundled-schema validation of
+  the eval-policy files and every `evals/cases/*.json` (AD-020), id/filename
+  agreement and baseline references (OQ-016f), `ok_for_verify` SampleSets
+  (FR-027 / OQ-017a), the consent⇒redaction invariant (FR-018), and the
+  best-effort secret scan (AC-025).
+- the full red/green gate (FR-017 / NFR-010 / AC-008): OQ-016 mechanical
+  scoring (`score_episode`, incl. the independent re-verify — AD-004),
+  §11.8 aggregation (`aggregate`: majority-of-runs, buckets with
+  infra-excluded denominators and the 10% infra cap, targets/ratchet,
+  fixture-regression baseline, correction bucket reported-only) and the
+  orchestrated default mode with its 0/1/2 exit-code discipline.
+
+All tests are offline and provider-free (OQ-017e): scoring/aggregation is
+driven with hand-built episodes; orchestration tests monkeypatch
+`eval_harness.run_fixture` and the provider factory, and never need the
+anthropic SDK or an API key. Only the pinned local engine is exercised
+(the OQ-016a re-verify subprocess).
 """
 
+import copy
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -26,7 +37,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CHECK = REPO_ROOT / "scripts" / "check_evals.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from check_evals import lint_evals  # noqa: E402
+import check_evals  # noqa: E402
+import eval_harness  # noqa: E402
+from check_evals import aggregate, lint_evals, score_episode  # noqa: E402
 
 
 def run_check(*args: str) -> subprocess.CompletedProcess:
@@ -150,10 +163,309 @@ def test_nfr_011_missing_policy_file_and_invalid_fixture_red(tmp_repo: Path):
     assert any(str(bad) in f for f in failures), failures
 
 
-def test_nfr_011_full_run_mode_not_yet_implemented_exit_2():
-    # FR-017 boundary — the full-run mode is not in this slice; invoking
-    # without --lint exits 2 with a pointer to FR-017 on stderr.
-    result = run_check("--root", str(REPO_ROOT))
+# ---------------------------------------------------------------------------
+# FR-017 / NFR-010 / AC-008 — full gate: scoring, aggregation, orchestration.
+# ---------------------------------------------------------------------------
+
+FLATTEN_FIXTURE = json.loads(
+    (REPO_ROOT / "evals" / "cases" / "seed-matched-flatten-orders.json").read_text(
+        encoding="utf-8"
+    )
+)
+#: The committed AC-001 template — verifies matched against the fixture's
+#: SampleSet under the pinned engine (the fixture is adapted from that set).
+CORRECT_TEMPLATE = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "ac001" / "template.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+#: Committed corpus ids by bucket (SPEC §11.8).
+MATCHED_IDS = (
+    "seed-matched-attr-dynamic-name",
+    "seed-matched-flatten-orders",
+    "seed-matched-map-chain-attrs",
+)
+REFUSE_IDS = ("seed-refuse-nonexistent-mode", "seed-refuse-nonexistent-operator")
+CORRECTION_ID = "seed-correction-attr-misspelled"
+
+DEFAULT_TARGETS = {
+    "schema_version": "1.0",
+    "authoring_target": 0.80,
+    "adversarial_target": 1.0,
+}
+EMPTY_BASELINE = {"schema_version": "1.0", "passing": []}
+
+
+def episode(submitted=None, outcome="submitted", tool_calls=1, error=None):
+    """Hand-built EpisodeResult in the eval_harness shape (OQ-017e)."""
+    return {
+        "submitted": submitted,
+        "outcome": outcome,
+        "tool_calls": tool_calls,
+        "error": error,
+    }
+
+
+def matched_result(template):
+    """A schema-valid AuthoringResult claiming matched (OQ-016a shape)."""
+    return {
+        "schema_version": "1.0",
+        "ok": True,
+        "status": "matched",
+        "explanation": "verified matched",
+        "template": template,
+        "verdict": {
+            "schema_version": "1.0",
+            "ok": True,
+            "assurance": "matched",
+            "errors": [],
+        },
+    }
+
+
+def refuse_result(status="aborted"):
+    """A schema-valid refusal AuthoringResult (OQ-016b shape)."""
+    return {
+        "schema_version": "1.0",
+        "ok": False,
+        "status": status,
+        "explanation": "cannot be grounded in the pinned metadata",
+    }
+
+
+def corpus_scores(**overrides):
+    """Per-fixture score plan for orchestration tests: default all-pass."""
+    plan = {fid: "pass" for fid in (*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID)}
+    plan.update(overrides)
+    return plan
+
+
+def orchestrate(monkeypatch, root, scores_by_id, update_baseline=False):
+    """Run `check_evals.main` in full-run mode, fully offline (OQ-017e):
+    env key faked, provider factory stubbed, `eval_harness.run_fixture`
+    scripted, and `score_episode` replaced by the episode's planned score.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
+    monkeypatch.setattr(check_evals, "_build_provider", lambda cfg: object())
+
+    def scripted_run_fixture(fixture, runner_cfg, provider, repo_root):
+        return dict(
+            episode(outcome="submitted"), score=scores_by_id[fixture["id"]]
+        )
+
+    monkeypatch.setattr(eval_harness, "run_fixture", scripted_run_fixture)
+    monkeypatch.setattr(
+        check_evals, "score_episode", lambda fixture, ep: ep["score"]
+    )
+    argv = ["--root", str(root)]
+    if update_baseline:
+        argv.append("--update-baseline")
+    return check_evals.main(argv)
+
+
+def report_from(capsys):
+    captured = capsys.readouterr()
+    return json.loads(captured.out), captured.err
+
+
+def test_fr_017_ac_008_matched_scoring_requires_independent_reverify():
+    # FR-017 / AC-008 / OQ-016a — a matched claim is only a pass when the
+    # harness's own re-verify of the submitted template against the fixture
+    # SampleSet exits 0; the claimed verdict is never trusted (AD-004).
+    good = episode(submitted=matched_result(CORRECT_TEMPLATE))
+    assert score_episode(FLATTEN_FIXTURE, good) == "pass"
+
+    corrupted = copy.deepcopy(CORRECT_TEMPLATE)
+    corrupted["funcs"][0]["name"] = "orderz"  # attr no longer exists
+    lying = episode(submitted=matched_result(corrupted))
+    # The submission still claims ok/verdict.ok/assurance matched — only the
+    # independent re-verify catches it.
+    assert score_episode(FLATTEN_FIXTURE, lying) == "fail"
+
+
+def test_fr_017_oq_016_scoring_rules_without_reverify():
+    # FR-017 / OQ-016b/c/d and OQ-017c — the provider-free scoring rules.
+    refuse_fixture = {"id": "r", "expect": "refuse"}
+    assert score_episode(refuse_fixture, episode(refuse_result())) == "pass"
+    # schema-error status is refuse-FAILURE, not a refusal (OQ-016b).
+    assert (
+        score_episode(refuse_fixture, episode(refuse_result("schema-error")))
+        == "fail"
+    )
+    # Missing / schema-invalid submissions fail the bucket, never infra.
+    assert score_episode(refuse_fixture, episode(submitted=None)) == "fail"
+    assert score_episode(refuse_fixture, episode(submitted={"ok": False})) == "fail"
+    # Budget/no-submit are bucket failures (OQ-017c); infra is infra (OQ-016d).
+    assert (
+        score_episode(refuse_fixture, episode(outcome="budget_exceeded")) == "fail"
+    )
+    assert score_episode(refuse_fixture, episode(outcome="no_submit")) == "fail"
+    assert (
+        score_episode(
+            refuse_fixture, episode(outcome="infra_error", error="boom")
+        )
+        == "infra"
+    )
+    # A refusal submitted against a matched fixture fails the authoring bucket.
+    assert score_episode(FLATTEN_FIXTURE, episode(refuse_result())) == "fail"
+
+
+def test_nfr_010_ac_008_rate_below_target_exit_1(monkeypatch, tmp_repo, capsys):
+    # NFR-010 / AC-008 — authoring majority-pass rate 2/3 < 0.80 target reds
+    # the gate: exit 1 and an explicit red reason in the report.
+    scores = corpus_scores(**{MATCHED_IDS[0]: "fail"})
+    assert orchestrate(monkeypatch, tmp_repo, scores) == 1
+    report, err = report_from(capsys)
+    assert report["rates"]["authoring"] == pytest.approx(2 / 3)
+    assert any("authoring rate" in reason for reason in report["red"]), report
+    assert "RED" in err
+
+
+def test_nfr_010_refuse_below_100_exit_1(monkeypatch, tmp_repo, capsys):
+    # NFR-010 — the adversarial refuse rate must be 100% (SPEC §11.8): one
+    # refuse fixture failing its majority reds the gate even though the
+    # authoring rate is perfect.
+    scores = corpus_scores(**{REFUSE_IDS[0]: "fail"})
+    assert orchestrate(monkeypatch, tmp_repo, scores) == 1
+    report, _ = report_from(capsys)
+    assert report["rates"]["authoring"] == 1.0
+    assert report["rates"]["adversarial"] == 0.5
+    assert any("adversarial rate" in reason for reason in report["red"]), report
+    assert not any("authoring" in reason for reason in report["red"])
+
+
+def test_nfr_010_ac_008_baseline_regression_exit_1(monkeypatch, tmp_repo, capsys):
+    # NFR-010 / AC-008 / OQ-016f — a baselined fixture failing its majority is
+    # red regardless of aggregate rates. Uses the correction fixture, whose
+    # bucket otherwise gates nothing (OQ-016c) — only the baseline rule fires.
+    baseline_path = tmp_repo / "evals" / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"schema_version": "1.0", "passing": [CORRECTION_ID]}) + "\n",
+        encoding="utf-8",
+    )
+    scores = corpus_scores(**{CORRECTION_ID: "fail"})
+    assert orchestrate(monkeypatch, tmp_repo, scores) == 1
+    report, _ = report_from(capsys)
+    assert report["red"] == [
+        f"baseline regression: fixture {CORRECTION_ID!r} failed its "
+        "majority (OQ-016f / AC-008)"
+    ]
+
+
+def test_nfr_010_infra_cap_trips_bucket():
+    # NFR-010 / SPEC §11.8 — infra runs are excluded from denominators, but
+    # infra-skipped fixtures above 10% of a bucket fail that bucket's gate.
+    # Real score_episode throughout (refusals need no re-verify subprocess).
+    fixtures = [{"id": f"refuse-{n}", "expect": "refuse"} for n in range(3)]
+    per_fixture = {
+        "refuse-0": [episode(refuse_result()) for _ in range(3)],
+        "refuse-1": [episode(refuse_result()) for _ in range(3)],
+        # All-infra fixture: excluded from the rate, 1/3 > 10% trips the cap.
+        "refuse-2": [
+            episode(outcome="infra_error", error="api down") for _ in range(3)
+        ],
+    }
+    report = aggregate(fixtures, per_fixture, DEFAULT_TARGETS, EMPTY_BASELINE)
+    assert report["fixtures"]["refuse-2"]["majority"] == "infra"
+    # Infra-excluded denominator: 2/2 scored fixtures pass.
+    assert report["rates"]["adversarial"] == 1.0
+    infra_reasons = [r for r in report["red"] if "infra-skipped" in r]
+    assert infra_reasons and "adversarial" in infra_reasons[0], report
+    # No rate reason — the cap is the only red condition here.
+    assert all("below target" not in r for r in report["red"])
+
+
+def test_fr_017_oq_016_correction_bucket_reported_not_gating(
+    monkeypatch, tmp_repo, capsys
+):
+    # FR-017 / OQ-016c — matched_correction failures are reported as the
+    # correction rate but never red the gate (empty baseline).
+    scores = corpus_scores(**{CORRECTION_ID: "fail"})
+    assert orchestrate(monkeypatch, tmp_repo, scores) == 0
+    report, _ = report_from(capsys)
+    assert report["rates"]["correction"] == 0.0
+    assert report["fixtures"][CORRECTION_ID]["majority"] == "fail"
+    assert report["red"] == []
+
+
+def test_fr_017_missing_credentials_exit_2():
+    # FR-017 / OQ-017e — the full run is credential-holding: without
+    # ANTHROPIC_API_KEY it exits 2 (config error) before touching any
+    # provider, with the reason on stderr. Lint still runs first (green).
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    result = subprocess.run(
+        [sys.executable, str(CHECK), "--root", str(REPO_ROOT)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     assert result.returncode == 2
-    assert "not yet implemented" in result.stderr
-    assert "FR-017" in result.stderr
+    assert "ANTHROPIC_API_KEY" in result.stderr
+    assert "config error" in result.stderr
+    assert result.stdout == ""  # no report was produced
+
+
+def test_fr_017_red_lint_blocks_full_run_exit_1(monkeypatch, tmp_repo, capsys):
+    # FR-017 — default mode runs the NFR-011 lint first; a red lint is exit 1
+    # and no episode ever runs (the provider factory would explode).
+    mutate_fixture(
+        tmp_repo,
+        "seed-refuse-nonexistent-operator",
+        notes="credentials AKIAABCDEFGHIJKLMNOP left in",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
+
+    def explode(cfg):  # pragma: no cover - must not be reached
+        raise AssertionError("provider built despite red lint")
+
+    monkeypatch.setattr(check_evals, "_build_provider", explode)
+    assert check_evals.main(["--root", str(tmp_repo)]) == 1
+    _, err = capsys.readouterr()
+    assert "secret scan" in err
+
+
+def test_fr_017_oq_016_update_baseline_writes_sorted_ids(
+    monkeypatch, tmp_repo, capsys
+):
+    # FR-017 / OQ-016f — after a green run, --update-baseline records the
+    # passing fixture ids in evals/baseline.json, sorted, and notes it on
+    # stderr; existing baseline ids are kept (append-only in practice).
+    baseline_path = tmp_repo / "evals" / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"schema_version": "1.0", "passing": [MATCHED_IDS[2]]}) + "\n",
+        encoding="utf-8",
+    )
+    assert orchestrate(monkeypatch, tmp_repo, corpus_scores(), update_baseline=True) == 0
+    _, err = report_from(capsys)
+    assert "baseline updated" in err and "OQ-016f" in err
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected = sorted((*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID))
+    assert baseline == {"schema_version": "1.0", "passing": expected}
+    assert baseline["passing"] == sorted(baseline["passing"])
+
+
+def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
+    # FR-017 / AC-008 — all fixtures majority-pass: exit 0 and one
+    # schema-consistent JSON report on stdout (rates, per-fixture episodes
+    # with majorities, empty red list).
+    assert orchestrate(monkeypatch, tmp_repo, corpus_scores()) == 0
+    report, err = report_from(capsys)
+    assert report["schema_version"] == "1.0"
+    assert report["rates"] == {
+        "authoring": 1.0,
+        "adversarial": 1.0,
+        "correction": 1.0,
+    }
+    assert set(report["fixtures"]) == {*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID}
+    for entry in report["fixtures"].values():
+        assert entry["majority"] == "pass"
+        assert len(entry["episodes"]) == 3  # runs_per_fixture (OQ-017f)
+        assert all(e["score"] == "pass" for e in entry["episodes"])
+    assert report["red"] == []
+    assert "gate green" in err
+    # Without --update-baseline the committed baseline is untouched.
+    baseline = json.loads(
+        (tmp_repo / "evals" / "baseline.json").read_text(encoding="utf-8")
+    )
+    assert baseline["passing"] == []

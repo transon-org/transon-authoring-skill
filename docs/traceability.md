@@ -25,7 +25,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-014 | AC-021 | A1 | CLI unit | [x] | tests/test_cli_a1.py (test_fr_014_check_samples_ok_exit_0, test_fr_014_check_samples_unconfirmed_exit_1, test_fr_014_verify_matched_exit_0, test_fr_014_verify_failed_stage_exit_1, test_fr_014_validate_ok_exit_0, test_fr_014_dry_run_success_has_result_and_writes) |
 | FR-015 | AC-007, AC-009 | A4 | check_install | [ ] | |
 | FR-016 | AC-007 | A4 | check_install | [ ] | |
-| FR-017 | AC-008 | A2 | check_evals | [ ] | |
+| FR-017 | AC-008 | A2 | check_evals | [x] | tests/test_check_evals.py (test_fr_017_ac_008_matched_scoring_requires_independent_reverify, test_fr_017_oq_016_scoring_rules_without_reverify, test_fr_017_oq_016_correction_bucket_reported_not_gating, test_fr_017_missing_credentials_exit_2, test_fr_017_red_lint_blocks_full_run_exit_1, test_fr_017_oq_016_update_baseline_writes_sorted_ids, test_fr_017_ac_008_green_path_exit_0), tests/test_eval_harness.py (test_fr_017_oq_017_tool_loop_write_run_submit and siblings), .github/workflows/evals.yml (dispatch workflow) |
 | FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | tests/test_check_evals.py (test_nfr_011_ac_025_consent_requires_redaction) (A2 slice: lint; real-use corpus at A3) |
 | FR-019 | AC-009 | A4 | check_install | [ ] | |
 | FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [x] | tests/test_check_samples.py (test_fr_020_ac_010_gap_codes_and_waiver_flow, test_fr_020_oq_018_placeholder_fingerprint_both_gaps, test_fr_020_oq_018_confirmed_true_missing_confirmed_by_is_unconfirmed, test_fr_020_oq_018_waiver_on_rejected_obligation_not_invalid, test_fr_020_oq_018_proposed_waiver_inert_dangling_ref_invalid, test_fr_020_oq_018_mode_choice_and_custom_target_ignored, test_fr_020_ac_017_flags_independent, test_fr_020_ac_018_sample_check_byte_deterministic), tests/test_verify.py (test_fr_020_oq_018_invalid_include_fails_dry_run_stage) |
@@ -46,5 +46,5 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | NFR-007 | AC-005 | A4 | check_parity | [ ] | |
 | NFR-008 | AC-006, AC-007 | A4–A5 | release checklist | [ ] | |
 | NFR-009 | AC-007, AC-009 | A4 | check_install | [ ] | |
-| NFR-010 | AC-008 | A2 | check_evals | [ ] | |
+| NFR-010 | AC-008 | A2 | check_evals | [x] | tests/test_check_evals.py (test_nfr_010_ac_008_rate_below_target_exit_1, test_nfr_010_refuse_below_100_exit_1, test_nfr_010_ac_008_baseline_regression_exit_1, test_nfr_010_infra_cap_trips_bucket) |
 | NFR-011 | AC-025 | A2 | fixture lint | [x] | tests/test_check_evals.py (test_nfr_011_ac_025_committed_fixtures_lint_green, test_nfr_011_ac_025_consent_requires_redaction, test_nfr_011_secret_pattern_is_red, test_nfr_011_bad_sample_set_is_red, test_nfr_011_id_mismatch_and_dangling_baseline_red, test_nfr_011_missing_policy_file_and_invalid_fixture_red, test_nfr_011_full_run_mode_not_yet_implemented_exit_2) |
