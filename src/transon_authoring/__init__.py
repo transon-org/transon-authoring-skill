@@ -7,4 +7,9 @@ metadata snapshot, the examples corpus with its NL-intents sidecar, and the
 ``python -m transon_authoring metadata`` entry; verification lands A1.
 """
 
+from .samples import check_samples
+from .verify import dry_run
+
+__all__ = ["check_samples", "dry_run"]
+
 __version__ = "0.0.1"
