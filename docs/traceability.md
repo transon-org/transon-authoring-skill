@@ -26,7 +26,7 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | FR-015 | AC-007, AC-009 | A4 | check_install | [ ] | |
 | FR-016 | AC-007 | A4 | check_install | [ ] | |
 | FR-017 | AC-008 | A2 | check_evals | [ ] | |
-| FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | |
+| FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review | [ ] | tests/test_check_evals.py (test_nfr_011_ac_025_consent_requires_redaction) (A2 slice: lint; real-use corpus at A3) |
 | FR-019 | AC-009 | A4 | check_install | [ ] | |
 | FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit | [x] | tests/test_check_samples.py (test_fr_020_ac_010_gap_codes_and_waiver_flow, test_fr_020_oq_018_placeholder_fingerprint_both_gaps, test_fr_020_oq_018_confirmed_true_missing_confirmed_by_is_unconfirmed, test_fr_020_oq_018_waiver_on_rejected_obligation_not_invalid, test_fr_020_oq_018_proposed_waiver_inert_dangling_ref_invalid, test_fr_020_oq_018_mode_choice_and_custom_target_ignored, test_fr_020_ac_017_flags_independent, test_fr_020_ac_018_sample_check_byte_deterministic), tests/test_verify.py (test_fr_020_oq_018_invalid_include_fails_dry_run_stage) |
 | FR-021 | AC-029, AC-017 | A2 | schema unit | [x] | tests/test_sample_persistence.py (test_fr_021_ac_029_persisted_confirmation_round_trips, test_ac_029_content_edit_flips_fingerprint_mismatch, test_fr_021_oq_015_fingerprint_only_from_sample_check, test_fr_021_oq_015_cli_acquisition_route, test_fr_021_ac_017_confirmation_alone_insufficient) |
@@ -47,4 +47,4 @@ Status: `[ ]` not started / partial · `[x]` done (tests green and cited).
 | NFR-008 | AC-006, AC-007 | A4–A5 | release checklist | [ ] | |
 | NFR-009 | AC-007, AC-009 | A4 | check_install | [ ] | |
 | NFR-010 | AC-008 | A2 | check_evals | [ ] | |
-| NFR-011 | AC-025 | A2 | fixture lint | [ ] | |
+| NFR-011 | AC-025 | A2 | fixture lint | [x] | tests/test_check_evals.py (test_nfr_011_ac_025_committed_fixtures_lint_green, test_nfr_011_ac_025_consent_requires_redaction, test_nfr_011_secret_pattern_is_red, test_nfr_011_bad_sample_set_is_red, test_nfr_011_id_mismatch_and_dangling_baseline_red, test_nfr_011_missing_policy_file_and_invalid_fixture_red, test_nfr_011_full_run_mode_not_yet_implemented_exit_2) |
