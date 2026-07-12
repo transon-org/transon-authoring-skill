@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "provider": "anthropic",
-  "model_id": "claude-sonnet-5",
+  "model_id": "claude-haiku-4-5-20251001",
   "max_output_tokens": 8192,
   "tool_budget": 32,
   "runs_per_fixture": 3,

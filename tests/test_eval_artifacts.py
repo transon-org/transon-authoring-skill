@@ -54,19 +54,32 @@ def test_fr_017_runner_targets_baseline_validate(file_name, schema_name):
 
 
 def test_fr_017_runner_values_are_oq_017f_pin():
-    # OQ-017f: the initial committed runner.json values are gate identity
-    # (AD-020); changing any is an explicit eval-policy commit.
+    # OQ-017f: the committed runner.json values are gate identity (AD-020);
+    # changing any is an explicit eval-policy commit. Current pin: the
+    # AD-021/OQ-024a small-model gate (superseding the initial sonnet pin
+    # via the 2026-07-12 eval-policy commit).
     document = load_document(EVALS / "runner.json", "eval_runner.json")
     assert document == {
         "schema_version": "1.0",
         "provider": "anthropic",
-        "model_id": "claude-sonnet-5",
+        "model_id": "claude-haiku-4-5-20251001",
         "max_output_tokens": 8192,
         "tool_budget": 32,
         "runs_per_fixture": 3,
         "pass_rule": "majority",
         "seed": None,
     }
+
+
+def test_oq_024_baseline_reset_with_gate_model_swap():
+    # OQ-024g: the gate-model swap resets baseline.json to an empty passing
+    # list in the same eval-policy commit; targets are never reset (0.80
+    # floor stays, ratchet untouched).
+    baseline = load_document(EVALS / "baseline.json", "eval_baseline.json")
+    assert baseline["passing"] == []
+    targets = load_document(EVALS / "targets.json", "eval_targets.json")
+    assert targets["authoring_target"] == 0.80
+    assert targets["adversarial_target"] == 1.0
 
 
 def test_fr_017_targets_start_at_the_initial_authoring_target():
