@@ -1,0 +1,30 @@
+{
+  "source_example": "WorkedExampleNestedArithmetic",
+  "template": {
+    "$": "expr",
+    "op": "*",
+    "values": [
+      {
+        "$": "expr",
+        "op": "+",
+        "values": [
+          {
+            "$": "attr",
+            "name": "a"
+          },
+          {
+            "$": "attr",
+            "name": "b"
+          }
+        ]
+      },
+      {
+        "$": "attr",
+        "name": "c"
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

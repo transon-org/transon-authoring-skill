@@ -1,0 +1,28 @@
+{
+  "source_example": "CondFirstTruthyArm",
+  "template": {
+    "$": "cond",
+    "cases": [
+      {
+        "then": "negative",
+        "when": {
+          "$": "expr",
+          "op": "<",
+          "value": 0
+        }
+      },
+      {
+        "then": "zero",
+        "when": {
+          "$": "expr",
+          "op": "==",
+          "value": 0
+        }
+      }
+    ],
+    "default": "positive"
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

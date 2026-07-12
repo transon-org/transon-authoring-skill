@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-join-many-dynamic-dicts",
+  "expect": "matched",
+  "intent_nl": "Each input item has a \"key\" and a \"value\" field. Build one object that contains both the forward mapping (each key to its value) and the reverse mapping (each value to its key) for every item.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Each input item has a \"key\" and a \"value\" field. Build one object that contains both the forward mapping (each key to its value) and the reverse mapping (each value to its key) for every item.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": [
+          {
+            "key": "a",
+            "value": "b"
+          },
+          {
+            "key": "c",
+            "value": "d"
+          }
+        ],
+        "output": {
+          "a": "b",
+          "c": "d",
+          "b": "a",
+          "d": "c"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": [
+          {
+            "key": "variation-alpha",
+            "value": "variation-beta"
+          },
+          {
+            "key": "variation-gamma",
+            "value": "variation-alpha"
+          }
+        ],
+        "output": {
+          "variation-alpha": "variation-gamma",
+          "variation-gamma": "variation-alpha",
+          "variation-beta": "variation-alpha"
+        },
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
+            "key": "variation-beta",
+            "value": "variation-gamma"
+          },
+          {
+            "key": "variation-alpha",
+            "value": "variation-beta"
+          }
+        ],
+        "output": {
+          "variation-beta": "variation-alpha",
+          "variation-alpha": "variation-beta",
+          "variation-gamma": "variation-beta"
+        },
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "0b6b5055fba14ecfcd28155f58dfcfc3dd179a623319711db0c4b5cdbbf20278"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'JoinManyDynamicDicts' (AD-021 / FR-029); seed provenance at evals/seeds/syn-join-many-dynamic-dicts.json.",
+  "redacted": false
+}

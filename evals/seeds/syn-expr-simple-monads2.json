@@ -1,0 +1,19 @@
+{
+  "source_example": "ExprSimpleMonads2",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      "prefix_",
+      {
+        "$": "expr",
+        "op": "+",
+        "value": {
+          "$": "parent"
+        }
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

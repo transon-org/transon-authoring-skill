@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 """check-evals — eval gate for the committed corpus under ``evals/``
-(FR-017 / NFR-010 / NFR-011 / AC-008 / AC-025; SPEC §11.8, §13, §15
-OQ-016/OQ-017).
+(FR-017 / FR-029 / NFR-010 / NFR-011 / AC-008 / AC-025 / AC-030; SPEC §11.8,
+§13, §15 OQ-016/OQ-017/OQ-025).
 
 Two modes:
 
-- ``--lint`` — the credential-free NFR-011 fixture privacy lint that per-PR
-  CI runs (OQ-017e; the §13 check_evals row carries this lint). Engine-free
-  and deterministic.
+- ``--lint`` — the fixture lint that per-PR CI runs (OQ-017e; the §13
+  check_evals row carries this lint plus the FR-029 seed-regen check,
+  AC-030). Credential-free, network-free and deterministic — no provider is
+  ever touched; the AC-030 regen check does exercise the pinned local engine
+  through the AD-017 sandbox.
 - default (no ``--lint``) — the full FR-017 red/green eval gate: lint first,
   then run every fixture ``runs_per_fixture`` times through the provider tool
   loop (``scripts/eval_harness.py``), score each episode mechanically
@@ -35,6 +37,22 @@ Lint checks (every failure names the offending file, all reported on stderr):
 6. Best-effort secret scan over each fixture's raw bytes against
    ``SECRET_PATTERNS`` (AWS access key ids, private-key PEM headers, GitHub
    tokens, ``sk-…`` API keys, JWT-looking payloads); any hit is red.
+7. Every ``evals/seeds/*.json`` parses, is shape-valid
+   (``{source_example, template, generator: {version, notes?}}`` — validated
+   structurally, not by the §11.0 ingress, per OQ-025), and has a matching
+   fixture ``evals/cases/<stem>.json``; a seed without a fixture is red, a
+   fixture without a seed is hand-authored and ignored (FR-029 / AC-030).
+8. Snapshot provenance (FR-029a): the seed ``source_example`` names an entry
+   in the pinned snapshot ``docs.examples``, the seed ``template``
+   JSON-equals that entry's ``template``, and fixture case 1 ``input``
+   JSON-equals that entry's ``data`` (AD-021: a seed cannot smuggle in a
+   template that never originated from the corpus).
+9. Regeneration (FR-029b / AC-030): the fixture regenerates bit-identically
+   from its seed under the current pin — the §11.1 SampleSet content subset
+   (compared via its OQ-015 canonical bytes / ``content_fingerprint``) and
+   the recorded confirmation fingerprint both match a fresh
+   ``scripts/gen_fixtures.py`` run — the same drift discipline as
+   ``check_snapshot``.
 
 Exit codes: 0 gate/lint green, 1 red gate or any lint failure, 2 config /
 credential / policy-file errors.
@@ -53,20 +71,22 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from transon_authoring import check_samples
+    from transon_authoring import check_samples, get_metadata
     from transon_authoring._ingress import (
         IngressError,
         load_document,
         schema_violations,
     )
+    from transon_authoring.samples import content_fingerprint
 except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring import check_samples
+    from transon_authoring import check_samples, get_metadata
     from transon_authoring._ingress import (
         IngressError,
         load_document,
         schema_violations,
     )
+    from transon_authoring.samples import content_fingerprint
 
 #: Committed eval-policy files and their bundled schemas (AD-020, §11.8).
 POLICY_FILES = (
@@ -89,11 +109,14 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[bytes]], ...] = (
 
 
 def lint_evals(repo_root: Path, verbose: bool = False) -> list[str]:
-    """Run the NFR-011 fixture lint over ``<repo_root>/evals``; return the
-    (possibly empty) list of failure messages, each naming the offending file.
+    """Run the NFR-011 fixture lint plus the FR-029 / AC-030 seed checks over
+    ``<repo_root>/evals``; return the (possibly empty) list of failure
+    messages, each naming the offending file.
 
-    Engine-free and deterministic (no network, no provider credentials); safe
-    for per-PR CI (OQ-017e).
+    Credential-free, network-free and deterministic (no provider is ever
+    touched); safe for per-PR CI (OQ-017e). The AC-030 regen check runs the
+    pinned local engine through the AD-017 sandbox — same determinism, no
+    external dependency.
     """
     failures: list[str] = []
     evals_dir = repo_root / "evals"
@@ -121,6 +144,7 @@ def lint_evals(repo_root: Path, verbose: bool = False) -> list[str]:
     # --- Check 2: every fixture validates; id == stem; ids unique. ---------
     cases_dir = evals_dir / "cases"
     fixture_ids: set[str] = set()
+    fixtures_by_stem: dict[str, dict] = {}
     if not cases_dir.is_dir():
         failures.append(f"{cases_dir}: missing eval cases directory (SPEC §11.8)")
         fixture_paths: list[Path] = []
@@ -134,6 +158,7 @@ def lint_evals(repo_root: Path, verbose: bool = False) -> list[str]:
         except IngressError as exc:
             failures.extend(f"{path}: {error['message']}" for error in exc.errors)
         if fixture is not None:
+            fixtures_by_stem[path.stem] = fixture
             fixture_id = fixture["id"]
             if fixture_id != path.stem:
                 failures.append(
@@ -185,6 +210,152 @@ def lint_evals(repo_root: Path, verbose: bool = False) -> list[str]:
                 f"{baseline_path}: passing id {dangling!r} has no fixture under "
                 f"{cases_dir} (OQ-016f)"
             )
+
+    # --- Checks 7–9: seed provenance + AC-030 regeneration (FR-029). -------
+    failures.extend(_lint_seeds(evals_dir, cases_dir, fixtures_by_stem, note))
+
+    return failures
+
+
+def _seed_shape_errors(seed: Any) -> list[str]:
+    """Structural validation of a seed provenance doc (FR-029 shape;
+    OQ-025 tail: no ``schema_version``, never the §11.0 ingress validator)."""
+    if not isinstance(seed, dict):
+        return ["seed document must be a JSON object"]
+    errors: list[str] = []
+    extras = sorted(set(seed) - {"source_example", "template", "generator"})
+    if extras:
+        errors.append(f"unknown seed keys: {', '.join(extras)}")
+    if not isinstance(seed.get("source_example"), str):
+        errors.append("`source_example` must be a string")
+    if "template" not in seed:
+        errors.append("`template` is required")
+    generator = seed.get("generator")
+    if not isinstance(generator, dict):
+        errors.append("`generator` must be an object")
+    else:
+        if not isinstance(generator.get("version"), str):
+            errors.append("`generator.version` must be a string")
+        if "notes" in generator and not isinstance(generator["notes"], str):
+            errors.append("`generator.notes` must be a string when present")
+        gen_extras = sorted(set(generator) - {"version", "notes"})
+        if gen_extras:
+            errors.append(f"unknown generator keys: {', '.join(gen_extras)}")
+    return errors
+
+
+def _lint_seeds(
+    evals_dir: Path,
+    cases_dir: Path,
+    fixtures_by_stem: dict[str, dict],
+    note,
+) -> list[str]:
+    """FR-029 / AC-030 seed checks (lint checks 7–9). A fixture without a
+    seed file is hand-authored and ignored; every seed file must agree with
+    its fixture and the pinned snapshot, and regenerate bit-identically."""
+    failures: list[str] = []
+    seeds_dir = evals_dir / "seeds"
+    seed_paths = sorted(seeds_dir.glob("*.json")) if seeds_dir.is_dir() else []
+    snapshot_examples: dict[str, dict] | None = None
+    generator = None
+
+    for path in seed_paths:
+        # Check 7 — parse + shape + matching fixture.
+        try:
+            seed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            failures.append(f"{path}: seed does not parse: {exc} (FR-029)")
+            continue
+        shape_errors = _seed_shape_errors(seed)
+        if shape_errors:
+            failures.extend(
+                f"{path}: {error} (FR-029 seed shape)" for error in shape_errors
+            )
+            continue
+        fixture = fixtures_by_stem.get(path.stem)
+        if fixture is None:
+            failures.append(
+                f"{path}: seed has no matching fixture "
+                f"{cases_dir / (path.stem + '.json')} (FR-029 / AC-030)"
+            )
+            continue
+
+        # Check 8 — snapshot provenance (FR-029a / AD-021).
+        if snapshot_examples is None:
+            snapshot_examples = {
+                entry["name"]: entry
+                for entry in get_metadata()["docs"]["examples"]
+            }
+        entry = snapshot_examples.get(seed["source_example"])
+        if entry is None:
+            failures.append(
+                f"{path}: source_example {seed['source_example']!r} is not in "
+                "the pinned snapshot docs.examples (FR-029 / AC-030)"
+            )
+            continue
+        if seed["template"] != entry["template"]:
+            failures.append(
+                f"{path}: seed template does not JSON-equal the snapshot "
+                f"entry's template (FR-029 / AC-030 / AD-021)"
+            )
+            continue
+        fixture_path = cases_dir / f"{path.stem}.json"
+        samples = fixture.get("samples")
+        if not isinstance(samples, dict) or not samples.get("cases"):
+            failures.append(
+                f"{fixture_path}: seeded fixture carries no SampleSet cases — "
+                "case 1 provenance cannot be established (FR-029 / AC-030)"
+            )
+            continue
+        if samples["cases"][0].get("input") != entry["data"]:
+            failures.append(
+                f"{fixture_path}: case 1 input does not JSON-equal the "
+                f"snapshot entry's data (FR-029 / AC-030 / AD-021)"
+            )
+            continue
+
+        # Check 9 — bit-identical regeneration under the current pin
+        # (AC-030): §11.1 content subset compared via its OQ-015 canonical
+        # bytes (content_fingerprint is sha256 over exactly those bytes)
+        # plus the recorded confirmation fingerprint.
+        if generator is None:
+            generator = _import_fixture_generator()
+        try:
+            regen_fixture, _regen_seed = generator.generate(
+                entry, path.stem, fixture["intent_nl"]
+            )
+        except Exception as exc:
+            failures.append(
+                f"{path}: fixture does not regenerate from its seed under the "
+                f"current pin: {exc} (FR-029 / AC-030)"
+            )
+            continue
+        regen_samples = regen_fixture["samples"]
+        subset_agrees = content_fingerprint(samples) == content_fingerprint(
+            regen_samples
+        )
+        # A generator regression that drops the confirmation fingerprint must
+        # be a clean red, never a KeyError crash — and never a silent
+        # None == None pass against a fixture missing it too.
+        regen_fp = regen_samples.get("confirmation", {}).get("content_fingerprint")
+        if not regen_fp:
+            failures.append(
+                f"{fixture_path}: regenerated fixture carries no confirmation "
+                "content_fingerprint — generator regression (FR-029 / AC-030)"
+            )
+            continue
+        recorded_agrees = (
+            samples.get("confirmation", {}).get("content_fingerprint") == regen_fp
+        )
+        if not (subset_agrees and recorded_agrees):
+            failures.append(
+                f"{fixture_path}: fixture does not regenerate bit-identically "
+                "from its seed under the current pin (SampleSet content "
+                "subset / content_fingerprint drift) — same discipline as "
+                "check_snapshot (FR-029 / AC-030)"
+            )
+            continue
+        note(f"seed OK: {path}")
 
     return failures
 
@@ -404,6 +575,18 @@ def aggregate(
     }
 
 
+def _import_fixture_generator():
+    """Import scripts/gen_fixtures.py lazily (same pattern as
+    :func:`_import_eval_harness`): the FR-029 generator is only needed when
+    seed files exist, and module-level lookups keep it monkeypatchable."""
+    try:
+        import gen_fixtures
+    except ImportError:  # pragma: no cover - invoked outside scripts/
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gen_fixtures
+    return gen_fixtures
+
+
 def _import_eval_harness():
     """Import scripts/eval_harness.py lazily (module-level attribute lookups
     keep it monkeypatchable in offline tests, OQ-017e)."""
@@ -523,13 +706,15 @@ def main(argv: list[str] | None = None) -> int:
         description="Eval gate (FR-017/NFR-010/AD-020). Default mode runs "
         "the full provider eval gate (SPEC §11.8; needs ANTHROPIC_API_KEY); "
         "--lint runs only the credential-free NFR-011 fixture privacy lint "
-        "(AC-025) used by per-PR CI (OQ-017e).",
+        "(AC-025) plus the FR-029 seed provenance/regen checks (AC-030) "
+        "used by per-PR CI (OQ-017e).",
     )
     parser.add_argument(
         "--lint",
         action="store_true",
         help="run only the fixture lint (schema, ids, baseline refs, sample "
-        "readiness, consent/redaction, secret scan)",
+        "readiness, consent/redaction, secret scan, seed provenance + "
+        "AC-030 regeneration)",
     )
     parser.add_argument(
         "--update-baseline",

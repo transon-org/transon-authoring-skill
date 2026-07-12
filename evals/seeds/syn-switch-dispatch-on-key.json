@@ -1,0 +1,17 @@
+{
+  "source_example": "SwitchDispatchOnKey",
+  "template": {
+    "$": "switch",
+    "cases": {
+      "a": "Apple",
+      "b": "Banana"
+    },
+    "key": {
+      "$": "attr",
+      "name": "kind"
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

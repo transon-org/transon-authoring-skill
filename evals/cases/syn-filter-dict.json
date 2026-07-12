@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-filter-dict",
+  "expect": "matched",
+  "intent_nl": "From an input object mapping names to numbers, keep only the entries whose value is odd and drop the even-valued ones.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "From an input object mapping names to numbers, keep only the entries whose value is odd and drop the even-valued ones.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "a": 1,
+          "b": 2,
+          "c": 3,
+          "d": 4,
+          "e": 5,
+          "f": 6
+        },
+        "output": {
+          "a": 1,
+          "c": 3,
+          "e": 5
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "a": 7,
+          "b": 11,
+          "c": 13,
+          "d": 7,
+          "e": 11,
+          "f": 13
+        },
+        "output": {
+          "a": 7,
+          "b": 11,
+          "c": 13,
+          "d": 7,
+          "e": 11,
+          "f": 13
+        },
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "a": 11,
+          "b": 13,
+          "c": 7,
+          "d": 11,
+          "e": 13,
+          "f": 7
+        },
+        "output": {
+          "a": 11,
+          "b": 13,
+          "c": 7,
+          "d": 11,
+          "e": 13,
+          "f": 7
+        },
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "0b6c58430be251d6d7fa2f9e8e3ec4a9cf9aa590718bddafdce3a0a084cfb234"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FilterDict' (AD-021 / FR-029); seed provenance at evals/seeds/syn-filter-dict.json.",
+  "redacted": false
+}

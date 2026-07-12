@@ -1,0 +1,35 @@
+{
+  "source_example": "MapListsToDict",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "zip",
+        "items": [
+          {
+            "$": "attr",
+            "name": "keys"
+          },
+          {
+            "$": "attr",
+            "name": "values"
+          }
+        ]
+      },
+      {
+        "$": "map",
+        "key": {
+          "$": "attr",
+          "name": 0
+        },
+        "value": {
+          "$": "attr",
+          "name": 1
+        }
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

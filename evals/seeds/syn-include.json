@@ -1,0 +1,13 @@
+{
+  "source_example": "Include",
+  "template": {
+    "$": "map",
+    "item": {
+      "$": "include",
+      "name": "MapListsToDict"
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

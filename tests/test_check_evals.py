@@ -2,13 +2,15 @@
 
 Two surfaces:
 
-- `--lint` (NFR-011 / AC-025, FR-018 A2 slice): the credential-free,
-  engine-free, deterministic fixture privacy lint per-PR CI runs (SPEC §15
-  OQ-017e; the §13 check_evals row carries it): bundled-schema validation of
+- `--lint` (NFR-011 / AC-025 plus the FR-029 / AC-030 seed checks): the
+  credential-free, network-free, deterministic fixture lint per-PR CI runs
+  (SPEC §15 OQ-017e; the §13 check_evals row carries it; the AC-030 regen
+  check exercises the pinned local engine): bundled-schema validation of
   the eval-policy files and every `evals/cases/*.json` (AD-020), id/filename
   agreement and baseline references (OQ-016f), `ok_for_verify` SampleSets
-  (FR-027 / OQ-017a), the consent⇒redaction invariant (FR-018), and the
-  best-effort secret scan (AC-025).
+  (FR-027 / OQ-017a), the consent⇒redaction invariant (FR-018), the
+  best-effort secret scan (AC-025), and the FR-029 seed provenance +
+  bit-identical regeneration gate (AC-030).
 - the full red/green gate (FR-017 / NFR-010 / AC-008): OQ-016 mechanical
   scoring (`score_episode`, incl. the independent re-verify — AD-004),
   §11.8 aggregation (`aggregate`: majority-of-runs, buckets with
@@ -164,6 +166,159 @@ def test_nfr_011_missing_policy_file_and_invalid_fixture_red(tmp_repo: Path):
 
 
 # ---------------------------------------------------------------------------
+# FR-029 / AC-030 — seed provenance + bit-identical regeneration lint.
+# ---------------------------------------------------------------------------
+
+import gen_fixtures  # noqa: E402
+
+from transon_authoring import check_samples as _check_samples  # noqa: E402
+from transon_authoring import get_metadata as _get_metadata  # noqa: E402
+
+SNAPSHOT_EXAMPLES = {e["name"]: e for e in _get_metadata()["docs"]["examples"]}
+#: Small writes-capable seed used by the AC-030 lint tests (fast to regen).
+SEED_EXAMPLE = "FileWriteViaMap"
+SEED_ID = "seed-file-write-via-map"
+SEED_INTENT = "Write each input item to its own numbered output file."
+
+
+def mint_into(root: Path) -> tuple[Path, Path]:
+    """Mint the test seed fixture + provenance doc into *root* via the SAME
+    generator core the lint regen uses (FR-029)."""
+    fixture, seed = gen_fixtures.generate(
+        SNAPSHOT_EXAMPLES[SEED_EXAMPLE], SEED_ID, SEED_INTENT
+    )
+    seeds_dir = root / "evals" / "seeds"
+    seeds_dir.mkdir(parents=True, exist_ok=True)
+    fixture_path = root / "evals" / "cases" / f"{SEED_ID}.json"
+    seed_path = seeds_dir / f"{SEED_ID}.json"
+    fixture_path.write_text(
+        json.dumps(fixture, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    seed_path.write_text(
+        json.dumps(seed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return fixture_path, seed_path
+
+
+def rewrite_samples(fixture_path: Path, mutate) -> None:
+    """Apply *mutate(samples)* and refresh the confirmation fingerprint via
+    the library (OQ-015 acquisition path) so ok_for_verify stays true and
+    only the AC-030 checks can catch the drift."""
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    samples = fixture["samples"]
+    mutate(samples)
+    samples["confirmation"]["content_fingerprint"] = ""
+    samples["confirmation"]["confirmed"] = False
+    check = _check_samples(samples)
+    samples["confirmation"]["content_fingerprint"] = check["content_fingerprint"]
+    samples["confirmation"]["confirmed"] = True
+    fixture_path.write_text(
+        json.dumps(fixture, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def test_ac_030_agreeing_seed_fixture_snapshot_lint_green(tmp_repo: Path):
+    # AC-030 — a repo whose seeds, fixtures, and snapshot agree lints green,
+    # importable-function and CLI alike.
+    mint_into(tmp_repo)
+    assert lint_evals(tmp_repo) == []
+    result = run_check("--lint", "--root", str(tmp_repo))
+    assert result.returncode == 0, result.stderr
+
+
+def test_ac_030_regen_mismatch_red(tmp_repo: Path):
+    # AC-030 / FR-029 — a committed fixture that no longer regenerates
+    # bit-identically (content subset drifted; fingerprint refreshed so only
+    # the regen check can catch it) is red, naming the file.
+    fixture_path, _seed_path = mint_into(tmp_repo)
+
+    def tamper(samples):
+        samples["cases"][1]["output"] = {"tampered": True}
+
+    rewrite_samples(fixture_path, tamper)
+    failures = lint_evals(tmp_repo)
+    regen = [f for f in failures if "regenerate" in f and "AC-030" in f]
+    assert regen, failures
+    assert any(str(fixture_path) in f for f in regen)
+
+
+def test_ac_030_seed_without_fixture_red(tmp_repo: Path):
+    # AC-030 — a seed file with no matching fixture is red; the reverse
+    # (hand-authored fixture without a seed) is ignored.
+    fixture_path, seed_path = mint_into(tmp_repo)
+    fixture_path.unlink()
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(seed_path) in f and "no matching fixture" in f for f in failures
+    ), failures
+
+
+def test_ac_030_unknown_source_example_red(tmp_repo: Path):
+    # AC-030 / FR-029 snapshot provenance — source_example must name an
+    # entry in the pinned snapshot docs.examples.
+    _fixture_path, seed_path = mint_into(tmp_repo)
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    seed["source_example"] = "NoSuchExample"
+    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(seed_path) in f and "NoSuchExample" in f for f in failures
+    ), failures
+
+
+def test_ac_030_seed_template_not_snapshot_verbatim_red(tmp_repo: Path):
+    # AC-030 / FR-029 — the seed template must JSON-equal the snapshot
+    # entry's template (a seed cannot smuggle in a foreign template, AD-021).
+    _fixture_path, seed_path = mint_into(tmp_repo)
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    seed["template"] = {"$": "this"}
+    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(seed_path) in f and "template" in f for f in failures
+    ), failures
+
+
+def test_ac_030_case_1_input_differs_red(tmp_repo: Path):
+    # AC-030 / FR-029 — fixture case 1 input must JSON-equal the snapshot
+    # entry's data (the AD-021 corpus pair).
+    fixture_path, _seed_path = mint_into(tmp_repo)
+
+    def tamper(samples):
+        samples["cases"][0]["input"] = [{"id": 999}]
+
+    rewrite_samples(fixture_path, tamper)
+    failures = lint_evals(tmp_repo)
+    case1 = [f for f in failures if "case 1" in f]
+    assert case1, failures
+    assert any(str(fixture_path) in f or "seed" in f for f in case1)
+
+
+def test_ac_030_seed_shape_invalid_red(tmp_repo: Path):
+    # FR-029 / OQ-025 tail — seed docs are validated structurally by the
+    # lint (no schema_version, no §11.0 ingress): a wrong-shaped seed is red.
+    mint_into(tmp_repo)
+    bad = tmp_repo / "evals" / "seeds" / "seed-bad-shape.json"
+    bad.write_text(
+        json.dumps({"source_example": 42, "generator": {}}) + "\n",
+        encoding="utf-8",
+    )
+    failures = lint_evals(tmp_repo)
+    assert any(str(bad) in f for f in failures), failures
+
+
+def test_ac_030_hand_authored_fixture_without_seed_ignored():
+    # AC-030 — fixtures without seed files are hand-authored and outside the
+    # seed checks: the committed corpus mixes seeded syn-* fixtures (the
+    # FR-029 / AD-021 v1 wave) with hand-authored seed-* ones and lints green.
+    seed_stems = {p.stem for p in (REPO_ROOT / "evals" / "seeds").glob("*.json")}
+    case_stems = {p.stem for p in (REPO_ROOT / "evals" / "cases").glob("*.json")}
+    assert seed_stems, "expected the committed FR-029 seeds"
+    assert case_stems - seed_stems, "expected hand-authored fixtures too"
+    assert lint_evals(REPO_ROOT) == []
+
+
+# ---------------------------------------------------------------------------
 # FR-017 / NFR-010 / AC-008 — full gate: scoring, aggregation, orchestration.
 # ---------------------------------------------------------------------------
 
@@ -188,6 +343,17 @@ MATCHED_IDS = (
 )
 REFUSE_IDS = ("seed-refuse-nonexistent-mode", "seed-refuse-nonexistent-operator")
 CORRECTION_ID = "seed-correction-attr-misspelled"
+
+#: The full committed corpus, id → expect bucket (dynamic: alongside the
+#: hand-authored seed-* fixtures the corpus carries the FR-029 / AD-021 v1
+#: synthetic wave, one seeded syn-* fixture per snapshot tag family).
+ALL_FIXTURES = {
+    path.stem: json.loads(path.read_text(encoding="utf-8"))["expect"]
+    for path in sorted((REPO_ROOT / "evals" / "cases").glob("*.json"))
+}
+ALL_MATCHED_IDS = tuple(
+    fid for fid, expect in ALL_FIXTURES.items() if expect == "matched"
+)
 
 DEFAULT_TARGETS = {
     "schema_version": "1.0",
@@ -236,7 +402,7 @@ def refuse_result(status="aborted"):
 
 def corpus_scores(**overrides):
     """Per-fixture score plan for orchestration tests: default all-pass."""
-    plan = {fid: "pass" for fid in (*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID)}
+    plan = {fid: "pass" for fid in ALL_FIXTURES}
     plan.update(overrides)
     return plan
 
@@ -312,12 +478,16 @@ def test_fr_017_oq_016_scoring_rules_without_reverify():
 
 
 def test_nfr_010_ac_008_rate_below_target_exit_1(monkeypatch, tmp_repo, capsys):
-    # NFR-010 / AC-008 — authoring majority-pass rate 2/3 < 0.80 target reds
-    # the gate: exit 1 and an explicit red reason in the report.
-    scores = corpus_scores(**{MATCHED_IDS[0]: "fail"})
+    # NFR-010 / AC-008 — an authoring majority-pass rate below the 0.80
+    # target reds the gate: exit 1 and an explicit red reason in the report.
+    # Fail just enough matched fixtures to drop below the target.
+    total = len(ALL_MATCHED_IDS)
+    fails = int(total * (1 - DEFAULT_TARGETS["authoring_target"])) + 1
+    scores = corpus_scores(**{fid: "fail" for fid in ALL_MATCHED_IDS[:fails]})
     assert orchestrate(monkeypatch, tmp_repo, scores) == 1
     report, err = report_from(capsys)
-    assert report["rates"]["authoring"] == pytest.approx(2 / 3)
+    assert report["rates"]["authoring"] == pytest.approx((total - fails) / total)
+    assert report["rates"]["authoring"] < DEFAULT_TARGETS["authoring_target"]
     assert any("authoring rate" in reason for reason in report["red"]), report
     assert "RED" in err
 
@@ -455,7 +625,7 @@ def test_fr_017_oq_016_update_baseline_writes_sorted_ids(
     _, err = report_from(capsys)
     assert "baseline updated" in err and "OQ-016f" in err
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    expected = sorted((*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID))
+    expected = sorted(ALL_FIXTURES)
     assert baseline == {"schema_version": "1.0", "passing": expected}
     assert baseline["passing"] == sorted(baseline["passing"])
 
@@ -472,7 +642,7 @@ def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
         "adversarial": 1.0,
         "correction": 1.0,
     }
-    assert set(report["fixtures"]) == {*MATCHED_IDS, *REFUSE_IDS, CORRECTION_ID}
+    assert set(report["fixtures"]) == set(ALL_FIXTURES)
     for entry in report["fixtures"].values():
         assert entry["majority"] == "pass"
         assert len(entry["episodes"]) == 3  # runs_per_fixture (OQ-017f)

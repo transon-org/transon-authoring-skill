@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-map-lists-to-dict",
+  "expect": "matched",
+  "intent_nl": "My input has a \"keys\" list and a \"values\" list of the same length. Pair them up element by element and return a single object mapping each key to its corresponding value.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "My input has a \"keys\" list and a \"values\" list of the same length. Pair them up element by element and return a single object mapping each key to its corresponding value.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--keys",
+        "kind": "list_empty",
+        "target": "/keys",
+        "description": "Array at /keys is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--keys",
+        "kind": "list_singleton",
+        "target": "/keys",
+        "description": "Array at /keys has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--keys",
+        "kind": "list_many",
+        "target": "/keys",
+        "description": "Array at /keys has two or more elements.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--values",
+        "kind": "list_empty",
+        "target": "/values",
+        "description": "Array at /values is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--values",
+        "kind": "list_singleton",
+        "target": "/values",
+        "description": "Array at /values has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--values",
+        "kind": "list_many",
+        "target": "/values",
+        "description": "Array at /values has two or more elements.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "keys": [
+            "a",
+            "b",
+            "c"
+          ],
+          "values": [
+            1,
+            2,
+            3
+          ]
+        },
+        "output": {
+          "a": 1,
+          "b": 2,
+          "c": 3
+        },
+        "satisfies": [
+          "ob-happy",
+          "ob-list-many--keys",
+          "ob-list-many--values"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "keys": [],
+          "values": [
+            1,
+            2,
+            3
+          ]
+        },
+        "output": {},
+        "satisfies": [
+          "ob-list-empty--keys"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "keys": [
+            "a"
+          ],
+          "values": [
+            1,
+            2,
+            3
+          ]
+        },
+        "output": {
+          "a": 1
+        },
+        "satisfies": [
+          "ob-list-singleton--keys"
+        ]
+      },
+      {
+        "id": "c-4",
+        "input": {
+          "keys": [
+            "a",
+            "b",
+            "c"
+          ],
+          "values": []
+        },
+        "output": {},
+        "satisfies": [
+          "ob-list-empty--values"
+        ]
+      },
+      {
+        "id": "c-5",
+        "input": {
+          "keys": [
+            "a",
+            "b",
+            "c"
+          ],
+          "values": [
+            1
+          ]
+        },
+        "output": {
+          "a": 1
+        },
+        "satisfies": [
+          "ob-list-singleton--values"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "377a15e15bb764611f5eb47566b0a8e38bb7262a5d92ab180e62299f6e832250"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'MapListsToDict' (AD-021 / FR-029); seed provenance at evals/seeds/syn-map-lists-to-dict.json.",
+  "redacted": false
+}

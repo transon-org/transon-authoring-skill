@@ -1,0 +1,42 @@
+{
+  "source_example": "JoinManyDynamicDicts",
+  "template": {
+    "$": "join",
+    "items": {
+      "$": "join",
+      "items": [
+        {
+          "$": "map",
+          "item": {
+            "$": "object",
+            "key": {
+              "$": "attr",
+              "name": "key"
+            },
+            "value": {
+              "$": "attr",
+              "name": "value"
+            }
+          }
+        },
+        {
+          "$": "map",
+          "item": {
+            "$": "object",
+            "key": {
+              "$": "attr",
+              "name": "value"
+            },
+            "value": {
+              "$": "attr",
+              "name": "key"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

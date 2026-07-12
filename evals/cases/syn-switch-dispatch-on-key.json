@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-switch-dispatch-on-key",
+  "expect": "matched",
+  "intent_nl": "Look at the input's \"kind\" field and return the matching fruit name: \"Apple\" for kind \"a\" and \"Banana\" for kind \"b\".",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Look at the input's \"kind\" field and return the matching fruit name: \"Apple\" for kind \"a\" and \"Banana\" for kind \"b\".",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-no-content",
+        "kind": "custom",
+        "description": "NO_CONTENT: an input drives the template to the engine NO_CONTENT sentinel (empirical relevance, OQ-025c).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "kind": "b"
+        },
+        "output": "Banana",
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "kind": "variation-alpha"
+        },
+        "output": {
+          "$transon_authoring": "NO_CONTENT"
+        },
+        "satisfies": [
+          "ob-no-content"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "kind": "variation-beta"
+        },
+        "output": {
+          "$transon_authoring": "NO_CONTENT"
+        },
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "b08d4c1eabd8232e10b4c198fa17397945ed0da9f4889a3cea41e9b27ffa382e"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'SwitchDispatchOnKey' (AD-021 / FR-029); seed provenance at evals/seeds/syn-switch-dispatch-on-key.json.",
+  "redacted": false
+}

@@ -1,0 +1,16 @@
+{
+  "source_example": "ExprSimpleValues1",
+  "template": {
+    "$": "expr",
+    "op": "+",
+    "values": [
+      {
+        "$": "this"
+      },
+      "_suffix"
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

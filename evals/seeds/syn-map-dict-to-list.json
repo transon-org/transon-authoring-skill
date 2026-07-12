@@ -1,0 +1,17 @@
+{
+  "source_example": "MapDictToList",
+  "template": {
+    "$": "map",
+    "item": {
+      "key": {
+        "$": "key"
+      },
+      "value": {
+        "$": "value"
+      }
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}
