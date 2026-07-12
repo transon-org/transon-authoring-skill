@@ -415,8 +415,11 @@ def _build(
     cases: list[dict[str, Any]] = []
     used_ids: set[str] = set()
 
-    def add_case(input_value: Any, *, context: str) -> dict[str, Any]:
-        envelope = engine.run(input_value)
+    def add_case(
+        input_value: Any, *, context: str, envelope: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if envelope is None:
+            envelope = engine.run(input_value)
         if not envelope["ok"]:
             raise GeneratorError(
                 f"seed {source_example['name']!r}: dry-run failed for the "
@@ -615,7 +618,7 @@ def _build(
         coverage.append(obligation)
         case = next((c for c in cases if c["input"] == candidate), None)
         if case is None:
-            case = add_case(candidate, context=base)
+            case = add_case(candidate, context=base, envelope=envelope)
         satisfy(obligation, case)
 
     # (a) Length variations, in array-discovery order: the document root
