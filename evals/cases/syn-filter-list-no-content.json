@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-length-variation--root",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Length variation: the corpus array at the document root with its final element removed (OQ-026a).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -44,6 +44,19 @@
       {
         "id": "c-2",
         "input": [
+          "a",
+          "b"
+        ],
+        "output": [
+          "a"
+        ],
+        "satisfies": [
+          "ob-length-variation--root"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
           "variation-alpha",
           "variation-beta",
           "variation-gamma"
@@ -52,25 +65,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": [
-          "variation-beta",
-          "variation-gamma",
-          "variation-alpha"
-        ],
-        "output": [],
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "31e1e5000569481fff034c7bac6f2743ae27abdd645416ce88c12ce71316d638"
+      "content_fingerprint": "46b61cd6d574d746f15cd43b4291a390dbe45ba8bebfa30d33210484a0d0efea"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FilterListNoContent' (AD-021 / FR-029); seed provenance at evals/seeds/syn-filter-list-no-content.json.",

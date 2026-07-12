@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-length-variation--root",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Length variation: the corpus array at the document root with its final element removed (OQ-026a).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -75,6 +75,32 @@
           {
             "a": {
               "b": {
+                "c": 1
+              }
+            },
+            "d": {
+              "e": {
+                "f": 2
+              }
+            }
+          }
+        ],
+        "output": [
+          {
+            "key": 1,
+            "value": 2
+          }
+        ],
+        "satisfies": [
+          "ob-length-variation--root"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
+            "a": {
+              "b": {
                 "c": 7
               }
             },
@@ -110,55 +136,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": [
-          {
-            "a": {
-              "b": {
-                "c": 11
-              }
-            },
-            "d": {
-              "e": {
-                "f": 13
-              }
-            }
-          },
-          {
-            "a": {
-              "b": {
-                "c": 7
-              }
-            },
-            "d": {
-              "e": {
-                "f": 11
-              }
-            }
-          }
-        ],
-        "output": [
-          {
-            "key": 11,
-            "value": 13
-          },
-          {
-            "key": 7,
-            "value": 11
-          }
-        ],
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "c16890bd8bf2748b3664e5d226fba61d4f77a514a68ee76e44b67cbd0d818a6e"
+      "content_fingerprint": "8132ef047cb96793c6c7a9352c0f1d976829118f8ba1a31b55e04732e50ccedc"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'ChainWithAttr' (AD-021 / FR-029); seed provenance at evals/seeds/syn-chain-with-attr.json.",
