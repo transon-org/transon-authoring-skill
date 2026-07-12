@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""gen-fixtures — synthetic EvalFixture generator (FR-029 / AD-021 / OQ-025).
+"""gen-fixtures — synthetic EvalFixture generator (FR-029 / AD-021 /
+OQ-025 / OQ-026).
 
 Maintainer script (SPEC §10 ``scripts/`` — never shipped in the package) that
 mints EvalFixtures from pinned-snapshot ``docs.examples`` seeds. The pure core
@@ -17,11 +18,14 @@ Contract highlights (SPEC FR-029, AD-021, OQ-024/OQ-025, §11.8):
   (``transon_authoring.verify.dry_run``) and asserted JSON-equal to the
   example's ``result`` — a failing assert makes the seed ineligible
   (OQ-025d), never a fixture;
-* 3–6 cases chosen by which §11.1 coverage kinds apply (OQ-025a/b/c/e), with
-  the FR-029 budget rule: packing preferred, fixed drop order
-  ``list_singleton`` → ``optional_present`` → ``list_many``, padding to the
-  3-case minimum with value-variation customs from the fixed per-JSON-type
-  substitution table;
+* 3–6 cases chosen by which §11.1 coverage kinds apply (OQ-025a/b/c/e) plus
+  the OQ-026 wave-2 coverage customs (list length variations — including the
+  document root — and root key addition/deletion variations, each dry-run
+  gated and silently skippable), with the FR-029 budget rule: packing
+  preferred, fixed drop order ``key_deletion`` → ``key_addition`` →
+  ``length_variation`` → ``list_singleton`` → ``optional_present`` →
+  ``list_many`` (OQ-026d), padding to the 3-case minimum with
+  value-variation customs from the fixed per-JSON-type substitution table;
 * confirmations are ``confirmed: true`` / ``confirmed_by: "ci"`` with NO
   ``confirmed_at``; the ``content_fingerprint`` comes from the library's
   OQ-015 acquisition path (``check_samples``), never recomputed here;
@@ -29,21 +33,27 @@ Contract highlights (SPEC FR-029, AD-021, OQ-024/OQ-025, §11.8):
   ``evals/seeds/<fixture-id>.json`` and never inside the fixture object.
 
 Implementation-defined details frozen forever by the AC-030 regen check
-(OQ-025 tail): the case id scheme ``c-1..c-n`` (creation order), the
-obligation id scheme (``ob-happy``, ``ob-<kind-with-dashes>--<pointer-slug>``,
-``ob-no-content``, ``ob-writes``, ``ob-variation-<n>``), the substitution
-table below, and the deterministic decisions the SPEC leaves open, recorded
-here explicitly:
+(OQ-025 tail, minus the probe count — normative since OQ-026c): the case id
+scheme ``c-1..c-n`` (creation order), the obligation id scheme (``ob-happy``,
+``ob-<kind-with-dashes>--<pointer-slug>``, ``ob-no-content``, ``ob-writes``,
+``ob-variation-<n>``, and — OQ-026 — ``ob-length-variation--root`` /
+``ob-length-variation--<pointer-slug>`` / ``ob-key-deletion--<key-slug>`` /
+``ob-key-addition--<name-slug>``), the substitution table below, and the
+deterministic decisions the SPEC leaves open, recorded here explicitly:
 
 * the whole-document pointer ``""`` is not a §11.1 target (targets MUST start
   with ``/``), so the pre-order walk excludes the document root itself from
-  optional/array candidacy — a root-level array receives no ``list_*`` kinds;
+  optional/array candidacy — a root-level array receives no ``list_*`` kinds
+  (it does receive the OQ-026a length variation, whose ``custom`` obligation
+  carries no target);
 * ``list_singleton``/``list_many`` derivations for a corpus array that is
   empty are underivable and their obligations are not emitted (``list_empty``
   then packs into the corpus-pair case);
 * a structural derivation whose dry-run fails under the pinned engine makes
   the seed ineligible (error), never a silent skip; failing value-variation
-  candidates are skipped in favour of the next variation index.
+  candidates are skipped in favour of the next variation index; failing
+  OQ-026 length/key-variation derivations are silently skipped (their
+  obligations are simply not emitted — never seed ineligibility, OQ-026a/b).
 
 Exit codes: 0 minted, 1 generation/verify failure (seed ineligible, AD-004
 verify not matched), 2 usage/config errors (unknown example, refusing to
@@ -77,15 +87,24 @@ except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
     )
     from transon_authoring.verify import dry_run, verify
 
-#: Recorded in every seed doc (FR-029 seed shape ``generator.version``).
-GENERATOR_VERSION = "1.0.0"
+#: Recorded in every seed doc (FR-029 seed shape ``generator.version``);
+#: informational — AC-030 regen compares content subset + fingerprint only.
+GENERATOR_VERSION = "1.1.0"
 
 #: FR-029 budget bounds.
 MIN_CASES = 3
 MAX_CASES = 6
 
-#: FR-029 fixed drop order (never-dropped kinds are simply not listed).
-DROP_ORDER = ("list_singleton", "optional_present", "list_many")
+#: FR-029 fixed drop order, extended by OQ-026d: the wave-2 custom kinds
+#: drop FIRST (never-dropped kinds are simply not listed).
+DROP_ORDER = (
+    "key_deletion",
+    "key_addition",
+    "length_variation",
+    "list_singleton",
+    "optional_present",
+    "list_many",
+)
 
 #: §11.0 ``enc`` of the engine NO_CONTENT sentinel (OQ-025c relevance test).
 NO_CONTENT_REF = {"$transon_authoring": "NO_CONTENT"}
@@ -99,8 +118,9 @@ SUBSTITUTION_TABLE: dict[str, list[Any]] = {
     "boolean": [True, False],
 }
 
-#: Number of value-variation candidates probed for NO_CONTENT relevance
-#: (OQ-025c "the value-variation candidates"): exactly the variations the
+#: Number of value-variation candidates probed for NO_CONTENT relevance —
+#: NORMATIVE since OQ-026c ("the OQ-025c candidate list examines only the
+#: first two value-variation candidates"): exactly the variations the
 #: 3-case padding could need (1 case → 3 cases).
 PROBE_VARIATIONS = 2
 
@@ -179,15 +199,50 @@ def _template_nodes(template: Any):
             stack = list(node) + stack
 
 
-def _attr_default_names(template: Any) -> set[str]:
-    """OQ-025a: literal string ``attr`` names carrying a ``default``."""
-    return {
-        node["name"]
-        for node in _template_nodes(template)
-        if node.get("$") == "attr"
-        and isinstance(node.get("name"), str)
-        and "default" in node
-    }
+#: Sentinel: an ``attr`` accessor carrying no ``default`` member at all
+#: (distinct from a literal ``default: null`` — that name IS OQ-025a
+#: optional, while a defaultless accessor is not).
+_NO_DEFAULT = object()
+
+
+def _attr_accessors_ordered(template: Any) -> list[tuple[str, Any]]:
+    """OQ-026b(i) key-addition set (rev 2026-07-12) in template pre-order
+    discovery order: EVERY ``attr`` node with a literal string ``name`` — a
+    ``default`` member is not required. The value-typing default per name is
+    the first pre-order node of that name carrying a ``default``
+    (:data:`_NO_DEFAULT` otherwise). Names whose default is not the sentinel
+    form the OQ-025a optional-key set (unchanged by the amendment)."""
+    order: list[str] = []
+    defaults: dict[str, Any] = {}
+    for node in _template_nodes(template):
+        if node.get("$") == "attr" and isinstance(node.get("name"), str):
+            name = node["name"]
+            if name not in defaults:
+                order.append(name)
+                defaults[name] = _NO_DEFAULT
+            if defaults[name] is _NO_DEFAULT and "default" in node:
+                defaults[name] = node["default"]
+    return [(name, defaults[name]) for name in order]
+
+
+def _optional_names(accessors: list[tuple[str, Any]]) -> set[str]:
+    """OQ-025a optional-key names: accessors carrying a ``default``."""
+    return {name for name, default in accessors if default is not _NO_DEFAULT}
+
+
+def _addition_value(default: Any) -> Any:
+    """OQ-026b(i) (rev 2026-07-12): the first entry of the
+    substitution-table row keyed by the JSON type of the attr's literal
+    ``default`` when one is present; no ``default`` at all, a non-literal
+    default, or a literal whose JSON type has no table row take the string
+    entry."""
+    if isinstance(default, bool):
+        row = "boolean"
+    elif default is not _NO_DEFAULT and isinstance(default, (int, float)):
+        row = "number"
+    else:  # string, dict/list (non-literal), null, or no default at all
+        row = "string"
+    return deepcopy(SUBSTITUTION_TABLE[row][0])
 
 
 def _literal_include_names(template: Any) -> list[str]:
@@ -348,6 +403,7 @@ def _build(
     plan: list[dict[str, Any]],
     dropped: set[str],
     writes_capable: bool,
+    accessors: list[tuple[str, Any]],
 ) -> tuple[list[dict], list[dict]]:
     """One deterministic build pass under a fixed dropped-kinds set.
 
@@ -359,8 +415,11 @@ def _build(
     cases: list[dict[str, Any]] = []
     used_ids: set[str] = set()
 
-    def add_case(input_value: Any, *, context: str) -> dict[str, Any]:
-        envelope = engine.run(input_value)
+    def add_case(
+        input_value: Any, *, context: str, envelope: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if envelope is None:
+            envelope = engine.run(input_value)
         if not envelope["ok"]:
             raise GeneratorError(
                 f"seed {source_example['name']!r}: dry-run failed for the "
@@ -545,6 +604,81 @@ def _build(
             )
         satisfy(writes_ob, case)
 
+    # OQ-026 wave-2 coverage customs — emitted after the OQ-025 structural
+    # kinds and the NO_CONTENT/writes customs, before value-variation padding
+    # (OQ-026d). Each derivation is dry-run gated and silently skipped on
+    # failure (never seed ineligibility, OQ-026a/b); the FR-029 packing rule
+    # applies (an existing case whose input already JSON-equals the
+    # derivation satisfies the obligation instead of adding a case).
+    def emit_custom(base: str, description: str, candidate: Any) -> None:
+        envelope = engine.run(candidate)
+        if not envelope["ok"]:
+            return  # silently skipped (OQ-026a/b)
+        obligation = _obligation(used_ids, base, "custom", description, None)
+        coverage.append(obligation)
+        case = next((c for c in cases if c["input"] == candidate), None)
+        if case is None:
+            case = add_case(candidate, context=base, envelope=envelope)
+        satisfy(obligation, case)
+
+    # (a) Length variations, in array-discovery order: the document root
+    # first (when the corpus data is itself an array), then the OQ-025b
+    # pre-order walk; derived only for arrays of length >= 2.
+    if "length_variation" not in dropped:
+        arrays: list[tuple[str, list[str], Any]] = []
+        if isinstance(data, list):
+            arrays.append(("the document root", [], data))
+        arrays.extend(
+            (entry["pointer"], entry["tokens"], entry["value"])
+            for entry in plan
+            if entry["array"]
+        )
+        for label, tokens, value in arrays:
+            if len(value) < 2:
+                continue
+            if tokens:
+                candidate = _delete_at(data, tokens + [str(len(value) - 1)])
+                base = f"ob-length-variation--{_slug(_pointer_string(tokens))}"
+            else:
+                candidate = deepcopy(data)[:-1]
+                base = "ob-length-variation--root"
+            emit_custom(
+                base,
+                f"Length variation: the corpus array at {label} with its "
+                "final element removed (OQ-026a).",
+                candidate,
+            )
+
+    # (b) Root key variations — only when the corpus data is a JSON object:
+    # key deletions in root-key document order, then key additions in
+    # template pre-order discovery order.
+    if isinstance(data, dict):
+        optional_names = _optional_names(accessors)
+        if "key_deletion" not in dropped:
+            for key in data:
+                if key in optional_names:
+                    continue  # already covered by optional_absent (OQ-026b)
+                emit_custom(
+                    f"ob-key-deletion--{_slug(_pointer_string([key]))}",
+                    f'Key deletion: the corpus data with root key "{key}" '
+                    "removed (OQ-026b).",
+                    _delete_at(data, [key]),
+                )
+        if "key_addition" not in dropped:
+            discoverable = {entry["tokens"][-1] for entry in plan}
+            for name, default in accessors:
+                if name in discoverable:
+                    continue
+                candidate = deepcopy(data)
+                candidate[name] = _addition_value(default)
+                emit_custom(
+                    f"ob-key-addition--{_slug(_pointer_string([name]))}",
+                    f'Key addition: the corpus data with root key "{name}" '
+                    "added (value from the fixed substitution table, keyed "
+                    "by the accessor's default JSON type) (OQ-026b).",
+                    candidate,
+                )
+
     return coverage, cases
 
 
@@ -563,17 +697,20 @@ def generate(
     examples_by_name = {e["name"]: e for e in get_metadata()["docs"]["examples"]}
     includes = _resolve_includes(template, examples_by_name)
     engine = _Engine(template, includes)
-    optional_names = _attr_default_names(template)
-    plan = _walk_plan(data, optional_names)
+    accessors = _attr_accessors_ordered(template)
+    plan = _walk_plan(data, _optional_names(accessors))
     writes_capable = _writes_capable(template, includes)
 
-    # FR-029 budget rule: full build first, then the fixed drop order until
-    # the 6-case cap fits; never-dropped kinds exceeding the cap ⇒ ineligible.
+    # FR-029 budget rule (drop order extended by OQ-026d): full build first,
+    # then the fixed drop order until the 6-case cap fits; never-dropped
+    # kinds exceeding the cap ⇒ ineligible.
     drop_sets = [set(DROP_ORDER[:n]) for n in range(len(DROP_ORDER) + 1)]
     coverage: list[dict] | None = None
     cases: list[dict] | None = None
     for dropped in drop_sets:
-        coverage, cases = _build(source_example, engine, plan, dropped, writes_capable)
+        coverage, cases = _build(
+            source_example, engine, plan, dropped, writes_capable, accessors
+        )
         if len(cases) <= MAX_CASES:
             break
     if cases is None or len(cases) > MAX_CASES:

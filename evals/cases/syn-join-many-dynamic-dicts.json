@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-length-variation--root",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Length variation: the corpus array at the document root with its final element removed (OQ-026a).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -53,6 +53,22 @@
         "id": "c-2",
         "input": [
           {
+            "key": "a",
+            "value": "b"
+          }
+        ],
+        "output": {
+          "a": "b",
+          "b": "a"
+        },
+        "satisfies": [
+          "ob-length-variation--root"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
             "key": "variation-alpha",
             "value": "variation-beta"
           },
@@ -69,34 +85,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": [
-          {
-            "key": "variation-beta",
-            "value": "variation-gamma"
-          },
-          {
-            "key": "variation-alpha",
-            "value": "variation-beta"
-          }
-        ],
-        "output": {
-          "variation-beta": "variation-alpha",
-          "variation-alpha": "variation-beta",
-          "variation-gamma": "variation-beta"
-        },
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "0b6b5055fba14ecfcd28155f58dfcfc3dd179a623319711db0c4b5cdbbf20278"
+      "content_fingerprint": "6b097cf325c105af6558a081f6b0ecd593d0a29f35d600a3acdaee0ca7f1be19"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'JoinManyDynamicDicts' (AD-021 / FR-029); seed provenance at evals/seeds/syn-join-many-dynamic-dicts.json.",

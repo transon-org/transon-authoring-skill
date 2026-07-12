@@ -14,15 +14,21 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--a",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"a\" removed (OQ-026b).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-key-deletion--b",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"b\" removed (OQ-026b).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-key-deletion--c",
+        "kind": "custom",
+        "description": "Key deletion: the corpus data with root key \"c\" removed (OQ-026b).",
         "acceptance": "accepted"
       }
     ],
@@ -55,51 +61,61 @@
       {
         "id": "c-2",
         "input": {
-          "a": 7,
-          "b": 11,
-          "c": 13
+          "b": 2,
+          "c": 3
         },
         "output": [
           {
-            "key": "a",
-            "value": 7
-          },
-          {
             "key": "b",
-            "value": 11
+            "value": 2
           },
           {
             "key": "c",
-            "value": 13
+            "value": 3
           }
         ],
         "satisfies": [
-          "ob-variation-1"
+          "ob-key-deletion--a"
         ]
       },
       {
         "id": "c-3",
         "input": {
-          "a": 11,
-          "b": 13,
-          "c": 7
+          "a": 1,
+          "c": 3
         },
         "output": [
           {
             "key": "a",
-            "value": 11
-          },
-          {
-            "key": "b",
-            "value": 13
+            "value": 1
           },
           {
             "key": "c",
-            "value": 7
+            "value": 3
           }
         ],
         "satisfies": [
-          "ob-variation-2"
+          "ob-key-deletion--b"
+        ]
+      },
+      {
+        "id": "c-4",
+        "input": {
+          "a": 1,
+          "b": 2
+        },
+        "output": [
+          {
+            "key": "a",
+            "value": 1
+          },
+          {
+            "key": "b",
+            "value": 2
+          }
+        ],
+        "satisfies": [
+          "ob-key-deletion--c"
         ]
       }
     ],
@@ -107,7 +123,7 @@
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "d3ef88bf82ef43637c00960f7102d6e7036a78a87ee4cef7dc91f2996b65104e"
+      "content_fingerprint": "acdcc1ee1decf3304eec4be27adbe0c673fa260aaffd5d8d9c89409f6d63709b"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'MapDictToList' (AD-021 / FR-029); seed provenance at evals/seeds/syn-map-dict-to-list.json.",

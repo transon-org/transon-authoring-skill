@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-length-variation--root",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Length variation: the corpus array at the document root with its final element removed (OQ-026a).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -47,6 +47,22 @@
       {
         "id": "c-2",
         "input": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "output": [
+          "b",
+          "d"
+        ],
+        "satisfies": [
+          "ob-length-variation--root"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
           "variation-alpha",
           "variation-beta",
           "variation-gamma",
@@ -60,30 +76,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": [
-          "variation-beta",
-          "variation-gamma",
-          "variation-alpha",
-          "variation-beta",
-          "variation-gamma"
-        ],
-        "output": [
-          "variation-gamma",
-          "variation-beta"
-        ],
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "4027fbe7471c43b2088714943ae5982953431844726ebd4ce0935382b8a6cbcf"
+      "content_fingerprint": "1113461b4ec25811783f2c1ee653e61530db61b53a314f44e0289c92e5f7dba1"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FilterListByOddIndex' (AD-021 / FR-029); seed provenance at evals/seeds/syn-filter-list-by-odd-index.json.",
