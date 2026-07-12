@@ -1403,7 +1403,12 @@ work and do not gate any milestone.
   pointer.
   (b) **array scope** — arrays are discovered by the same deterministic pre-order walk of the
   corpus `data`; **every** array found receives the three `list_*` kinds (subject to the FR-029
-  budget/drop order); pointers through array elements use index-`0` segments.
+  budget/drop order); pointers through array elements use index-`0` segments. Two boundary rules
+  (rev 2026-07-12, from implementation against the pinned engine): the **document root** is
+  excluded from array/optional candidacy — §11.1 obligation targets must start with `/`, and the
+  whole-document pointer is rejected there — and a corpus array of length **0** yields only the
+  `list_empty` kind (`list_singleton`/`list_many` derivations are impossible and their
+  obligations are not emitted).
   (c) **`NO_CONTENT` relevance** — empirical, engine-decided; no static rule-shape analysis.
   The generator derives candidate inputs in a fixed order (each `optional_absent` derivation in
   pointer order, then each `list_empty` derivation in pointer order, then the value-variation
@@ -1416,11 +1421,19 @@ work and do not gate any milestone.
   through included templates, resolved from snapshot `docs.examples` by `name`; a literal
   include name that does not resolve is left absent (the corpus `result` may depend on the miss).
   After building case 1 the generator MUST assert the re-executed output JSON-equals the entry's
-  `result`; a seed failing the assert (e.g. `IncludeWithDefault`, whose corpus `result` requires
-  the include to stay absent while `LookupMissingAttr` exists in the corpus) is **ineligible**:
-  the generator errors and the curator selects the tag family's next corpus-order candidate.
+  `result`; a seed failing the assert is **ineligible**: the generator errors and the curator
+  selects the tag family's next corpus-order candidate. *(rev 2026-07-12: the original
+  parenthetical citing `IncludeWithDefault` as an assert casualty was empirically wrong — under
+  the pinned engine, `include` `default` also applies when the resolved include yields
+  `NO_CONTENT`, so its corpus pair re-executes equal; that seed is instead ineligible via the
+  3-case padding rule, its `data: {}` having no substitutable leaf scalars.)*
   A seed whose never-dropped obligations (happy path, `list_empty`, `optional_absent`, customs)
-  alone cannot fit six cases is likewise ineligible, preserving FR-029's cap guarantee.
+  alone cannot fit six cases is likewise ineligible, preserving FR-029's cap guarantee. Further
+  ineligibility/skip rules (rev 2026-07-12): a structurally derived obligation input
+  (`optional_absent` or `list_*`) whose dry-run **errors** under the pinned engine makes the
+  seed ineligible (hard error, curator moves on); a **value-variation** candidate whose dry-run
+  errors is skipped in favor of the next deterministic index (padding continues; a seed that
+  cannot reach the 3-case minimum is ineligible).
   (e) **writes-capable** — a seed is writes-capable iff its template, or any transitively
   included template, contains a `file` rule invocation; the `writes` custom case asserts the
   case's sandbox-captured `writes` map, not the top-level result alone.
