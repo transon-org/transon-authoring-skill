@@ -314,6 +314,9 @@ No console-script product; no MCP.
   seed **writes-capable**, how `SampleSet.includes` is populated, and seed **eligibility** (the
   corpus-pair re-execution assert; never-dropped obligations exceeding the six-case budget) — are
   fixed in OQ-025.
+  *(rev 2026-07-12, OQ-026)* Wave-2 coverage extensions — list length-variation customs, root key
+  addition/deletion customs, the frozen `NO_CONTENT` probe count, and the extended drop order —
+  are fixed in OQ-026.
 
 ### Install CI
 - **FR-019** — CI install checks:
@@ -1441,6 +1444,44 @@ work and do not gate any milestone.
   implementation-defined but are **frozen by the AC-030 regen check** once the first seed lands.
   Seed provenance docs carry no `schema_version` and are validated structurally by
   `check_evals --lint`, not by the §11.0 ingress validator.
+- **OQ-026** — **Resolved (2026-07-12, A3 wave-2 design):** FR-029 generator coverage extensions,
+  closing honest gaps the OQ-025 derivations cannot express (even-length boundaries for arrays —
+  including root arrays, which OQ-025b excludes from `list_*` candidacy; present branches for
+  defaulting-accessor keys absent from the corpus `data`; default-insertion branches driven by
+  rule semantics rather than a defaulting `attr`). Normative in FR-029:
+  (a) **List length variation** — every array discovered by the OQ-025b pre-order walk of the
+  corpus `data`, **plus the document root itself when the corpus `data` is a JSON array**, yields
+  one `kind: "custom"` *length-variation* obligation (`target` omitted; the `description` names
+  the array's pointer) whose case input is the corpus document with that array's **final element
+  removed** — derived only when the corpus array has length ≥ 2. Each is emitted iff its dry-run
+  under the pinned engine succeeds and is silently skipped otherwise; output comes from the
+  pinned engine as usual; the FR-029 packing rule applies (an existing case whose input already
+  JSON-equals the derivation satisfies the obligation instead of adding a case).
+  (b) **Root key variations** — only when the corpus `data` document is a JSON object:
+  (i) *key addition* — for every defaulting-accessor literal name (the OQ-025a node set: a
+  literal string `attr` `name` carrying a `default` member) NOT discoverable at any pointer of
+  the OQ-025b walk (no visited pointer's final segment equals the name), one `kind: "custom"`
+  obligation/case pair: the corpus `data` with that key added at the root, its value the **first
+  entry** of the FR-029 per-JSON-type substitution-table row keyed by the JSON type of the
+  accessor's literal `default` (a non-literal `default` — or a literal whose JSON type has no
+  table row — takes the string entry);
+  (ii) *key deletion* — for every root-level key not already covered by an `optional_absent`
+  obligation, one `kind: "custom"` obligation/case pair: the corpus `data` with that key removed.
+  Each root key variation is emitted iff its dry-run succeeds and is silently skipped otherwise —
+  never seed ineligibility (contrast the OQ-025d structural hard-error rule); `target` is
+  omitted and the `description` names the key; the FR-029 packing rule applies as in (a).
+  (c) **`NO_CONTENT` probe count** — the OQ-025c candidate list examines only the **first two**
+  value-variation candidates. This freezes the current behavior and supersedes the
+  implementation-defined status of the OQ-025 tail **for the probe count only** (the
+  substitution table and the id-naming scheme stay implementation-defined, frozen by AC-030).
+  (d) **Budget and drop order** — the OQ-026 custom kinds count toward the FR-029 six-case cap,
+  are droppable, and drop FIRST, extending FR-029's fixed drop order to: *key deletion*, then
+  *key addition*, then *length variation*, then `list_singleton`, then `optional_present`, then
+  `list_many`. They are excluded from the never-dropped satisfiability guarantee, which is
+  unchanged. Deterministic emission order — after the OQ-025 structural kinds and the
+  `NO_CONTENT`/`writes` customs, before value-variation padding: length variations in
+  array-discovery order (document root first, then OQ-025b pre-order), then key deletions in
+  root-key document order, then key additions in template pre-order discovery order.
 
 ---
 
