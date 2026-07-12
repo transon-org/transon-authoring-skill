@@ -499,7 +499,8 @@ No console-script product; no MCP.
   `scripts/`, `evals/`, `tests/`, `src/`, repo-root `resources/`), contains a `§`-section
   reference into `docs/SPEC.md`, or carries requirement-ID citations outside markdown comments;
   a self-contained skill body and adapters lint **green**. Mentions of the engine's own
-  `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint.
+  `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint — the exemption is the exact
+  string `docs/SPECIFICATION.md`; any other `docs/…` path trips it (deterministic discriminator).
 - **AC-033** — *(FR-031, added 2026-07-12)* An `AuthoringResult` carrying `trace` validates
   against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
   without `trace` remains valid; a malformed `trace` fails schema validation like any other
@@ -619,7 +620,7 @@ and non-finite numbers (`NaN`/`Infinity`) at ingress.
 
 **Schema versions:** documents carry `schema_version` string. v1 library understands `"1.0"` for
 SampleSet, SampleCheck, Verdict, AuthoringResult, CliError, ProjectConfig, NlIntents, EvalRunner,
-EvalFixture.
+EvalFixture, EpisodeTranscript.
 
 ### 11.1 SampleSet & `check_samples`
 
@@ -1139,7 +1140,10 @@ EvalFixture = {
     fixture_id: string,
     run_index: integer,             # 0-based within runs_per_fixture
     model_id: string,
-    outcome: string,                # EpisodeResult outcome class
+    outcome: "submitted" | "no_submit" | "budget_exceeded" | "infra_error",
+                                    # the harness episode outcome: submit_result called /
+                                    # episode ended without submit (OQ-017c) / tool budget
+                                    # exceeded (OQ-017c) / provider or infra failure (§11.8)
     tool_calls: [ { seq: integer, name: string, input: JsonValue, result: JsonValue } ],
     submitted: AuthoringResult | null,
     error: string | null
@@ -1147,7 +1151,9 @@ EvalFixture = {
   ```
   The gate report gains `failure_modes`: per bucket, a histogram keyed by the submitted §11.5
   `status` (suffixed with `verdict.failed_stage` when present, e.g. `"verify-failed/match"`) or,
-  when nothing was submitted, the outcome class. Derived mechanically from episode results;
+  when nothing was submitted, the outcome class (`no_submit` | `budget_exceeded` |
+  `infra_error` — the same closed enum as `EpisodeTranscript.outcome`). Derived mechanically
+  from episode results;
   transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
   a run without `--transcripts-dir` scores identically.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
