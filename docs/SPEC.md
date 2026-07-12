@@ -289,7 +289,13 @@ No console-script product; no MCP.
   (their obligations not emitted) in this fixed order until the budget fits:
   `list_singleton`, then `optional_present`, then `list_many`; happy path, `list_empty`,
   `optional_absent`, and the `NO_CONTENT`/`writes` custom kinds are never dropped (at most six
-  of those can apply, so the cap is always satisfiable). Generated confirmations use
+  of those can apply, so the cap is always satisfiable). If the applicable kinds yield fewer
+  than three distinct cases (e.g. a scalar seed with no arrays, optional keys, `NO_CONTENT`
+  relevance, or writes), the generator pads to the 3-case minimum with **value-variation
+  cases**: the corpus `data` shape with each leaf scalar replaced by a deterministic alternate
+  from a fixed per-JSON-type substitution table (position-indexed, no randomness), outputs
+  obtained from the pinned engine as usual, each emitted as a `kind: "custom"` obligation whose
+  `description` names it a value variation. Generated confirmations use
   `confirmed: true`, `confirmed_by: "ci"`, no `confirmed_at` (determinism), and the fingerprint
   from the OQ-015 acquisition path. Fixtures are committed under `evals/cases/` **without any
   seed-template field**; provenance is committed at `evals/seeds/<fixture-id>.json` as
