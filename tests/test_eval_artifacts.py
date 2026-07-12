@@ -76,7 +76,7 @@ def test_oq_024_baseline_reset_with_gate_model_swap():
     # list in the same eval-policy commit; targets are never reset (0.80
     # floor stays, ratchet untouched).
     baseline = load_document(EVALS / "baseline.json", "eval_baseline.json")
-    assert baseline["passing"] == []
+    assert baseline == {"schema_version": "1.0", "passing": []}
     targets = load_document(EVALS / "targets.json", "eval_targets.json")
     assert targets["authoring_target"] == 0.80
     assert targets["adversarial_target"] == 1.0

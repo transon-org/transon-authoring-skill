@@ -423,7 +423,15 @@ def _build(
                     pointer,
                 )
                 coverage.append(present)
-                satisfy(present, find_satisfying("optional_present", pointer))
+                present_case = find_satisfying("optional_present", pointer)
+                if present_case is None:
+                    # Defensive: an optional key is discovered in the corpus
+                    # data, so case 1 always satisfies optional_present; keep
+                    # the failure a clean GeneratorError regardless.
+                    raise GeneratorError(
+                        f"no case satisfies optional_present at {pointer}"
+                    )
+                satisfy(present, present_case)
             absent_input = _delete_at(data, tokens)
             absent_derivations.append(absent_input)
             absent = _obligation(
@@ -525,7 +533,16 @@ def _build(
             None,
         )
         coverage.append(writes_ob)
-        case = next((c for c in cases if c.get("writes")), cases[0])
+        case = next((c for c in cases if c.get("writes")), None)
+        if case is None:
+            # OQ-025e: the writes case asserts a sandbox-captured writes map;
+            # a writes-capable seed with no capturing case cannot honestly
+            # satisfy the obligation — the seed is ineligible, never a
+            # vacuous attachment (frozen by AC-030 otherwise).
+            raise GeneratorError(
+                "writes-capable seed produced no case with captured writes "
+                "(OQ-025e) — seed ineligible"
+            )
         satisfy(writes_ob, case)
 
     return coverage, cases

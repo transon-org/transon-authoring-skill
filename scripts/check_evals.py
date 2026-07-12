@@ -334,9 +334,18 @@ def _lint_seeds(
         subset_agrees = content_fingerprint(samples) == content_fingerprint(
             regen_samples
         )
+        # A generator regression that drops the confirmation fingerprint must
+        # be a clean red, never a KeyError crash — and never a silent
+        # None == None pass against a fixture missing it too.
+        regen_fp = regen_samples.get("confirmation", {}).get("content_fingerprint")
+        if not regen_fp:
+            failures.append(
+                f"{fixture_path}: regenerated fixture carries no confirmation "
+                "content_fingerprint — generator regression (FR-029 / AC-030)"
+            )
+            continue
         recorded_agrees = (
-            samples.get("confirmation", {}).get("content_fingerprint")
-            == regen_samples["confirmation"]["content_fingerprint"]
+            samples.get("confirmation", {}).get("content_fingerprint") == regen_fp
         )
         if not (subset_agrees and recorded_agrees):
             failures.append(
