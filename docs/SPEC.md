@@ -187,6 +187,22 @@ No console-script product; no MCP.
 - **AD-020 — Eval runner policy (resolves OQ-009).** See §11.8. Committed `evals/runner.json`
   pins provider/model/settings; 3 runs/fixture majority-of-3; population = all committed fixtures;
   ratchet and privacy rules normative.
+- **AD-021 — Synthetic eval corpus from `docs.examples`; small-model primary gate (resolves
+  OQ-024; absorbs RFC-001).** The pinned snapshot's flat `docs.examples` corpus (121 templates at
+  `transon==0.1.7`) is an allowed **fixture factory** for the FR-017 improvement loop:
+  each example seeds one EvalFixture whose SampleSet outputs come **only** from executing the
+  seed template under the pinned engine's AD-017 profile (never model memory, never the snapshot
+  `result` taken on faith — the corpus pair is re-executed). The **seed template is
+  provenance-only**: committed under `evals/seeds/` (FR-029), never placed in the fixture object,
+  the eval prompt, or the tools path of the skill under test; scoring stays behavioral
+  (`assurance: "matched"` against the fixture SampleSet, §11.8), never seed-template recovery.
+  Synthetic `intent_nl` is LLM-drafted (grounded on the example `doc` and, when present, the
+  NL sidecar entry) but **human-accepted before commit** — never auto-committed. The primary
+  NFR-010 gate model is a **small model** (pin: `claude-haiku-4-5-20251001`), so `SKILL.md` is
+  driven to work without a frontier model; the gate-model swap and any later gate-model change
+  are explicit eval-policy commits per §11.8. Synthetic SampleSets are **evals/CI fixtures
+  only** — they never substitute for user confirmation in interactive authoring (AD-014/AD-016
+  untouched).
 
 ---
 
@@ -255,6 +271,25 @@ No console-script product; no MCP.
 - **FR-017** — Eval-driven loop (AD-010/020).
 - **FR-018** — Capture failing cases into evals only after **privacy redaction** and **explicit
   consent** (§11.8). No raw secrets/PII committed.
+- **FR-029** — **Synthetic fixture generator + seed provenance + regen gate (AD-021).** A
+  maintainer script (`scripts/` — not shipped in the package) mints EvalFixtures from snapshot
+  `docs.examples` seeds: deterministic (no wall-clock/randomness), **3–6 cases per fixture**
+  chosen by which §11.1 coverage kinds apply to the seed's input shape (happy path always;
+  `list_empty`/`list_singleton`/`list_many` for array inputs; `optional_present`/`optional_absent`
+  for optional keys; a `NO_CONTENT`-relevant case where the seed's rule can produce it and a
+  `writes` case for writes-capable seeds — these last two are emitted as `kind: "custom"`
+  obligations whose `description` names the behavior and whose `target` is omitted); **case 1 is
+  always the example's own `data`/`result` pair re-executed through the pinned engine**;
+  remaining cases are synthetic inputs run the same way. Generated confirmations use
+  `confirmed: true`, `confirmed_by: "ci"`, no `confirmed_at` (determinism), and the fingerprint
+  from the OQ-015 acquisition path. Fixtures are committed under `evals/cases/` **without any
+  seed-template field**; provenance is committed at `evals/seeds/<fixture-id>.json` as
+  `{ "source_example": string, "template": <Transon JSON>, "generator": { "version": string,
+  "notes"?: string } }`. `check_evals --lint` verifies that every fixture with a seed file
+  **regenerates bit-identically** (§11.1 SampleSet content subset and `content_fingerprint`)
+  from its seed under the current pin (AC-030) — the same drift discipline as `check_snapshot`. v1 scope: a tagged
+  subset (~25–30 seeds, one per tag family) with the remainder as follow-up waves; the
+  should-refuse bucket stays hand-authored (no synthesized refuse intents in v1).
 
 ### Install CI
 - **FR-019** — CI install checks:
@@ -349,6 +384,10 @@ No console-script product; no MCP.
   `content_fingerprint` obtained via the OQ-015 acquisition path yields `check_samples` →
   `confirmed: true`; any subsequent edit to the hashed content subset flips it back via
   `fingerprint_mismatch`.
+- **AC-030** — *(FR-029 regen gate)* `check_evals --lint` is **red** when any committed fixture
+  with a matching `evals/seeds/<fixture-id>.json` does not regenerate bit-identically (SampleSet
+  content subset and `content_fingerprint`) from its seed under the current pin, or when a seed
+  file has no matching fixture; a repo whose seeds and fixtures agree lints **green**.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → PR with template + SampleSet.
@@ -384,7 +423,8 @@ transon-authoring/
 │   ├── runner.json                # AD-020 pin
 │   ├── targets.json               # NFR-010 rates (OQ-016e)
 │   ├── baseline.json              # fixture-regression record (OQ-016f)
-│   └── cases/
+│   ├── cases/
+│   └── seeds/                     # synthetic-fixture provenance (AD-021 / FR-029)
 └── docs/
     ├── SPEC.md
     └── traceability.md            # generated or maintained matrix (§17)
@@ -891,6 +931,20 @@ them is an explicit eval-policy commit. *(rev 2026-07-12: `temperature` removed 
 the pinned `claude-sonnet-5` rejects non-default sampling parameters with a 400; the harness
 never sends sampling parameters, and determinism steering lives in the prompt.)*
 
+*(rev 2026-07-12, AD-021 / OQ-024)* **Gate model policy:** the primary NFR-010 gate model is a
+**small model**; the normative pin — effective from the §14-ordered eval-policy commit that
+swaps `runner.json`, until which the A2-standup values remain in force — is
+`provider: "anthropic"`, `model_id: "claude-haiku-4-5-20251001"` (the harness still sends no
+sampling parameters). A commit that
+changes the gate `model_id` (including this swap from the A2-standup `claude-sonnet-5`) is an
+eval-policy commit that **MUST in the same commit** reset `evals/baseline.json` to
+`{ "schema_version": "1.0", "passing": [] }` — majority results under one model are not
+transferable to another, so no fixture is "previously passing" under a model that never ran it;
+the baseline repopulates via `check_evals --update-baseline` on the next green run.
+`evals/targets.json` is **not** reset: `authoring_target` keeps its current ratchet value (0.80
+floor at swap time), and an expected sub-target rate after a gate-model swap surfaces as a red
+gate to fix by improving `SKILL.md`, never by lowering targets.
+
 **EvalFixture** (`evals/cases/*.json`, schema_version `"1.0"`):
 ```
 EvalFixture = {
@@ -942,6 +996,13 @@ EvalFixture = {
   tests.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
+- **Synthetic fixtures (AD-021 / FR-029):** fixtures minted from snapshot `docs.examples` are
+  ordinary EvalFixtures — same schema, same buckets, same scoring; they carry no `consent`
+  (nothing real-use) and `redacted: false`. Their SampleSet outputs come only from the pinned
+  engine under the AD-017 profile; the seed template lives at `evals/seeds/<fixture-id>.json`
+  (shape in FR-029) and is **never** part of the fixture object, the harness prompt, or the
+  episode workspace. `check_evals --lint` enforces seed↔fixture bit-identical regeneration
+  (AC-030). Synthetic `intent_nl` is LLM-drafted, human-accepted before commit (AD-021).
 
 ### 11.9 Project config & installation
 
@@ -1005,7 +1066,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030) |
 | `check_parity` | NFR-007 / AC-005 |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
@@ -1039,12 +1100,26 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   both before `check_evals`; **OQ-018** (`check_samples` edge semantics) and **OQ-023** (AC-011
   traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
   NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
-- **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses.
-  *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011). *DoD:* authoring target met;
+- **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses; plus the
+  AD-021/FR-029 improvement-loop deliverables (rev 2026-07-12): synthetic-fixture generator +
+  `evals/seeds/` provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted
+  synthetic fixtures); the §11.8 eval-policy commit swapping `evals/runner.json` to the
+  small-model pin with the baseline reset. *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011).
+  *DoD:* FR-029 landed (AC-030 green); **authoring target met under the small-model pin**
+  (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave;
   AC-003/004/010–014/017/019/025/026 green.
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
   OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009.
 - **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
+
+*Improvement-loop note (AD-021 / FR-029, rev 2026-07-12):* synthetic corpus growth and the
+small-model gate swap are **A3 deliverables** (folded into the A3 DoD above) — the harness they
+rely on is the A2 deliverable, and the work proceeds in parallel with the skill body. Ordering
+within A3: SPEC (this edit) → generator + seeds + regen lint (FR-029) → v1 fixture wave with
+human-accepted intents → the eval-policy commit that swaps `evals/runner.json` to the small
+model and resets `evals/baseline.json` (§11.8) → iterate `SKILL.md` until the authoring target
+is met under that pin. Later fixture waves beyond the v1 subset remain ongoing improvement-loop
+work and do not gate any milestone.
 
 ---
 
@@ -1266,6 +1341,25 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   conversational half only ("conversational confirm (skill body) writes `confirmation` and binds
   `content_fingerprint` via the OQ-015 acquisition path") and remains mapped to FR-024 at A3.
   §17: FR-021 row → `AC-029, AC-017`; FR-024 row unchanged (`AC-010, AC-011`).
+- **OQ-024** — **Resolved (2026-07-12; absorbs RFC-001,
+  `docs/proposals/rfc-001-synthetic-eval-corpus-for-small-models.md`):** synthetic eval corpus
+  from `docs.examples` and small-model primary gate. Author decisions, normative in AD-021 /
+  FR-029 / §11.8:
+  (a) **gate model** — `claude-haiku-4-5-20251001` replaces `claude-sonnet-5` as the NFR-010
+  pin (dated ID, same provider, no harness change);
+  (b) **stratification budget** — 3–6 cases per fixture, driven by which §11.1 coverage kinds
+  apply to the seed's input shape, not a flat count;
+  (c) **v1 scope** — a tagged subset of ~25–30 seeds (one per tag family), remainder as
+  follow-up waves; all-121 coverage is not a v1 requirement;
+  (d) **corpus pair** — every fixture's case 1 is the example's own `data`/`result` re-executed
+  through the pinned engine; corpus-only single-case fixtures are forbidden (leakage);
+  (e) **refuse bucket** — hand-authored seeds only in v1; no synthesized refuse intents (near-miss
+  fakes risk colliding with legitimate `matched_correction` mapping);
+  (f) **provenance/regen** — seeds at `evals/seeds/<fixture-id>.json`
+  (`{source_example, template, generator:{version, notes?}}`); `check_evals --lint` proves
+  bit-identical regeneration under the current pin (AC-030);
+  (g) **baseline on gate-model swap** — `evals/baseline.json` resets to an empty `passing` list
+  in the same eval-policy commit; `authoring_target` stays 0.80 (ratchet untouched at its floor).
 
 ---
 
@@ -1278,6 +1372,11 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 - `file`/`include` → sandbox only (incl. worker); residual trust boundary (AD-017).
 - Weak obligations → user confirmation + evals.
 - Eval cost/flakiness → majority-of-3 + infra_skip cap.
+- Synthetic SampleSet leakage (wrong templates pass thin fixtures) → coverage-driven 3–6 case
+  budget + corpus-only fixtures forbidden (AD-021/FR-029).
+- Weak synthetic `intent_nl` → mandatory human acceptance before commit (AD-021).
+- Gate cliff on small-model swap → explicit baseline reset, targets never lowered (§11.8).
+- Seed/pin drift in synthetic fixtures → AC-030 regen lint, same discipline as `check_snapshot`.
 - Privacy leaks in fixtures → NFR-011.
 - Adapter drift → parity gate.
 - Repair blowup → FR-007 cap.
@@ -1319,6 +1418,7 @@ excluded from active coverage.
 | FR-026 | AC-021, AC-026 | A1 | schema unit + CLI exit 2 |
 | FR-027 | AC-016 | A1 | verify preflight |
 | FR-028 | AC-027, AC-028 | A1 | profile-knob reject + timeout worker unit |
+| FR-029 | AC-030 | A3 | check_evals lint + generator unit |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
@@ -1340,6 +1440,6 @@ excluded from active coverage.
 | **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
 | **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
-| A3 | After A2 green | Skill body only. Entry: OQ-023 resolved (2026-07-11). |
+| A3 | After A2 green | Skill body + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. |
 | A5 | After A4 | Optional editor sink demo. |
