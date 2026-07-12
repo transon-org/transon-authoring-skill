@@ -1,0 +1,15 @@
+{
+  "source_example": "MapDictToDictItems",
+  "template": {
+    "$": "map",
+    "key": {
+      "$": "value"
+    },
+    "value": {
+      "$": "key"
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

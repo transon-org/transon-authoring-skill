@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-cond-default-branch",
+  "expect": "matched",
+  "intent_nl": "Turn an input number into a word: \"negative\" if it is below zero, \"zero\" if it equals zero, and fall back to \"positive\" for anything else.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Turn an input number into a word: \"negative\" if it is below zero, \"zero\" if it equals zero, and fall back to \"positive\" for anything else.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": 10,
+        "output": "positive",
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": 7,
+        "output": "positive",
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": 11,
+        "output": "positive",
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "1cdfb137903c9b7da411226ae95bb9eadab945eacca9ad3ba05988e7b16a1507"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'CondDefaultBranch' (AD-021 / FR-029); seed provenance at evals/seeds/syn-cond-default-branch.json.",
+  "redacted": false
+}

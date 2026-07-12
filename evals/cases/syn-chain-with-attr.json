@@ -1,0 +1,166 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-chain-with-attr",
+  "expect": "matched",
+  "intent_nl": "For each item in the input list, dig out the value nested at a, then b, then c, and the value nested at d, then e, then f, and return a list of objects holding those two values under \"key\" and \"value\" respectively.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "For each item in the input list, dig out the value nested at a, then b, then c, and the value nested at d, then e, then f, and return a list of objects holding those two values under \"key\" and \"value\" respectively.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": [
+          {
+            "a": {
+              "b": {
+                "c": 1
+              }
+            },
+            "d": {
+              "e": {
+                "f": 2
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": 3
+              }
+            },
+            "d": {
+              "e": {
+                "f": 4
+              }
+            }
+          }
+        ],
+        "output": [
+          {
+            "key": 1,
+            "value": 2
+          },
+          {
+            "key": 3,
+            "value": 4
+          }
+        ],
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": [
+          {
+            "a": {
+              "b": {
+                "c": 7
+              }
+            },
+            "d": {
+              "e": {
+                "f": 11
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": 13
+              }
+            },
+            "d": {
+              "e": {
+                "f": 7
+              }
+            }
+          }
+        ],
+        "output": [
+          {
+            "key": 7,
+            "value": 11
+          },
+          {
+            "key": 13,
+            "value": 7
+          }
+        ],
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
+            "a": {
+              "b": {
+                "c": 11
+              }
+            },
+            "d": {
+              "e": {
+                "f": 13
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": 7
+              }
+            },
+            "d": {
+              "e": {
+                "f": 11
+              }
+            }
+          }
+        ],
+        "output": [
+          {
+            "key": 11,
+            "value": 13
+          },
+          {
+            "key": 7,
+            "value": 11
+          }
+        ],
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "c16890bd8bf2748b3664e5d226fba61d4f77a514a68ee76e44b67cbd0d818a6e"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'ChainWithAttr' (AD-021 / FR-029); seed provenance at evals/seeds/syn-chain-with-attr.json.",
+  "redacted": false
+}

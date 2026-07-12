@@ -1,0 +1,13 @@
+{
+  "source_example": "FormatFromSingleValue",
+  "template": {
+    "$": "map",
+    "item": {
+      "$": "format",
+      "pattern": "{:.03f}"
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

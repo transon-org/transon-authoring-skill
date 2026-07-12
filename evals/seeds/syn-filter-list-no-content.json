@@ -1,0 +1,38 @@
+{
+  "source_example": "FilterListNoContent",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "set",
+        "name": "current"
+      },
+      true,
+      {
+        "$": "set",
+        "name": "a"
+      },
+      false,
+      {
+        "$": "set",
+        "name": "b"
+      },
+      {
+        "$": "get",
+        "name": "current"
+      },
+      {
+        "$": "filter",
+        "cond": {
+          "$": "get",
+          "name": {
+            "$": "item"
+          }
+        }
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

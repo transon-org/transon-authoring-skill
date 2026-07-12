@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-format-from-single-value",
+  "expect": "matched",
+  "intent_nl": "Turn a list of floating-point numbers into a list of strings, formatting each number with exactly three decimal places.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Turn a list of floating-point numbers into a list of strings, formatting each number with exactly three decimal places.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": [
+          0.5,
+          0.3333333333333333,
+          0.25,
+          0.2,
+          0.16666666666666666,
+          0.14285714285714285,
+          0.125,
+          0.1111111111111111
+        ],
+        "output": [
+          "0.500",
+          "0.333",
+          "0.250",
+          "0.200",
+          "0.167",
+          "0.143",
+          "0.125",
+          "0.111"
+        ],
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": [
+          7,
+          11,
+          13,
+          7,
+          11,
+          13,
+          7,
+          11
+        ],
+        "output": [
+          "7.000",
+          "11.000",
+          "13.000",
+          "7.000",
+          "11.000",
+          "13.000",
+          "7.000",
+          "11.000"
+        ],
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          11,
+          13,
+          7,
+          11,
+          13,
+          7,
+          11,
+          13
+        ],
+        "output": [
+          "11.000",
+          "13.000",
+          "7.000",
+          "11.000",
+          "13.000",
+          "7.000",
+          "11.000",
+          "13.000"
+        ],
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "a239cbf6728641fb80cce0c05e293bfd267752ea4a65d91c34c3ec5660578acf"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FormatFromSingleValue' (AD-021 / FR-029); seed provenance at evals/seeds/syn-format-from-single-value.json.",
+  "redacted": false
+}

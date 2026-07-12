@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-map-dict-to-dict-items",
+  "expect": "matched",
+  "intent_nl": "Given an input object, produce a new object with keys and values swapped: each value becomes a key and its original key becomes that value.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Given an input object, produce a new object with keys and values swapped: each value becomes a key and its original key becomes that value.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "a": "d",
+          "b": "e",
+          "c": "f"
+        },
+        "output": {
+          "d": "a",
+          "e": "b",
+          "f": "c"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "a": "variation-alpha",
+          "b": "variation-beta",
+          "c": "variation-gamma"
+        },
+        "output": {
+          "variation-alpha": "a",
+          "variation-beta": "b",
+          "variation-gamma": "c"
+        },
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "a": "variation-beta",
+          "b": "variation-gamma",
+          "c": "variation-alpha"
+        },
+        "output": {
+          "variation-beta": "a",
+          "variation-gamma": "b",
+          "variation-alpha": "c"
+        },
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "6ebe58a344b9d77262f9db2e022155a61016343385d1007c767e10aeb1888c27"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'MapDictToDictItems' (AD-021 / FR-029); seed provenance at evals/seeds/syn-map-dict-to-dict-items.json.",
+  "redacted": false
+}

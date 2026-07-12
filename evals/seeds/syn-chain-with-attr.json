@@ -1,0 +1,51 @@
+{
+  "source_example": "ChainWithAttr",
+  "template": {
+    "$": "map",
+    "item": {
+      "key": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "item"
+          },
+          {
+            "$": "attr",
+            "name": "a"
+          },
+          {
+            "$": "attr",
+            "name": "b"
+          },
+          {
+            "$": "attr",
+            "name": "c"
+          }
+        ]
+      },
+      "value": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "item"
+          },
+          {
+            "$": "attr",
+            "name": "d"
+          },
+          {
+            "$": "attr",
+            "name": "e"
+          },
+          {
+            "$": "attr",
+            "name": "f"
+          }
+        ]
+      }
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}
