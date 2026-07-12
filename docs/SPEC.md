@@ -1447,7 +1447,7 @@ work and do not gate any milestone.
 - **OQ-026** — **Resolved (2026-07-12, A3 wave-2 design):** FR-029 generator coverage extensions,
   closing honest gaps the OQ-025 derivations cannot express (even-length boundaries for arrays —
   including root arrays, which OQ-025b excludes from `list_*` candidacy; present branches for
-  defaulting-accessor keys absent from the corpus `data`; default-insertion branches driven by
+  accessor keys absent from the corpus `data`; default-insertion branches driven by
   rule semantics rather than a defaulting `attr`). Normative in FR-029:
   (a) **List length variation** — every array discovered by the OQ-025b pre-order walk of the
   corpus `data`, **plus the document root itself when the corpus `data` is a JSON array**, yields
@@ -1458,13 +1458,19 @@ work and do not gate any milestone.
   pinned engine as usual; the FR-029 packing rule applies (an existing case whose input already
   JSON-equals the derivation satisfies the obligation instead of adding a case).
   (b) **Root key variations** — only when the corpus `data` document is a JSON object:
-  (i) *key addition* — for every defaulting-accessor literal name (the OQ-025a node set: a
-  literal string `attr` `name` carrying a `default` member) NOT discoverable at any pointer of
-  the OQ-025b walk (no visited pointer's final segment equals the name), one `kind: "custom"`
-  obligation/case pair: the corpus `data` with that key added at the root, its value the **first
-  entry** of the FR-029 per-JSON-type substitution-table row keyed by the JSON type of the
-  accessor's literal `default` (a non-literal `default` — or a literal whose JSON type has no
-  table row — takes the string entry);
+  (i) *key addition* — for **every `attr` node with a literal string `name`** (a `default`
+  member is NOT required) whose name is not discoverable at any pointer of the OQ-025b walk
+  (no visited pointer's final segment equals the name), one `kind: "custom"` obligation/case
+  pair: the corpus `data` with that key added at the root, its value the **first entry** of the
+  FR-029 per-JSON-type substitution-table row keyed by the JSON type of the attr's literal
+  `default` when one is present — the first template-pre-order node of that name carrying a
+  `default` decides — else the string entry (a non-literal `default`, or a literal whose JSON
+  type has no table row, likewise takes the string entry). *(rev 2026-07-12: the original
+  predicate reused the OQ-025a node set — `attr` with a `default` member — which was empirically
+  wrong against the pinned corpus: `FormatWithDefault`'s `label` accessor carries no `default`
+  (the pinned engine absorbs the missing key to `NO_CONTENT` and the enclosing `format` rule
+  does the defaulting), so the motivating label-present branch derived nothing; the OQ-025a
+  optional-key predicate itself is unchanged.)*;
   (ii) *key deletion* — for every root-level key not already covered by an `optional_absent`
   obligation, one `kind: "custom"` obligation/case pair: the corpus `data` with that key removed.
   Each root key variation is emitted iff its dry-run succeeds and is silently skipped otherwise —
