@@ -116,8 +116,14 @@ flowchart TD
 
     engine -->|error/diff| repair["repair; max repair_attempts"]
     repair --> verify
-    engine -->|matched| blessed["AuthoringResult success"]
+    engine -->|matched| review["interactive user review<br/>approve / revise / stop (FR-030)"]
+    review -->|approve| blessed["AuthoringResult success"]
+    review -->|revise: NL feedback| draft
+    review -->|revise: sample edits| samples
+    review -->|stop| stopped["deferred / aborted"]
 ```
+
+Non-interactive/CI runs have no reviewer: `matched` is emitted directly after `verify` (FR-030).
 
 **Runtime (AD-006):** Python library is the contract; agents/CI use `python -m transon_authoring`.
 No console-script product; no MCP.
@@ -205,6 +211,15 @@ No console-script product; no MCP.
   are explicit eval-policy commits per §11.8. Synthetic SampleSets are **evals/CI fixtures
   only** — they never substitute for user confirmation in interactive authoring (AD-014/AD-016
   untouched).
+- **AD-022 — Observability: mechanical records over self-report (added 2026-07-12).** Two
+  layers. (1) The skill MAY self-report an ordered `trace` in `AuthoringResult` (§11.5,
+  FR-031) — **diagnostic only**: never an input to scoring, gating, or `verify`, and never
+  trusted as evidence a step actually ran (a model can misreport its own steps). (2) The
+  **authoritative** step record is mechanical: eval episodes persist full tool-call transcripts
+  and the `check_evals` report aggregates failure modes from submitted envelopes (§11.8,
+  FR-032). Effectiveness questions — *which step failed, how often, at what cost* — are
+  answered from layer 2; layer 1 adds narrative color in interactive sessions. Gates and
+  determinism (NFR-002) are untouched: traces and transcripts are artifacts, never gate inputs.
 
 ---
 
@@ -244,6 +259,27 @@ No console-script product; no MCP.
   from ProjectConfig when deciding whether to draft another candidate.
 - **FR-008** — On exhaustion / defer / abort / reject, return `AuthoringResult` failure (§11.5).
   Never return unverified JSON as success.
+
+### Review
+- **FR-030** — *(added 2026-07-12)* **Interactive template review before emission.** In
+  interactive sessions, after `verify` yields `ok: true` and `assurance: "matched"`, the skill
+  presents the matched template together with its Verdict to the user before emitting the final
+  `AuthoringResult`. Exactly three exits:
+  - **approve** — the user accepts; the skill emits the success envelope (`status: "matched"`).
+  - **revise** — the user supplies feedback. NL-only feedback → draft a new candidate under the
+    FR-001 grounding rules and re-run `verify`, with a **fresh `repair_attempts` budget** for
+    that revision round (each round independently bounded per FR-007/NFR-006). Feedback that
+    adds or changes expected input/output behavior → apply as SampleSet edits, which flip
+    `confirmed` back via `fingerprint_mismatch` (AC-029) and send the flow through the FR-023
+    sample loop (re-confirm) before any redraft.
+  - **stop** — the user declines the template and ends the request: `status: "deferred"`
+    (stop for now) or `status: "aborted"` (abandon), with **no template** (AC-012 semantics).
+
+  Only matched candidates are ever presented for review — user approval is **additional** to,
+  never a substitute for, the AD-004 verify gate. The review loop is unbounded until exactly one
+  exit (same discipline as FR-023); never auto-approve; never treat silence as approval.
+  Non-interactive/CI runs (AC-014 semantics; direct emission covered by AC-031) have no
+  reviewer: the matched result is emitted directly — the §11.8 eval harness is unaffected.
 
 ### Grounding & corpus
 - **FR-009** — Bundle pinned `get_editor_metadata()` snapshot as the structural grounding catalog.
@@ -319,6 +355,26 @@ No console-script product; no MCP.
   addition/deletion customs, the frozen `NO_CONTENT` probe count, and the extended drop order —
   are fixed in OQ-026.
 
+### Observability
+- **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
+  MAY carry `trace`: an ordered array of `TraceEntry` (§11.5) — one entry per protocol step the
+  skill performed (config, grounding, sample-loop rounds, confirm, draft, each verify/repair
+  cycle, review, result), each carrying the verbatim `python -m transon_authoring` invocation
+  when one ran and a step-local outcome. The skill body instructs filling it in interactive
+  sessions. Diagnostic only: schema-validated when present, ignored by scoring and gates,
+  absence never invalidates a result, content never treated as ground truth (AD-022).
+- **FR-032** — *(added 2026-07-12, AD-022)* **Eval episode transcripts + failure attribution.**
+  Full `check_evals` runs persist one `EpisodeTranscript` per episode (shape in §11.8) under a
+  run-artifact directory (`--transcripts-dir`); transcripts are **never committed** to the repo
+  (repo hygiene + NFR-011) — the credential-holding dispatch workflow retains them as build
+  artifacts. The gate report gains a `failure_modes` aggregation per bucket over runs that
+  **failed their bucket's OQ-016 success rule** (plus reported-only `infra_error` runs), keyed
+  by the final **scored** harness outcome — closed key set and precedence in §11.8 (harness
+  outcome classes, `invalid_submission`, `reverify_failed`, or the submitted §11.5 `status`
+  suffixed with `verdict.failed_stage`); the submitted status only ever labels a failure, it is
+  never trusted as the score (AD-004). Scoring, targets, baseline, and lint semantics are
+  unchanged by the presence or absence of transcripts.
+
 ### Install CI
 - **FR-019** — CI install checks:
   - **Claude Code:** structural install at documented path; plus headless listing **if** OQ-010
@@ -348,6 +404,10 @@ No console-script product; no MCP.
   `transon==…`. Does not track unpinned newer releases (AD-007).
 - **NFR-005 — Honest failure.** §11.5 statuses distinguishable from success.
 - **NFR-006 — Bounded repair.** Per FR-007; sample loop unbounded until confirm/defer/abort.
+  *(rev 2026-07-12, FR-030)* The interactive review loop is likewise unbounded until
+  approve/stop; each FR-030 revision round is a new candidate sequence with a fresh
+  `repair_attempts` budget — the machine bound applies within a round, never across user-driven
+  rounds.
 - **NFR-007 — Adapter parity.** Claude/Cursor equal capability or documented exclusion.
 - **NFR-008 — Versioned releases.** Record skill version, engine pin, snapshot hash.
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
@@ -355,6 +415,16 @@ No console-script product; no MCP.
 - **NFR-010 — Eval regression gate.** Targets (OQ-006): authoring ≥80%→95% ratchet; adversarial
   refuse-class =100%. Exact formula and runner: §11.8 / AD-020.
 - **NFR-011 — Privacy.** Real-use fixtures require redaction + consent before commit (FR-018).
+- **NFR-012 — Shipped-skill self-sufficiency.** *(added 2026-07-12)* The shipped skill body
+  (`SKILL.md`) and adapter files must be fully operable standalone: every behavior, schema
+  field, status, and gate they rely on is stated inline, and they contain **no references to
+  repo files that are not shipped alongside them** — no links or paths into `docs/`, `harness/`,
+  `scripts/`, `evals/`, `tests/`, `src/`, or repo-root `resources/` (bundled resources are
+  reached via `python -m transon_authoring` subcommands, never by repo path), and no `§`-section
+  references into `docs/SPEC.md`. Named external authorities that are not files of this repo —
+  the pinned engine and its `docs/SPECIFICATION.md` (AD-018) — remain allowed. Requirement-ID
+  annotations for reviewer traceability are allowed **only inside markdown comments**
+  (`<!-- … -->`), never in rendered/normative text. Enforced by `check_parity` (AC-032).
 
 ---
 
@@ -419,9 +489,34 @@ No console-script product; no MCP.
   (`source_example` absent from the pinned `docs.examples`, seed `template` ≠ that entry's
   `template`, or case 1 `input` ≠ that entry's `data`). A repo whose seeds, fixtures, and
   snapshot agree lints **green**.
+- **AC-031** — *(FR-030 review loop, added 2026-07-12)* In an interactive session a matched
+  template is presented with its Verdict before the success envelope is emitted; approve →
+  `status: "matched"`; NL-feedback revise → a new draft cycle with a fresh FR-007 budget,
+  re-verified and re-presented only when matched; sample-feedback revise → the SampleSet edit
+  flips `confirmed` (`fingerprint_mismatch`) and the flow re-enters the FR-023 sample loop
+  before redrafting; stop → `deferred`/`aborted` with no template; never auto-approve.
+  Non-interactive runs emit `matched` without review.
+- **AC-032** — *(NFR-012 self-sufficiency lint, added 2026-07-12)* `check_parity` is **red**
+  when `SKILL.md` or any adapter file references an unshipped repo path (`docs/`, `harness/`,
+  `scripts/`, `evals/`, `tests/`, `src/`, repo-root `resources/`), contains a `§`-section
+  reference into `docs/SPEC.md`, or carries requirement-ID citations outside markdown comments;
+  a self-contained skill body and adapters lint **green**. Mentions of the engine's own
+  `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint — the exemption is the exact
+  string `docs/SPECIFICATION.md`; any other `docs/…` path trips it (deterministic discriminator).
+- **AC-033** — *(FR-031, added 2026-07-12)* An `AuthoringResult` carrying `trace` validates
+  against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
+  without `trace` remains valid; a malformed `trace` fails schema validation like any other
+  field.
+- **AC-034** — *(FR-032, added 2026-07-12)* A full `check_evals` run with `--transcripts-dir`
+  writes one `EpisodeTranscript` per episode, each carrying the episode's ordered `tool_calls`
+  and the `submit_result` payload verbatim (even when schema-invalid); the report's
+  `failure_modes` equals a hand-computed histogram over the same **scored** episode results
+  under the §11.8 key precedence; the same run without `--transcripts-dir` produces identical
+  scoring and gate outcomes.
 
 ### Use cases
-- **UC-001** — Claude Code: samples → confirm → author → `verify` → PR with template + SampleSet.
+- **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
+  user review (approve) → PR with template + SampleSet.
 - **UC-002** — Cursor same path; optional handoff to blockly import (no in-surface guarantee).
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
 - **UC-004** — New engineer installs adapters, first-run layout prompt, authors successfully.
@@ -528,7 +623,7 @@ and non-finite numbers (`NaN`/`Infinity`) at ingress.
 
 **Schema versions:** documents carry `schema_version` string. v1 library understands `"1.0"` for
 SampleSet, SampleCheck, Verdict, AuthoringResult, CliError, ProjectConfig, NlIntents, EvalRunner,
-EvalFixture.
+EvalFixture, EpisodeTranscript.
 
 ### 11.1 SampleSet & `check_samples`
 
@@ -831,16 +926,30 @@ AuthoringResult = {
   gaps?: Gap[],
   last_candidate?: JsonValue,
   samples_path?: string,
-  repair_count?: number           # repairs consumed by the skill loop
+  repair_count?: number,          # repairs consumed by the skill loop
+  trace?: TraceEntry[]            # FR-031 self-reported step log; diagnostic only (AD-022)
+}
+
+TraceEntry = {
+  seq: integer,                   # 1-based, contiguous, conversation order
+  step: "config" | "ground" | "propose" | "present-gaps" | "confirm"
+      | "draft" | "verify" | "repair" | "review" | "result",
+  summary: string,                # one line: what happened at this step
+  command?: string,               # verbatim `python -m transon_authoring …`, when one ran
+  outcome?: string                # step-local outcome, e.g. "gaps: 2", "failed_stage: match"
 }
 ```
 
+`trace` is self-reported by the skill and **diagnostic only** (AD-022): consumers MUST NOT use
+it for scoring, gating, or as evidence a step actually ran — the mechanical §11.8 transcript is
+the authoritative step record in evals. Absence of `trace` never invalidates a result.
+
 | status | When |
 |---|---|
-| `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` |
+| `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` — in interactive sessions only after FR-030 user approval *(rev 2026-07-12)* |
 | `need-samples` | stopped with incomplete coverage / need more cases |
-| `deferred` | user chose defer |
-| `aborted` | user chose abort, **or the skill aborted after determining the request cannot be grounded in the pinned metadata (refusal — AC-003; rev 2026-07-11, OQ-016b)** |
+| `deferred` | user chose defer — in the sample loop or as an FR-030 review **stop** *(rev 2026-07-12)* |
+| `aborted` | user chose abort (sample loop or FR-030 review stop; rev 2026-07-12), **or the skill aborted after determining the request cannot be grounded in the pinned metadata (refusal — AC-003; rev 2026-07-11, OQ-016b)** |
 | `repair-exhausted` | skill consumed all `repair_attempts` without a matched verdict |
 | `samples-rejected` | `check_samples` / verify `samples` stage failed on a schema-valid SampleSet |
 | `verify-failed` | validate, dry_run, or match failed and the skill stopped without scheduling another repair |
@@ -1025,6 +1134,47 @@ EvalFixture = {
   provider client behind the optional extra `transon-authoring[evals]`; full runs live in a
   credential-holding dispatch workflow, per-PR CI runs `check_evals --lint` + fake-provider unit
   tests.
+- **Transcripts & attribution (FR-032 / AD-022, added 2026-07-12):** full runs write one
+  `EpisodeTranscript` JSON per episode to `--transcripts-dir`; **never committed** to the repo
+  (repo hygiene + NFR-011) — the dispatch workflow retains the directory as a build artifact:
+  ```
+  EpisodeTranscript = {
+    schema_version: "1.0",
+    fixture_id: string,
+    run_index: integer,             # 0-based within runs_per_fixture
+    model_id: string,
+    outcome: "submitted" | "no_submit" | "budget_exceeded" | "infra_error",
+                                    # the harness episode outcome: submit_result called /
+                                    # episode ended without submit (OQ-017c) / tool budget
+                                    # exceeded (OQ-017c) / provider or infra failure (§11.8)
+    tool_calls: [ { seq: integer, name: string, input: JsonValue, result: JsonValue } ],
+    submitted: JsonValue | null,    # the submit_result payload VERBATIM — possibly
+                                    # schema-invalid (retained so OQ-016(b) failures
+                                    # stay diagnosable)
+    error: string | null
+  }
+  ```
+  The gate report gains `failure_modes`: per bucket, a histogram over the runs that **failed
+  that bucket's OQ-016 success rule**, plus reported-only `infra_error` runs. Each failed run
+  is keyed by its final **scored** outcome, first match in this precedence wins:
+  `infra_error` | `no_submit` | `budget_exceeded` | `invalid_submission` (payload fails the
+  bundled AuthoringResult schema — OQ-016(b)) | `reverify_failed` (a submitted `matched` whose
+  OQ-016(a) independent re-verify failed — the claim is never trusted, AD-004) | otherwise the
+  submitted §11.5 `status`, suffixed with `verdict.failed_stage` when present (e.g.
+  `"verify-failed/match"`; in the refuse bucket a key of `"matched"` means an invented success
+  where refusal was expected). The submitted status only labels a failure — it is never the
+  score itself. Derived mechanically from scored episode results;
+  transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
+  a run without `--transcripts-dir` scores identically.
+  **Privacy & retention** *(rev 2026-07-13)*: an episode transcript contains only (a) fixture
+  content already committed under `evals/cases/` — real-use fixtures having passed the NFR-011
+  redaction + consent lint before commit, synthetic fixtures (AD-021) containing no real-use
+  data by construction — and (b) library envelopes and gate-model output over that content,
+  so no new real-use data can enter a transcript. Access and retention follow the dispatch
+  workflow's build-artifact policy (repo CI access; default artifact expiry deletes them);
+  transcripts MUST NOT be re-committed to the repo. Capturing a **real-use** failing
+  conversation remains governed by FR-018/NFR-011 — the transcript mechanism records eval
+  episodes only, never interactive sessions.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
 - **Synthetic fixtures (AD-021 / FR-029):** fixtures minted from snapshot `docs.examples` are
@@ -1097,8 +1247,8 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030) |
-| `check_parity` | NFR-007 / AC-005 |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030); full runs emit FR-032 transcripts + `failure_modes` (non-gating report artifacts, AC-034) |
+| `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
@@ -1131,16 +1281,21 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   both before `check_evals`; **OQ-018** (`check_samples` edge semantics) and **OQ-023** (AC-011
   traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
   NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
-- **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses; plus the
+- **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses;
+  interactive review loop per FR-030 (rev 2026-07-12); observability per FR-031/FR-032 —
+  `trace` schema field + eval transcripts/attribution (rev 2026-07-12, AD-022); plus the
   AD-021/FR-029 improvement-loop deliverables (rev 2026-07-12): synthetic-fixture generator +
   `evals/seeds/` provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted
   synthetic fixtures); the §11.8 eval-policy commit swapping `evals/runner.json` to the
   small-model pin with the baseline reset. *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011).
   *DoD:* FR-029 landed (AC-030 green); **authoring target met under the small-model pin**
   (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave;
-  AC-003/004/010–014/017/019/025/026 green.
+  AC-003/004/010–014/017/019/025/026/031/033/034 green (AC-031's conversational half by
+  skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it).
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
-  OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009.
+  OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
+  (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint; the `SKILL.md`-side
+  reference cleanup landed with the 2026-07-12 spec change).
 - **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
 
 *Improvement-loop note (AD-021 / FR-029, rev 2026-07-12):* synthetic corpus growth and the
@@ -1512,6 +1667,11 @@ work and do not gate any milestone.
 - Seed/pin drift in synthetic fixtures → AC-030 regen lint, same discipline as `check_snapshot`.
 - Privacy leaks in fixtures → NFR-011.
 - Adapter drift → parity gate.
+- Dangling references in shipped skill/adapters → NFR-012 + parity lint (AC-032).
+- Fabricated/misreported self-trace taken as evidence → AD-022: trace is diagnostic only; the
+  mechanical §11.8 transcript is the authoritative record; neither gates.
+- Review-loop fatigue (user rubber-stamps or the loop never ends) → three explicit exits,
+  no auto-approve, honest `deferred`/`aborted` statuses (FR-030).
 - Repair blowup → FR-007 cap.
 - False discoverability claims → FR-019 wording.
 
@@ -1552,6 +1712,9 @@ excluded from active coverage.
 | FR-027 | AC-016 | A1 | verify preflight |
 | FR-028 | AC-027, AC-028 | A1 | profile-knob reject + timeout worker unit |
 | FR-029 | AC-030 | A3 | check_evals lint + generator unit |
+| FR-030 | AC-031, AC-012 | A3 | skill-body unit + UC-001 walkthrough |
+| FR-031 | AC-033 | A3 | schema unit + skill-body unit |
+| FR-032 | AC-034 | A3 | check_evals unit |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
@@ -1563,6 +1726,7 @@ excluded from active coverage.
 | NFR-009 | AC-007, AC-009 | A4 | check_install |
 | NFR-010 | AC-008 | A2 | check_evals |
 | NFR-011 | AC-025 | A2 | fixture lint |
+| NFR-012 | AC-032 | A4 | check_parity |
 
 ---
 
@@ -1573,6 +1737,6 @@ excluded from active coverage.
 | **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
 | **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
-| A3 | After A2 green | Skill body + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
-| A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. |
+| A3 | After A2 green | Skill body (incl. FR-030 review loop, added 2026-07-12) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
+| A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
 | A5 | After A4 | Optional editor sink demo. |
