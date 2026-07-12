@@ -1,0 +1,11 @@
+{
+  "source_example": "ExprSimpleMonads1",
+  "template": {
+    "$": "expr",
+    "op": "+",
+    "value": "_suffix"
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

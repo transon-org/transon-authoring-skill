@@ -1,0 +1,10 @@
+{
+  "source_example": "ConvertNoParameters",
+  "template": {
+    "$": "call",
+    "name": "str"
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

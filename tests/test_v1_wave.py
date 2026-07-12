@@ -2,8 +2,11 @@
 
 The v1 scope commits a tagged subset of `docs.examples` seeds covering every
 tag family (the distinct prefixes before the first `:` across all example
-tags) — one seed per family, with dedup: a single example may cover every
-family its tags carry (OQ-024c). Coverage is established through the
+tags), one seed per family (OQ-024c). Whether a family is covered by a
+dedicated fixture or by another family's seed whose example also carries its
+tag (dedup) is an author curation decision, not SPEC text; this test asserts
+only the normative part — every family is covered. Coverage is established
+through the
 committed `evals/seeds/` provenance (FR-029): each seed's `source_example`
 names its snapshot entry, whose tags say which families the fixture covers.
 
