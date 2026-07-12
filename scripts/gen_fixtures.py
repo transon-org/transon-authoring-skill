@@ -199,35 +199,48 @@ def _template_nodes(template: Any):
             stack = list(node) + stack
 
 
-def _attr_defaults_ordered(template: Any) -> list[tuple[str, Any]]:
-    """OQ-025a node set in template pre-order discovery order (OQ-026d):
-    literal string ``attr`` names carrying a ``default``, first-seen wins."""
-    ordered: list[tuple[str, Any]] = []
-    seen: set[str] = set()
+#: Sentinel: an ``attr`` accessor carrying no ``default`` member at all
+#: (distinct from a literal ``default: null`` — that name IS OQ-025a
+#: optional, while a defaultless accessor is not).
+_NO_DEFAULT = object()
+
+
+def _attr_accessors_ordered(template: Any) -> list[tuple[str, Any]]:
+    """OQ-026b(i) key-addition set (rev 2026-07-12) in template pre-order
+    discovery order: EVERY ``attr`` node with a literal string ``name`` — a
+    ``default`` member is not required. The value-typing default per name is
+    the first pre-order node of that name carrying a ``default``
+    (:data:`_NO_DEFAULT` otherwise). Names whose default is not the sentinel
+    form the OQ-025a optional-key set (unchanged by the amendment)."""
+    order: list[str] = []
+    defaults: dict[str, Any] = {}
     for node in _template_nodes(template):
-        if (
-            node.get("$") == "attr"
-            and isinstance(node.get("name"), str)
-            and "default" in node
-            and node["name"] not in seen
-        ):
-            seen.add(node["name"])
-            ordered.append((node["name"], node["default"]))
-    return ordered
+        if node.get("$") == "attr" and isinstance(node.get("name"), str):
+            name = node["name"]
+            if name not in defaults:
+                order.append(name)
+                defaults[name] = _NO_DEFAULT
+            if defaults[name] is _NO_DEFAULT and "default" in node:
+                defaults[name] = node["default"]
+    return [(name, defaults[name]) for name in order]
+
+
+def _optional_names(accessors: list[tuple[str, Any]]) -> set[str]:
+    """OQ-025a optional-key names: accessors carrying a ``default``."""
+    return {name for name, default in accessors if default is not _NO_DEFAULT}
 
 
 def _addition_value(default: Any) -> Any:
-    """OQ-026b(i): the first entry of the substitution-table row keyed by
-    the JSON type of the accessor's literal ``default``; a non-literal
-    default — or a literal whose JSON type has no table row — takes the
-    string entry."""
+    """OQ-026b(i) (rev 2026-07-12): the first entry of the
+    substitution-table row keyed by the JSON type of the attr's literal
+    ``default`` when one is present; no ``default`` at all, a non-literal
+    default, or a literal whose JSON type has no table row take the string
+    entry."""
     if isinstance(default, bool):
         row = "boolean"
-    elif isinstance(default, (int, float)):
+    elif default is not _NO_DEFAULT and isinstance(default, (int, float)):
         row = "number"
-    elif isinstance(default, str):
-        row = "string"
-    else:  # dict/list (non-literal template) or null: no table row
+    else:  # string, dict/list (non-literal), null, or no default at all
         row = "string"
     return deepcopy(SUBSTITUTION_TABLE[row][0])
 
@@ -390,7 +403,7 @@ def _build(
     plan: list[dict[str, Any]],
     dropped: set[str],
     writes_capable: bool,
-    defaulting: list[tuple[str, Any]],
+    accessors: list[tuple[str, Any]],
 ) -> tuple[list[dict], list[dict]]:
     """One deterministic build pass under a fixed dropped-kinds set.
 
@@ -637,7 +650,7 @@ def _build(
     # key deletions in root-key document order, then key additions in
     # template pre-order discovery order.
     if isinstance(data, dict):
-        optional_names = {name for name, _default in defaulting}
+        optional_names = _optional_names(accessors)
         if "key_deletion" not in dropped:
             for key in data:
                 if key in optional_names:
@@ -650,7 +663,7 @@ def _build(
                 )
         if "key_addition" not in dropped:
             discoverable = {entry["tokens"][-1] for entry in plan}
-            for name, default in defaulting:
+            for name, default in accessors:
                 if name in discoverable:
                     continue
                 candidate = deepcopy(data)
@@ -681,9 +694,8 @@ def generate(
     examples_by_name = {e["name"]: e for e in get_metadata()["docs"]["examples"]}
     includes = _resolve_includes(template, examples_by_name)
     engine = _Engine(template, includes)
-    defaulting = _attr_defaults_ordered(template)
-    optional_names = {name for name, _default in defaulting}
-    plan = _walk_plan(data, optional_names)
+    accessors = _attr_accessors_ordered(template)
+    plan = _walk_plan(data, _optional_names(accessors))
     writes_capable = _writes_capable(template, includes)
 
     # FR-029 budget rule (drop order extended by OQ-026d): full build first,
@@ -694,7 +706,7 @@ def generate(
     cases: list[dict] | None = None
     for dropped in drop_sets:
         coverage, cases = _build(
-            source_example, engine, plan, dropped, writes_capable, defaulting
+            source_example, engine, plan, dropped, writes_capable, accessors
         )
         if len(cases) <= MAX_CASES:
             break

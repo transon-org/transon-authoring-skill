@@ -452,12 +452,16 @@ def test_fr_029_oq_026_key_addition_and_deletion():
 
 
 def test_fr_029_oq_026_key_addition_value_typing_and_order():
-    # OQ-026b(i)/(d) — the addition value is the FIRST entry of the table
-    # row keyed by the literal default's JSON type (non-literal → string
-    # row); additions are emitted in template pre-order discovery order.
+    # OQ-026b(i)/(d) (rev 2026-07-12) — a default member is NOT required for
+    # membership in the addition set; the addition value is the FIRST entry
+    # of the table row keyed by the attr's literal default JSON type when
+    # one is present (non-literal default → string row; no default at all →
+    # string row); additions are emitted in template pre-order discovery
+    # order.
     template = {
         "x": {"$": "attr", "name": "alpha", "default": 0},
         "y": {"$": "attr", "name": "beta", "default": {"$": "this"}},
+        "z": {"$": "attr", "name": "gamma"},  # defaultless accessor
     }
     baseline = dry_run(template, {"k": "v"}, {})
     assert baseline["ok"]
@@ -468,12 +472,18 @@ def test_fr_029_oq_026_key_addition_value_typing_and_order():
         for ob in fixture["samples"]["coverage"]
         if ob["id"].startswith("ob-key-addition")
     ]
-    assert addition_ids == ["ob-key-addition--alpha", "ob-key-addition--beta"]
+    assert addition_ids == [
+        "ob-key-addition--alpha",
+        "ob-key-addition--beta",
+        "ob-key-addition--gamma",
+    ]
     alpha_case = case_for(fixture, "ob-key-addition--alpha")
     assert alpha_case["input"]["alpha"] == 7  # number row, first entry
     beta_case = case_for(fixture, "ob-key-addition--beta")
     assert beta_case["input"]["beta"] == "variation-alpha"  # non-literal default
-    for case in (alpha_case, beta_case):
+    gamma_case = case_for(fixture, "ob-key-addition--gamma")
+    assert gamma_case["input"]["gamma"] == "variation-alpha"  # no default member
+    for case in (alpha_case, beta_case, gamma_case):
         env = dry_run(template, case["input"], {})
         assert env["ok"] and case["output"] == env["result"]
 
@@ -578,3 +588,24 @@ def test_fr_029_oq_026_motivating_join_default_insertion_branch():
     env = dry_run(source["template"], case["input"], {})
     assert env["ok"] and case["output"] == env["result"]
     assert case["output"]["a"] == "default"
+
+
+def test_fr_029_oq_026_format_label_addition_derived_but_engine_skipped():
+    # OQ-026b(i) (rev 2026-07-12) — the FormatWithDefault "label" accessor
+    # carries NO default member, so the amended addition set DOES derive the
+    # {"other": 1, "label": "variation-alpha"} candidate. But under the
+    # pinned engine the format pattern "{label}" formats against the
+    # computed `value` (here the plain string), NOT the input document, so
+    # the dry-run errors — oracle asserted below — and per OQ-026b the
+    # derivation is silently skipped: no obligation, no case, and the seed
+    # stays eligible. (The motivating label-present branch therefore remains
+    # uncovered for this template: it would need a dict-shaped label. STOP
+    # item, reported — never a silent special case.)
+    source = EXAMPLES["FormatWithDefault"]
+    env = dry_run(source["template"], {"other": 1, "label": "variation-alpha"}, {})
+    assert env["ok"] is False  # engine-decided, never assumed (AD-018)
+    fixture, _seed = generate(source, "syn-format-with-default", "label me")
+    ids = [ob["id"] for ob in fixture["samples"]["coverage"]]
+    assert "ob-key-addition--label" not in ids
+    assert "ob-key-deletion--other" in ids  # the deletion still lands
+    assert len(fixture["samples"]["cases"]) >= 3  # still eligible
