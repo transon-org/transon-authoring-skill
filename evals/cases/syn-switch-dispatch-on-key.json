@@ -20,9 +20,9 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--kind",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"kind\" removed (OQ-026b).",
         "acceptance": "accepted"
       }
     ],
@@ -51,14 +51,12 @@
       },
       {
         "id": "c-3",
-        "input": {
-          "kind": "variation-beta"
-        },
+        "input": {},
         "output": {
           "$transon_authoring": "NO_CONTENT"
         },
         "satisfies": [
-          "ob-variation-1"
+          "ob-key-deletion--kind"
         ]
       }
     ],
@@ -66,7 +64,7 @@
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "b08d4c1eabd8232e10b4c198fa17397945ed0da9f4889a3cea41e9b27ffa382e"
+      "content_fingerprint": "3c74ced2edcec3eccd291a8cd69a4bc72767c38fef629801dde78e679d45fff2"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'SwitchDispatchOnKey' (AD-021 / FR-029); seed provenance at evals/seeds/syn-switch-dispatch-on-key.json.",

@@ -20,15 +20,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-length-variation--root",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Length variation: the corpus array at the document root with its final element removed (OQ-026a).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -61,6 +61,23 @@
         "id": "c-2",
         "input": [
           {
+            "id": 1
+          }
+        ],
+        "output": [],
+        "writes": {
+          "output_0.json": {
+            "id": 1
+          }
+        },
+        "satisfies": [
+          "ob-length-variation--root"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
             "id": 7
           },
           {
@@ -79,36 +96,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": [
-          {
-            "id": 11
-          },
-          {
-            "id": 13
-          }
-        ],
-        "output": [],
-        "writes": {
-          "output_0.json": {
-            "id": 11
-          },
-          "output_1.json": {
-            "id": 13
-          }
-        },
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "9b06f685ec304622f7ff14c3ce40aa17feeb89597fcaa18df10290dde52c5c90"
+      "content_fingerprint": "9abbb6a696804e63828ab1d71616a01c3de42adb59fc9cb2dd904be2b4bf15aa"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FileWriteViaMap' (AD-021 / FR-029); seed provenance at evals/seeds/syn-file-write-via-map.json.",

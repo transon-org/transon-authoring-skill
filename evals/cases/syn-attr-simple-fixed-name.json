@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--a",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"a\" removed (OQ-026b).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -39,6 +39,16 @@
       },
       {
         "id": "c-2",
+        "input": {},
+        "output": {
+          "$transon_authoring": "NO_CONTENT"
+        },
+        "satisfies": [
+          "ob-key-deletion--a"
+        ]
+      },
+      {
+        "id": "c-3",
         "input": {
           "a": 7
         },
@@ -46,23 +56,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": {
-          "a": 11
-        },
-        "output": 11,
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "301b7e0ffea8e8b604ac19874caf27117ae12a6bda8e8b49a7bead7f21d42d89"
+      "content_fingerprint": "6c04214e112441ea9df65773692e816f70aaf2015da520a027462fd44787b313"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'AttrSimpleFixedName' (AD-021 / FR-029); seed provenance at evals/seeds/syn-attr-simple-fixed-name.json.",

@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--other",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"other\" removed (OQ-026b).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-variation-1",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
         "acceptance": "accepted"
       }
     ],
@@ -39,6 +39,14 @@
       },
       {
         "id": "c-2",
+        "input": {},
+        "output": "unknown",
+        "satisfies": [
+          "ob-key-deletion--other"
+        ]
+      },
+      {
+        "id": "c-3",
         "input": {
           "other": 7
         },
@@ -46,23 +54,13 @@
         "satisfies": [
           "ob-variation-1"
         ]
-      },
-      {
-        "id": "c-3",
-        "input": {
-          "other": 11
-        },
-        "output": "unknown",
-        "satisfies": [
-          "ob-variation-2"
-        ]
       }
     ],
     "waivers": [],
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "50128803f46545b5634f21042f67d996ded4443366d5bd6ac5aaa8f07208b40e"
+      "content_fingerprint": "d9cd0c645361e9be6c6483fd9fad14ae53cc9eb7fe8ebb22c20352efa63fa7e4"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FormatWithDefault' (AD-021 / FR-029); seed provenance at evals/seeds/syn-format-with-default.json.",

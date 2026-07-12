@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--a",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"a\" removed (OQ-026b).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-key-deletion--c",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"c\" removed (OQ-026b).",
         "acceptance": "accepted"
       }
     ],
@@ -44,29 +44,26 @@
       {
         "id": "c-2",
         "input": {
-          "a": "variation-alpha",
-          "c": "variation-beta"
+          "c": "d"
         },
         "output": {
-          "a": "variation-alpha",
-          "c": "variation-beta"
+          "a": "default",
+          "c": "d"
         },
         "satisfies": [
-          "ob-variation-1"
+          "ob-key-deletion--a"
         ]
       },
       {
         "id": "c-3",
         "input": {
-          "a": "variation-beta",
-          "c": "variation-gamma"
+          "a": "b"
         },
         "output": {
-          "a": "variation-beta",
-          "c": "variation-gamma"
+          "a": "b"
         },
         "satisfies": [
-          "ob-variation-2"
+          "ob-key-deletion--c"
         ]
       }
     ],
@@ -74,7 +71,7 @@
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "e777cd4874433ad1ad22c9a78b458395e8117fca1a806b407c1d6105a43fa448"
+      "content_fingerprint": "e6c7b2e454b989e1f0fa36007bfea182c8c9e5445dfe8cb913311a5c5ac63012"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'JoinWithStaticNoOverrides' (AD-021 / FR-029); seed provenance at evals/seeds/syn-join-with-static-no-overrides.json.",

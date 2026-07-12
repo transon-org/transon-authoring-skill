@@ -14,15 +14,15 @@
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-1",
+        "id": "ob-key-deletion--address",
         "kind": "custom",
-        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"address\" removed (OQ-026b).",
         "acceptance": "accepted"
       },
       {
-        "id": "ob-variation-2",
+        "id": "ob-key-deletion--name",
         "kind": "custom",
-        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "description": "Key deletion: the corpus data with root key \"name\" removed (OQ-026b).",
         "acceptance": "accepted"
       }
     ],
@@ -44,29 +44,26 @@
       {
         "id": "c-2",
         "input": {
-          "address": {
-            "city": "variation-alpha",
-            "zip": "variation-beta"
-          },
-          "name": "variation-gamma"
+          "name": "Ada"
         },
-        "output": "variation-alpha",
+        "output": {
+          "$transon_authoring": "NO_CONTENT"
+        },
         "satisfies": [
-          "ob-variation-1"
+          "ob-key-deletion--address"
         ]
       },
       {
         "id": "c-3",
         "input": {
           "address": {
-            "city": "variation-beta",
-            "zip": "variation-gamma"
-          },
-          "name": "variation-alpha"
+            "city": "London",
+            "zip": "EC1A 1BB"
+          }
         },
-        "output": "variation-beta",
+        "output": "London",
         "satisfies": [
-          "ob-variation-2"
+          "ob-key-deletion--name"
         ]
       }
     ],
@@ -74,7 +71,7 @@
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "d9a250cd93b87c9b348ce8b8c71c9644d407d033019488397c5d5518af7aaf65"
+      "content_fingerprint": "9ab90c2f71bb1b9d4c32c9d3a4747302f5da9728b0d1943bffde2e9271b061f4"
     }
   },
   "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'RecipeReadNestedValue' (AD-021 / FR-029); seed provenance at evals/seeds/syn-recipe-read-nested-value.json.",
