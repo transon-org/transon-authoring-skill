@@ -1302,7 +1302,11 @@ work and do not gate any milestone.
   `provider: "anthropic"`, `model_id: "claude-sonnet-5"`,
   `max_output_tokens: 8192`, `tool_budget: 32`, `runs_per_fixture: 3`,
   `pass_rule: "majority"`, `seed: null` (rev 2026-07-12: `temperature` pin dropped — see §11.8).
-  Changing any is an explicit eval-policy commit.
+  Changing any is an explicit eval-policy commit. *(rev 2026-07-12, OQ-024/AD-021: the
+  `model_id` above is the A2-standup **initial** value and is superseded by the §11.8 gate-model
+  policy — `claude-haiku-4-5-20251001` becomes the pin effective from the ordered eval-policy
+  commit that swaps `runner.json` and resets the baseline; until that commit lands, these
+  committed values remain the in-force gate identity.)*
 - **OQ-018** — **Resolved (2026-07-11, A2 standup):** all edges resolved to the A1-implemented
   behavior, now normative in §11.1 ("Edge semantics"):
   (a) **Placeholder:** `Confirmation.content_fingerprint` is required; the normative
