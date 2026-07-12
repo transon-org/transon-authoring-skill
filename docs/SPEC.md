@@ -287,7 +287,8 @@ No console-script product; no MCP.
   satisfy several obligations, and the generator prefers packing obligations into existing cases
   over adding cases. If distinct cases would still exceed six, applicable kinds are dropped
   (their obligations not emitted) in this fixed order until the budget fits:
-  `list_singleton`, then `optional_present`, then `list_many`; happy path, `list_empty`,
+  `list_singleton`, then `optional_present`, then `list_many` (order extended by OQ-026d — the
+  OQ-026 custom kinds drop before all of these); happy path, `list_empty`,
   `optional_absent`, and the `NO_CONTENT`/`writes` custom kinds are never dropped (at most six
   of those can apply, so the cap is always satisfiable). If the applicable kinds yield fewer
   than three distinct cases (e.g. a scalar seed with no arrays, optional keys, `NO_CONTENT`
@@ -1470,7 +1471,11 @@ work and do not gate any milestone.
   wrong against the pinned corpus: `FormatWithDefault`'s `label` accessor carries no `default`
   (the pinned engine absorbs the missing key to `NO_CONTENT` and the enclosing `format` rule
   does the defaulting), so the motivating label-present branch derived nothing; the OQ-025a
-  optional-key predicate itself is unchanged.)*;
+  optional-key predicate itself is unchanged. **Residual, tracked here:** even under the widened
+  set that branch stays uncovered — the engine formats the pattern against the computed *value*,
+  so `'{label}'` needs a dict-shaped addition the fixed substitution table cannot produce; the
+  candidate is derived and engine-rejected (silently skipped per (b)). Covering it would take
+  shape-aware addition values — a candidate wave-3 design decision, non-gating per §14.)*;
   (ii) *key deletion* — for every root-level key not already covered by an `optional_absent`
   obligation, one `kind: "custom"` obligation/case pair: the corpus `data` with that key removed.
   Each root key variation is emitted iff its dry-run succeeds and is silently skipped otherwise —
