@@ -211,6 +211,15 @@ No console-script product; no MCP.
   are explicit eval-policy commits per §11.8. Synthetic SampleSets are **evals/CI fixtures
   only** — they never substitute for user confirmation in interactive authoring (AD-014/AD-016
   untouched).
+- **AD-022 — Observability: mechanical records over self-report (added 2026-07-12).** Two
+  layers. (1) The skill MAY self-report an ordered `trace` in `AuthoringResult` (§11.5,
+  FR-031) — **diagnostic only**: never an input to scoring, gating, or `verify`, and never
+  trusted as evidence a step actually ran (a model can misreport its own steps). (2) The
+  **authoritative** step record is mechanical: eval episodes persist full tool-call transcripts
+  and the `check_evals` report aggregates failure modes from submitted envelopes (§11.8,
+  FR-032). Effectiveness questions — *which step failed, how often, at what cost* — are
+  answered from layer 2; layer 1 adds narrative color in interactive sessions. Gates and
+  determinism (NFR-002) are untouched: traces and transcripts are artifacts, never gate inputs.
 
 ---
 
@@ -346,6 +355,24 @@ No console-script product; no MCP.
   addition/deletion customs, the frozen `NO_CONTENT` probe count, and the extended drop order —
   are fixed in OQ-026.
 
+### Observability
+- **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
+  MAY carry `trace`: an ordered array of `TraceEntry` (§11.5) — one entry per protocol step the
+  skill performed (config, grounding, sample-loop rounds, confirm, draft, each verify/repair
+  cycle, review, result), each carrying the verbatim `python -m transon_authoring` invocation
+  when one ran and a step-local outcome. The skill body instructs filling it in interactive
+  sessions. Diagnostic only: schema-validated when present, ignored by scoring and gates,
+  absence never invalidates a result, content never treated as ground truth (AD-022).
+- **FR-032** — *(added 2026-07-12, AD-022)* **Eval episode transcripts + failure attribution.**
+  Full `check_evals` runs persist one `EpisodeTranscript` per episode (shape in §11.8) under a
+  run-artifact directory (`--transcripts-dir`); transcripts are **never committed** to the repo
+  (repo hygiene + NFR-011) — the credential-holding dispatch workflow retains them as build
+  artifacts. The gate report gains a `failure_modes` aggregation per bucket, derived
+  mechanically from episode results: for submitted envelopes the §11.5 `status` (suffixed with
+  `verdict.failed_stage` when present, e.g. `verify-failed/match`), otherwise the harness
+  outcome class (`no_submit`, `budget_exceeded`, `infra_error`). Scoring, targets, baseline,
+  and lint semantics are unchanged by the presence or absence of transcripts.
+
 ### Install CI
 - **FR-019** — CI install checks:
   - **Claude Code:** structural install at documented path; plus headless listing **if** OQ-010
@@ -473,6 +500,15 @@ No console-script product; no MCP.
   reference into `docs/SPEC.md`, or carries requirement-ID citations outside markdown comments;
   a self-contained skill body and adapters lint **green**. Mentions of the engine's own
   `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint.
+- **AC-033** — *(FR-031, added 2026-07-12)* An `AuthoringResult` carrying `trace` validates
+  against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
+  without `trace` remains valid; a malformed `trace` fails schema validation like any other
+  field.
+- **AC-034** — *(FR-032, added 2026-07-12)* A full `check_evals` run with `--transcripts-dir`
+  writes one `EpisodeTranscript` per episode, each carrying the episode's ordered `tool_calls`
+  and the submitted envelope verbatim; the report's `failure_modes` equals a hand-computed
+  histogram over the same episode results; the same run without `--transcripts-dir` produces
+  identical scoring and gate outcomes.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -886,9 +922,23 @@ AuthoringResult = {
   gaps?: Gap[],
   last_candidate?: JsonValue,
   samples_path?: string,
-  repair_count?: number           # repairs consumed by the skill loop
+  repair_count?: number,          # repairs consumed by the skill loop
+  trace?: TraceEntry[]            # FR-031 self-reported step log; diagnostic only (AD-022)
+}
+
+TraceEntry = {
+  seq: integer,                   # 1-based, contiguous, conversation order
+  step: "config" | "ground" | "propose" | "present-gaps" | "confirm"
+      | "draft" | "verify" | "repair" | "review" | "result",
+  summary: string,                # one line: what happened at this step
+  command?: string,               # verbatim `python -m transon_authoring …`, when one ran
+  outcome?: string                # step-local outcome, e.g. "gaps: 2", "failed_stage: match"
 }
 ```
+
+`trace` is self-reported by the skill and **diagnostic only** (AD-022): consumers MUST NOT use
+it for scoring, gating, or as evidence a step actually ran — the mechanical §11.8 transcript is
+the authoritative step record in evals. Absence of `trace` never invalidates a result.
 
 | status | When |
 |---|---|
@@ -1080,6 +1130,26 @@ EvalFixture = {
   provider client behind the optional extra `transon-authoring[evals]`; full runs live in a
   credential-holding dispatch workflow, per-PR CI runs `check_evals --lint` + fake-provider unit
   tests.
+- **Transcripts & attribution (FR-032 / AD-022, added 2026-07-12):** full runs write one
+  `EpisodeTranscript` JSON per episode to `--transcripts-dir`; **never committed** to the repo
+  (repo hygiene + NFR-011) — the dispatch workflow retains the directory as a build artifact:
+  ```
+  EpisodeTranscript = {
+    schema_version: "1.0",
+    fixture_id: string,
+    run_index: integer,             # 0-based within runs_per_fixture
+    model_id: string,
+    outcome: string,                # EpisodeResult outcome class
+    tool_calls: [ { seq: integer, name: string, input: JsonValue, result: JsonValue } ],
+    submitted: AuthoringResult | null,
+    error: string | null
+  }
+  ```
+  The gate report gains `failure_modes`: per bucket, a histogram keyed by the submitted §11.5
+  `status` (suffixed with `verdict.failed_stage` when present, e.g. `"verify-failed/match"`) or,
+  when nothing was submitted, the outcome class. Derived mechanically from episode results;
+  transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
+  a run without `--transcripts-dir` scores identically.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
 - **Synthetic fixtures (AD-021 / FR-029):** fixtures minted from snapshot `docs.examples` are
@@ -1152,7 +1222,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030) |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030); full runs emit FR-032 transcripts + `failure_modes` (non-gating report artifacts, AC-034) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
@@ -1187,15 +1257,16 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
   NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
 - **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses;
-  interactive review loop per FR-030 (rev 2026-07-12); plus the
+  interactive review loop per FR-030 (rev 2026-07-12); observability per FR-031/FR-032 —
+  `trace` schema field + eval transcripts/attribution (rev 2026-07-12, AD-022); plus the
   AD-021/FR-029 improvement-loop deliverables (rev 2026-07-12): synthetic-fixture generator +
   `evals/seeds/` provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted
   synthetic fixtures); the §11.8 eval-policy commit swapping `evals/runner.json` to the
   small-model pin with the baseline reset. *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011).
   *DoD:* FR-029 landed (AC-030 green); **authoring target met under the small-model pin**
   (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave;
-  AC-003/004/010–014/017/019/025/026/031 green (AC-031's conversational half by skill-body
-  tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it).
+  AC-003/004/010–014/017/019/025/026/031/033/034 green (AC-031's conversational half by
+  skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it).
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
   OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint; the `SKILL.md`-side
@@ -1572,6 +1643,8 @@ work and do not gate any milestone.
 - Privacy leaks in fixtures → NFR-011.
 - Adapter drift → parity gate.
 - Dangling references in shipped skill/adapters → NFR-012 + parity lint (AC-032).
+- Fabricated/misreported self-trace taken as evidence → AD-022: trace is diagnostic only; the
+  mechanical §11.8 transcript is the authoritative record; neither gates.
 - Review-loop fatigue (user rubber-stamps or the loop never ends) → three explicit exits,
   no auto-approve, honest `deferred`/`aborted` statuses (FR-030).
 - Repair blowup → FR-007 cap.
@@ -1615,6 +1688,8 @@ excluded from active coverage.
 | FR-028 | AC-027, AC-028 | A1 | profile-knob reject + timeout worker unit |
 | FR-029 | AC-030 | A3 | check_evals lint + generator unit |
 | FR-030 | AC-031, AC-012 | A3 | skill-body unit + UC-001 walkthrough |
+| FR-031 | AC-033 | A3 | schema unit + skill-body unit |
+| FR-032 | AC-034 | A3 | check_evals unit |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
