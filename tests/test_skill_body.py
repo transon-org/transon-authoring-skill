@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import json
 import re
 from pathlib import Path
 
@@ -93,14 +94,15 @@ def test_fr_001_skill_body_documents_grounded_flow():
         "## 3. Sample loop",
         "## 4. Draft",
         "## 5. Verify & repair",
-        "## 6. Result",
+        "## 6. Review",
+        "## 7. Result",
     ):
         assert heading in body, f"missing section heading: {heading}"
     assert "<!-- sample-loop protocol: FR-023/024/025 -->" in body
     assert "<!-- repair protocol: FR-007/NFR-006 -->" in body
 
-    # Section 6 carries the full section-11.5 status table: all nine statuses.
-    result_section = body.split("## 6. Result", 1)[1]
+    # Section 7 carries the full section-11.5 status table: all nine statuses.
+    result_section = body.split("## 7. Result", 1)[1]
     for status in (
         "matched",
         "need-samples",
@@ -646,3 +648,126 @@ def test_ac_019_scripted_loop_exhausts_after_repair_attempts():
     assert schema_violations(result, "authoring_result.json") == []
     assert result["repair_count"] == repair_attempts
     assert "template" not in result
+
+
+# ---------------------------------------------------------------------------
+# FR-030 / AC-031 / AC-012 — interactive review loop (section 6 protocol) and
+# the UC-001 approve walkthrough.
+# ---------------------------------------------------------------------------
+
+
+def _review_section() -> str:
+    """The `## 6. Review` section body (up to `## 7.`)."""
+    body = _body()
+    section = body.split("## 6. Review", 1)[1].split("## 7.", 1)[0]
+    assert "<!-- interactive review: FR-030 / AC-031 / AC-012 -->" in section, (
+        "review-loop traceability marker missing from section 6"
+    )
+    return section
+
+
+def test_fr_030_ac_031_review_loop():
+    """FR-030 / AC-031 / AC-012: in an interactive session a matched template
+    is presented WITH its Verdict for user review before emission; exactly
+    three bold exits (approve / revise / stop); approve -> `matched`; NL revise
+    -> a fresh `repair_attempts` budget + re-verify + re-present only when
+    matched; sample-feedback revise -> `fingerprint_mismatch` -> re-enter the
+    sample loop; stop -> `deferred` / `aborted` with no template; the loop is
+    unbounded and never auto-approves; review is ADDITIONAL to, not a
+    substitute for, the verify gate; non-interactive/CI emits matched without
+    review."""
+    section = _review_section()
+
+    # Presented only after a matched verify, template together with its Verdict.
+    assert _has(
+        r"ok:\s*true.{0,80}?assurance:\s*\"matched\"", section
+    ), "review does not gate presentation on a matched verify"
+    assert _has(
+        r"present.{0,200}?template.{0,120}?verdict", section
+    ), "review does not present the matched template together with its Verdict"
+
+    # Exactly three bold exits.
+    for exit_name in ("approve", "revise", "stop"):
+        assert _has(rf"\*\*{exit_name}\*\*", section), (
+            f"FR-030 review exit {exit_name!r} not defined in section 6"
+        )
+
+    # approve -> matched success envelope.
+    assert _has(
+        r"approve.{0,300}?status:\s*\"matched\"", section
+    ), "approve exit does not emit status matched"
+
+    # NL-only revise -> fresh repair_attempts budget + re-verify + re-present
+    # only when the new candidate verifies matched.
+    assert _has(r"fresh\s+`?repair_attempts`?\s+budget", section), (
+        "NL revise does not grant a fresh repair_attempts budget"
+    )
+    assert _has(
+        r"re-?present.{0,120}?only\s+when.{0,60}?matched", section
+    ), "NL revise does not re-present only on a matched re-verify"
+
+    # Sample-feedback revise -> SampleSet edit flips confirmed via
+    # fingerprint_mismatch and re-enters the sample loop.
+    assert _has(
+        r"sampleset\s+edit.{0,200}?fingerprint_mismatch", section
+    ), "sample-feedback revise does not flip confirmed via fingerprint_mismatch"
+    assert _has(
+        r"re-?enter.{0,80}?sample\s+loop", section
+    ), "sample-feedback revise does not re-enter the sample loop"
+
+    # stop -> deferred / aborted, with no template.
+    assert _has(r"stop.{0,300}?status:\s*\"deferred\"", section)
+    assert _has(r"status:\s*\"aborted\"", section)
+    assert _has(r"no\s+template", section), "stop exit does not withhold the template"
+
+    # Unbounded discipline; never auto-approve; silence is not approval.
+    assert _has(r"unbounded", section), "review loop is not stated unbounded"
+    assert _has(r"never\s+auto.approve", section), "review does not forbid auto-approve"
+
+    # Additional to, not a substitute for, the verify gate.
+    assert _has(
+        r"additional\s+to.{0,80}?substitute", section
+    ), "review is not stated as additional to (not a substitute for) verify"
+
+    # Non-interactive/CI emits matched without a review step.
+    assert _has(
+        r"non-interactive.{0,200}?(no\s+review|matched.{0,80}?directly)", section
+    ), "non-interactive/CI direct-emit rule missing from review section"
+
+
+def test_uc_001_walkthrough_review_approve():
+    """UC-001 (rev 2026-07-12, FR-030) — scripted happy path over library calls
+    only: a confirmed, coverage-complete SampleSet clears the section-3 gate
+    (`ok_for_verify`), its template verifies matched (section 5), and the user's
+    **approve** review exit (section 6) assembles the final success envelope — a
+    schema-valid `matched` AuthoringResult carrying the template. Fixtures are
+    the committed AC-001 hand-path artifacts (engine-verified at authoring
+    time)."""
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "ac001"
+    sample_set = json.loads(
+        (fixtures / "sample_set.json").read_text(encoding="utf-8")
+    )
+    template = json.loads((fixtures / "template.json").read_text(encoding="utf-8"))
+
+    # Section 3 gate: the confirmed, coverage-complete SampleSet is ready.
+    check = check_samples(sample_set)
+    assert check["ok_for_verify"] is True
+
+    # Section 5 gate: the template verifies matched (AD-004).
+    verdict = verify(template, sample_set)
+    assert verdict["ok"] is True
+    assert verdict["assurance"] == "matched"
+
+    # Section 6 approve exit: the reviewer accepts, so the final envelope is the
+    # success AuthoringResult — the ONLY place a `template` is emitted.
+    result = {
+        "schema_version": "1.0",
+        "ok": True,
+        "status": "matched",
+        "explanation": "User reviewed the matched template and approved emission.",
+        "template": template,
+        "verdict": verdict,
+    }
+    assert schema_violations(result, "authoring_result.json") == []
+    assert result["template"] == template
+    assert result["status"] == "matched"

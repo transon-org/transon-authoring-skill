@@ -43,6 +43,8 @@ import check_evals  # noqa: E402
 import eval_harness  # noqa: E402
 from check_evals import aggregate, lint_evals, score_episode  # noqa: E402
 
+from transon_authoring._ingress import schema_violations  # noqa: E402
+
 
 def run_check(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -400,6 +402,23 @@ def refuse_result(status="aborted"):
     }
 
 
+def verify_failed_result(stage="match"):
+    """A schema-valid verify-failed AuthoringResult carrying
+    verdict.failed_stage (§11.5) — the FR-032 status/stage failure label."""
+    return {
+        "schema_version": "1.0",
+        "ok": False,
+        "status": "verify-failed",
+        "explanation": "candidate failed verify at the match stage",
+        "verdict": {
+            "schema_version": "1.0",
+            "ok": False,
+            "failed_stage": stage,
+            "errors": [],
+        },
+    }
+
+
 def corpus_scores(**overrides):
     """Per-fixture score plan for orchestration tests: default all-pass."""
     plan = {fid: "pass" for fid in ALL_FIXTURES}
@@ -407,18 +426,30 @@ def corpus_scores(**overrides):
     return plan
 
 
-def orchestrate(monkeypatch, root, scores_by_id, update_baseline=False):
+def orchestrate(
+    monkeypatch,
+    root,
+    scores_by_id,
+    update_baseline=False,
+    transcripts_dir=None,
+    episode_for=None,
+):
     """Run `check_evals.main` in full-run mode, fully offline (OQ-017e):
     env key faked, provider factory stubbed, `eval_harness.run_fixture`
     scripted, and `score_episode` replaced by the episode's planned score.
+
+    ``episode_for(fixture)`` optionally supplies a richer EpisodeResult
+    (e.g. carrying ``tool_call_log`` + a schema-invalid ``submitted``) for the
+    FR-032 transcript path; ``transcripts_dir`` passes ``--transcripts-dir``.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
     monkeypatch.setattr(check_evals, "_build_provider", lambda cfg: object())
 
     def scripted_run_fixture(fixture, runner_cfg, provider, repo_root):
-        return dict(
-            episode(outcome="submitted"), score=scores_by_id[fixture["id"]]
+        base = episode_for(fixture) if episode_for is not None else episode(
+            outcome="submitted"
         )
+        return dict(base, score=scores_by_id[fixture["id"]])
 
     monkeypatch.setattr(eval_harness, "run_fixture", scripted_run_fixture)
     monkeypatch.setattr(
@@ -427,6 +458,8 @@ def orchestrate(monkeypatch, root, scores_by_id, update_baseline=False):
     argv = ["--root", str(root)]
     if update_baseline:
         argv.append("--update-baseline")
+    if transcripts_dir is not None:
+        argv += ["--transcripts-dir", str(transcripts_dir)]
     return check_evals.main(argv)
 
 
@@ -628,6 +661,140 @@ def test_fr_017_oq_016_update_baseline_writes_sorted_ids(
     expected = sorted(ALL_FIXTURES)
     assert baseline == {"schema_version": "1.0", "passing": expected}
     assert baseline["passing"] == sorted(baseline["passing"])
+
+
+def test_fr_032_ac_034_failure_modes_histogram():
+    # FR-032 / AC-034 — the report's failure_modes is a per-bucket histogram
+    # over the runs that FAILED their bucket's OQ-016 rule (plus reported-only
+    # infra_error runs), keyed by the scored outcome under the §11.8
+    # precedence. Real score_episode throughout; the reverify_failed case
+    # spawns the pinned-engine re-verify subprocess (kept minimal).
+    corrupted = copy.deepcopy(CORRECT_TEMPLATE)
+    corrupted["funcs"][0]["name"] = "orderz"  # attr gone -> reverify fails
+
+    refuse_fixture = {"id": "refuse-invented", "expect": "refuse"}
+    fixtures = [FLATTEN_FIXTURE, refuse_fixture]
+    per_fixture = {
+        FLATTEN_FIXTURE["id"]: [
+            episode(outcome="no_submit"),  # -> no_submit
+            episode(outcome="budget_exceeded"),  # -> budget_exceeded
+            episode(submitted=None),  # -> invalid_submission
+            episode(outcome="infra_error", error="api down"),  # -> infra_error
+            episode(submitted=matched_result(corrupted)),  # -> reverify_failed
+            episode(submitted=verify_failed_result("match")),  # verify-failed/match
+            episode(submitted=matched_result(CORRECT_TEMPLATE)),  # PASS -> excluded
+        ],
+        "refuse-invented": [
+            # Invented success in the refuse bucket keys as "matched", not the
+            # score (AD-004): the status only labels the failure.
+            episode(submitted=matched_result(CORRECT_TEMPLATE)),  # -> matched
+            episode(refuse_result("aborted")),  # PASS refusal -> excluded
+        ],
+    }
+    report = aggregate(fixtures, per_fixture, DEFAULT_TARGETS, EMPTY_BASELINE)
+    # All three bucket keys present; correction is an empty histogram.
+    assert report["failure_modes"] == {
+        "authoring": {
+            "no_submit": 1,
+            "budget_exceeded": 1,
+            "invalid_submission": 1,
+            "infra_error": 1,
+            "reverify_failed": 1,
+            "verify-failed/match": 1,
+        },
+        "adversarial": {"matched": 1},
+        "correction": {},
+    }
+
+
+def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
+    monkeypatch, tmp_repo, tmp_path, capsys
+):
+    # FR-032 / AC-034 — a full run with --transcripts-dir writes exactly one
+    # EpisodeTranscript per (fixture, run_index), each schema-valid and
+    # carrying the ordered tool_calls + the submitted payload VERBATIM (even
+    # a deliberately schema-invalid one). The same run WITHOUT --transcripts-dir
+    # produces an identical exit code and identical report — only files differ.
+    transcripts_dir = tmp_path / "transcripts"
+    scores = corpus_scores()  # all pass; transcripts change no scoring
+
+    invalid_submission = {"totally": "not an AuthoringResult", "ok": "maybe"}
+    tool_log = [
+        {
+            "seq": 1,
+            "name": "write_file",
+            "input": {"path": "t.json", "content": "{}"},
+            "result": {"ok": True, "path": "t.json"},
+        },
+        {
+            "seq": 2,
+            "name": "submit_result",
+            "input": {"result": invalid_submission},
+            "result": None,
+        },
+    ]
+
+    def episode_for(fixture):
+        return dict(
+            episode(submitted=invalid_submission, outcome="submitted", tool_calls=2),
+            tool_call_log=copy.deepcopy(tool_log),
+        )
+
+    exit_with = orchestrate(
+        monkeypatch,
+        tmp_repo,
+        scores,
+        transcripts_dir=transcripts_dir,
+        episode_for=episode_for,
+    )
+    report_with, _ = report_from(capsys)
+
+    runner = json.loads(
+        (tmp_repo / "evals" / "runner.json").read_text(encoding="utf-8")
+    )
+    runs = runner["runs_per_fixture"]
+    model_id = runner["model_id"]
+
+    # Exactly one transcript per (fixture, run_index).
+    expected_names = {
+        f"{fid}.{i}.json" for fid in ALL_FIXTURES for i in range(runs)
+    }
+    written = {p.name for p in transcripts_dir.glob("*.json")}
+    assert written == expected_names
+    assert len(written) == len(ALL_FIXTURES) * runs
+
+    # Each transcript is schema-valid and carries the ordered tool_calls plus
+    # the submitted payload VERBATIM (schema-invalid here).
+    for fid in ALL_FIXTURES:
+        for i in range(runs):
+            transcript = json.loads(
+                (transcripts_dir / f"{fid}.{i}.json").read_text(encoding="utf-8")
+            )
+            assert schema_violations(transcript, "episode_transcript.json") == []
+            assert transcript["fixture_id"] == fid
+            assert transcript["run_index"] == i
+            assert transcript["model_id"] == model_id
+            assert transcript["outcome"] == "submitted"
+            assert transcript["tool_calls"] == tool_log  # ordered, verbatim
+            assert transcript["submitted"] == invalid_submission  # VERBATIM
+            assert transcript["error"] is None
+
+    # The same run WITHOUT --transcripts-dir scores identically (parity).
+    exit_without = orchestrate(
+        monkeypatch, tmp_repo, scores, episode_for=episode_for
+    )
+    report_without, _ = report_from(capsys)
+
+    assert exit_with == exit_without == 0
+    assert report_with["rates"] == report_without["rates"]
+    assert report_with["red"] == report_without["red"]
+    assert {
+        fid: entry["majority"] for fid, entry in report_with["fixtures"].items()
+    } == {
+        fid: entry["majority"] for fid, entry in report_without["fixtures"].items()
+    }
+    # The whole report is identical — transcripts are a pure side artifact.
+    assert report_with == report_without
 
 
 def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):

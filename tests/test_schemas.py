@@ -8,6 +8,7 @@ groundwork: failure envelopes always carry ``ok: false`` plus a §11.5/§11.6
 ``status``.
 """
 
+import copy
 import json
 from importlib import resources
 from pathlib import Path
@@ -37,6 +38,7 @@ EXPECTED_SCHEMA_FILES = {
     "eval_runner.json",  # §11.8 evals/runner.json (AD-020 / FR-017)
     "eval_targets.json",  # §11.8 evals/targets.json (OQ-016e / FR-017)
     "eval_baseline.json",  # §11.8 evals/baseline.json (OQ-016f / FR-017)
+    "episode_transcript.json",  # §11.8 EpisodeTranscript (FR-032 / AC-034)
 }
 
 # §11.1 GapCode — full closed enum.
@@ -320,6 +322,52 @@ GOLDEN_CLI_ERROR = {
     ],
 }
 
+# FR-032 / AC-034: one EpisodeTranscript per episode; the submitted payload is
+# recorded VERBATIM (possibly schema-invalid) and tool_calls is the ordered
+# per-call record (submit_result carries result: null).
+GOLDEN_EPISODE_TRANSCRIPT = {
+    "schema_version": "1.0",
+    "fixture_id": "seed-matched-flatten-orders",
+    "run_index": 0,
+    "model_id": "claude-eval-model",
+    "outcome": "submitted",
+    "tool_calls": [
+        {
+            "seq": 1,
+            "name": "write_file",
+            "input": {"path": "t.json", "content": "{}"},
+            "result": {"ok": True, "path": "t.json"},
+        },
+        {
+            "seq": 2,
+            "name": "transon_authoring",
+            "input": {"argv": ["verify", "--template", "t.json"]},
+            "result": {"exit_code": 0, "stdout": "{}", "stderr": ""},
+        },
+        {
+            "seq": 3,
+            "name": "submit_result",
+            "input": {"result": {"ok": True}},
+            "result": None,
+        },
+    ],
+    "submitted": {"schema_version": "1.0", "ok": True, "status": "matched"},
+    "error": None,
+}
+
+# FR-032: an infra_error episode with no submission and no tool calls is valid
+# too (error carries the transport-fault string; submitted is null).
+GOLDEN_EPISODE_TRANSCRIPT_INFRA = {
+    "schema_version": "1.0",
+    "fixture_id": "seed-refuse-nonexistent-mode",
+    "run_index": 2,
+    "model_id": "claude-eval-model",
+    "outcome": "infra_error",
+    "tool_calls": [],
+    "submitted": None,
+    "error": "ConnectionError: api unreachable",
+}
+
 GOLDEN_FIXTURES = [
     ("sample_set.json", GOLDEN_SAMPLE_SET),
     ("sample_check.json", GOLDEN_SAMPLE_CHECK),
@@ -329,6 +377,8 @@ GOLDEN_FIXTURES = [
     ("authoring_result.json", GOLDEN_AUTHORING_RESULT_MATCHED),
     ("authoring_result.json", GOLDEN_AUTHORING_RESULT_FAILURE),
     ("cli_error.json", GOLDEN_CLI_ERROR),
+    ("episode_transcript.json", GOLDEN_EPISODE_TRANSCRIPT),
+    ("episode_transcript.json", GOLDEN_EPISODE_TRANSCRIPT_INFRA),
 ]
 
 
@@ -390,6 +440,29 @@ def test_fr_026_unknown_status_rejected():
     fixture = dict(GOLDEN_AUTHORING_RESULT_FAILURE, status="internal-error")
     # OQ-014a: "internal-error" is CLI-level only, not an AuthoringResult status.
     assert schema_violations(fixture, "authoring_result.json")
+
+
+def test_fr_032_episode_transcript_is_closed_envelope():
+    # FR-032 / AC-034 — EpisodeTranscript is a closed envelope: unknown outcome
+    # enum values, extra top-level keys, and tool-call records missing a
+    # required field are all schema-invalid, while submitted stays unconstrained
+    # (any JsonValue, incl. a schema-invalid AuthoringResult, is accepted).
+    assert schema_violations(
+        dict(GOLDEN_EPISODE_TRANSCRIPT, outcome="exploded"),
+        "episode_transcript.json",
+    )
+    assert schema_violations(
+        dict(GOLDEN_EPISODE_TRANSCRIPT, unexpected=1), "episode_transcript.json"
+    )
+    bad_tool_call = copy.deepcopy(GOLDEN_EPISODE_TRANSCRIPT)
+    del bad_tool_call["tool_calls"][0]["result"]  # result is required
+    assert schema_violations(bad_tool_call, "episode_transcript.json")
+    # A deliberately schema-invalid submitted payload is retained verbatim: the
+    # transcript itself stays valid (OQ-016(b) failures stay diagnosable).
+    invalid_submission = dict(
+        GOLDEN_EPISODE_TRANSCRIPT, submitted={"not": "an AuthoringResult"}
+    )
+    assert schema_violations(invalid_submission, "episode_transcript.json") == []
 
 
 def test_fr_026_unknown_gap_code_rejected():

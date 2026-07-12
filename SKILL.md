@@ -24,8 +24,8 @@ Precedence for Transon semantics, highest first:
 
 ## Procedure
 
-Work through sections 1–6 IN ORDER for every authoring request. Do exactly what each step says.
-Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (section 6).
+Work through sections 1–7 IN ORDER for every authoring request. Do exactly what each step says.
+Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (section 7).
 
 ## 1. Config & samples location
 
@@ -69,7 +69,7 @@ Gate: drive the sample conversation until
 `check-samples` output, never from your own judgment). Do not draft any template until both are
 true. Confirmation comes only from the user (interactive) or a pre-confirmed CI
 fixture — the library never sets `confirmed: true`. Conversation exits are
-confirm / defer / abort; map defer/abort to section 6 statuses. Run the protocol below
+confirm / defer / abort; map defer/abort to section 7 statuses. Run the protocol below
 in order: 3.1 → 3.2 → 3.3, with 3.4 governing every exit.
 
 <!-- sample-loop protocol: FR-023/024/025 -->
@@ -164,17 +164,44 @@ be captured into the project's shared eval-fixture corpus: commit only after pri
    the section 4 rules and re-run `verify`.
 4. Each re-verify after a repair increments the repair count by 1. Total candidates tried is at
    most `1 + repair_attempts`.
-5. If a re-verify succeeds (`ok: true`, `assurance: "matched"`), go to section 6 with
-   `status: "matched"` and report the repairs consumed in `repair_count`.
+5. If a re-verify succeeds (`ok: true`, `assurance: "matched"`), the candidate is matched — go to
+   section 6 (Review), and report the repairs consumed in `repair_count`.
 6. When the repair count reaches `repair_attempts` and the last verify still failed: STOP — no
    further tries; never loop past the bound. Emit `status: "repair-exhausted"` with
    `ok: false`, `repair_count` set to the repairs consumed (= `repair_attempts`), the last
-   failed Verdict in `verdict`, and the last candidate in `last_candidate` (section 6). Never
+   failed Verdict in `verdict`, and the last candidate in `last_candidate` (section 7). Never
    return an unverified template.
 7. If you stop repairing before the budget is exhausted (without scheduling another repair),
    emit `status: "verify-failed"` instead, with `repair_count` set to the repairs consumed.
 
-## 6. Result
+## 6. Review
+
+<!-- interactive review: FR-030 / AC-031 / AC-012 -->
+
+In an interactive session, after section 5 verifies a candidate — the Verdict has `ok: true` AND
+`assurance: "matched"` — present that matched template TOGETHER WITH its Verdict to the user and
+wait for their decision BEFORE emitting the final `AuthoringResult`. Only matched candidates are
+ever presented; this review is ADDITIONAL to, never a substitute for, the verify gate. The loop is
+unbounded until exactly one of the three exits below happens; never auto-approve; never treat
+silence as approval.
+
+- **approve** — the user accepts the template. Continue to section 7 and emit the success envelope
+  with `status: "matched"`.
+- **revise** — the user supplies feedback. Two kinds, handled differently:
+  - NL-only feedback that rewords or restructures the SAME input/output behavior: draft a new
+    candidate under the section 4 grounding rules and re-run section 5 verify with a **fresh
+    `repair_attempts` budget** for this revision round (each round independently bounded). Re-present
+    to the user only when the new candidate verifies matched.
+  - Feedback that ADDS or CHANGES expected input/output behavior: apply it as SampleSet edits. Any
+    such edit flips `confirmed` back via `fingerprint_mismatch`, sending the flow back through the
+    section 3 sample loop to re-confirm before any redraft — so re-enter that sample loop.
+- **stop** — the user declines the template and ends the request with NO template: emit
+  `status: "deferred"` (stop for now) or `status: "aborted"` (abandon).
+
+Non-interactive/CI runs have no reviewer: emit the matched result directly after section 5, with no
+review step.
+
+## 7. Result
 
 <!-- result envelope: FR-008 / AC-012 / AC-026 / AC-027 -->
 
@@ -184,12 +211,28 @@ status from the table below, and never present a template as success.
 
 | status | when |
 |---|---|
-| `matched` | verify returned `ok: true` with `assurance: "matched"` — the only success |
+| `matched` | verify returned `ok: true` with `assurance: "matched"` — the only success; in interactive sessions, only after the section 6 review **approve** |
 | `need-samples` | stopped with incomplete coverage / need more cases (section 3 gate not met) |
-| `deferred` | the user chose defer during the sample loop |
-| `aborted` | the user chose abort, or you refused because the request cannot be grounded in the pinned metadata (section 2) |
+| `deferred` | the user chose defer during the sample loop, or a section 6 review **stop** (stop for now) |
+| `aborted` | the user chose abort (sample loop or a section 6 review **stop**), or you refused because the request cannot be grounded in the pinned metadata (section 2) |
 | `repair-exhausted` | all `repair_attempts` repair cycles consumed without a matched verdict |
 | `samples-rejected` | `check-samples` (or the verify `samples` stage) failed on a schema-valid SampleSet |
 | `verify-failed` | validate, dry_run, or match failed and you stopped without scheduling another repair |
 | `schema-error` | malformed JSON or unsupported `schema_version` on ingress (CLI exit 2) |
 | `profile-rejected` | the request demanded an out-of-profile execution option (non-default marker/transformer): stop WITHOUT calling verify — or the CLI rejected a reserved knob |
+
+### 7.1 Trace (optional, diagnostic)
+
+<!-- trace: FR-031 / AC-033 (AD-022) -->
+
+In an interactive session you MAY add an ordered `trace` array to the `AuthoringResult`: one
+`TraceEntry` per protocol step you performed. Each entry has a 1-based `seq` (contiguous, in
+conversation order), a `step` — one of `config`, `ground`, `propose`, `present-gaps`, `confirm`,
+`draft`, `verify`, `repair`, `review`, `result` — and a one-line `summary`. When the step ran a
+module command, copy that exact python -m transon_authoring invocation into `command` verbatim,
+and record a step-local `outcome` (e.g. the reported gap count or the `failed_stage`).
+
+`trace` is DIAGNOSTIC ONLY. It never gates anything, is never treated as evidence that a step
+actually ran, and its absence never invalidates a result. Nothing in `trace` may change the
+status, `ok`, or `template` of the `AuthoringResult` you emit — decide those solely from the
+gates in sections 2–5.

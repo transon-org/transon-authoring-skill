@@ -494,6 +494,54 @@ def _majority(scores: list[str]) -> str:
     return "pass" if passes > fails else "fail"
 
 
+def _failure_key(
+    fixture: dict[str, Any], episode: dict[str, Any], score: str
+) -> str:
+    """FR-032 / AC-034 — the ``failure_modes`` histogram key for one FAILED or
+    infra episode, first match in the §11.8 precedence wins. Derived purely
+    from the already-scored result: the submitted status only ever *labels* a
+    failure, it is never the score (AD-004).
+    """
+    if score == "infra":
+        return "infra_error"
+    outcome = episode["outcome"]
+    if outcome == "no_submit":
+        return "no_submit"
+    if outcome == "budget_exceeded":
+        return "budget_exceeded"
+
+    # outcome == "submitted" with score "fail": inspect the submitted envelope.
+    submitted = episode.get("submitted")
+    if not isinstance(submitted, dict) or schema_violations(
+        submitted, "authoring_result.json"
+    ):
+        return "invalid_submission"
+
+    verdict = submitted.get("verdict")
+    claims_matched = (
+        submitted.get("ok") is True
+        and submitted.get("status") == "matched"
+        and "template" in submitted
+        and isinstance(verdict, dict)
+        and verdict.get("ok") is True
+        and verdict.get("assurance") == "matched"
+    )
+    # A matched claim that scored fail can only mean the OQ-016a independent
+    # re-verify rejected it (the claim is never trusted, AD-004). (A matched
+    # fixture always carries a SampleSet — the lint enforces it — so the
+    # "re-verify impossible" score-fail branch is unreachable in practice; and
+    # failure_modes is diagnostic-only and gates nothing regardless.)
+    if fixture["expect"] in ("matched", "matched_correction") and claims_matched:
+        return "reverify_failed"
+
+    # Otherwise label with the submitted §11.5 status, suffixed with the
+    # verdict.failed_stage when present (e.g. "verify-failed/match"; a refuse
+    # bucket key of "matched" is an invented success where refusal was owed).
+    status = submitted.get("status")
+    stage = verdict.get("failed_stage") if isinstance(verdict, dict) else None
+    return f"{status}/{stage}" if stage else str(status)
+
+
 def aggregate(
     fixtures: list[dict[str, Any]],
     per_fixture_episodes: dict[str, list[dict[str, Any]]],
@@ -509,6 +557,17 @@ def aggregate(
     majority (OQ-016f). The correction bucket is reported but gates nothing
     (OQ-016c); its fixtures still participate in the baseline rule.
     """
+    # FR-032 — per-bucket failure-mode histogram over the runs that failed
+    # their bucket's OQ-016 rule plus reported-only infra_error runs, keyed by
+    # the scored outcome (§11.8). Always all three bucket keys, each possibly
+    # empty. Non-gating: derived mechanically from the same scores below.
+    bucket_by_expect = {expect: bucket for expect, bucket in BUCKETS}
+    failure_modes: dict[str, dict[str, int]] = {
+        "authoring": {},
+        "adversarial": {},
+        "correction": {},
+    }
+
     fixtures_report: dict[str, dict[str, Any]] = {}
     majorities: dict[str, str] = {}
     for fixture in fixtures:
@@ -523,6 +582,13 @@ def aggregate(
             ],
             "majority": majorities[fixture_id],
         }
+        bucket = bucket_by_expect[fixture["expect"]]
+        for episode, score in zip(episodes, scores):
+            if score == "pass":
+                continue  # passing runs are excluded from failure_modes
+            key = _failure_key(fixture, episode, score)
+            histogram = failure_modes[bucket]
+            histogram[key] = histogram.get(key, 0) + 1
 
     red: list[str] = []
     rates: dict[str, Any] = {}
@@ -571,6 +637,7 @@ def aggregate(
         "schema_version": "1.0",
         "rates": rates,
         "fixtures": fixtures_report,
+        "failure_modes": failure_modes,
         "red": red,
     }
 
@@ -610,8 +677,47 @@ def _build_provider(runner_cfg: dict[str, Any]):
     return _import_eval_harness().AnthropicProvider(runner_cfg)
 
 
+def write_transcripts(
+    transcripts_dir: Path,
+    fixtures: list[dict[str, Any]],
+    per_fixture_episodes: dict[str, list[dict[str, Any]]],
+    runner_cfg: dict[str, Any],
+) -> None:
+    """FR-032 / AC-034 — persist one EpisodeTranscript JSON per episode to
+    ``transcripts_dir`` (§11.8 shape). A build artifact only: **never
+    committed** to the repo. Derived mechanically from the recorded episodes —
+    changes no scoring, target, baseline, or lint semantics.
+    """
+    transcripts_dir.mkdir(parents=True, exist_ok=True)
+    model_id = runner_cfg["model_id"]
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        for run_index, episode in enumerate(per_fixture_episodes[fixture_id]):
+            transcript = {
+                "schema_version": "1.0",
+                "fixture_id": fixture_id,
+                "run_index": run_index,
+                "model_id": model_id,
+                "outcome": episode["outcome"],
+                "tool_calls": episode.get("tool_call_log", []),
+                # The submit_result payload VERBATIM — possibly schema-invalid,
+                # retained so OQ-016(b) failures stay diagnosable (§11.8).
+                "submitted": episode.get("submitted"),
+                "error": episode.get("error"),
+            }
+            path = transcripts_dir / f"{fixture_id}.{run_index}.json"
+            path.write_text(
+                json.dumps(transcript, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+
 def run_evals(
-    repo_root: Path, *, update_baseline: bool = False, verbose: bool = False
+    repo_root: Path,
+    *,
+    update_baseline: bool = False,
+    verbose: bool = False,
+    transcripts_dir: Path | None = None,
 ) -> int:
     """Full FR-017 eval gate: lint, provider episodes, scoring, aggregation.
 
@@ -661,6 +767,11 @@ def run_evals(
             harness.run_fixture(fixture, runner_cfg, provider, repo_root)
             for _ in range(runs_per_fixture)
         ]
+
+    # FR-032 — persist episode transcripts when a directory is given, before
+    # scoring and regardless of red/green (a build artifact, never committed).
+    if transcripts_dir is not None:
+        write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
 
     report = aggregate(fixtures, per_fixture_episodes, targets, baseline)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -723,6 +834,14 @@ def main(argv: list[str] | None = None) -> int:
         "evals/baseline.json (OQ-016f)",
     )
     parser.add_argument(
+        "--transcripts-dir",
+        type=Path,
+        default=None,
+        help="write one FR-032 EpisodeTranscript JSON per episode to this "
+        "directory (SPEC §11.8); a build artifact only — transcripts are "
+        "never committed to the repo (repo hygiene + NFR-011)",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
@@ -740,6 +859,7 @@ def main(argv: list[str] | None = None) -> int:
             args.root.resolve(),
             update_baseline=args.update_baseline,
             verbose=args.verbose,
+            transcripts_dir=args.transcripts_dir,
         )
 
     failures = lint_evals(args.root.resolve(), verbose=args.verbose)
