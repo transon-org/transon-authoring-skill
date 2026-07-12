@@ -45,6 +45,10 @@ method the SPEC does not yet describe.
 
 ## Decisions locked for this draft
 
+> **Historical (superseded 2026-07-12):** the deferrals below (notably D1) were fulfilled the
+> same day — the SPEC edit landed as AD-021/FR-029/AC-030/OQ-024. They are kept verbatim as the
+> decision record at drafting time.
+
 Recorded from author answers (2026-07-12); change only by editing this RFC.
 
 | # | Topic | Decision |
@@ -134,6 +138,9 @@ Which concrete small model ID is **open** (see OQ-R1 below).
 
 ## What must land in a future SPEC edit (checklist, not done here)
 
+> **Historical (done 2026-07-12):** this checklist landed as AD-021 (item 1, 5), the §11.8
+> gate-model policy (item 2), FR-029/AC-030 (item 3), and the §14 A3 note (item 4).
+
 When the author resumes SPEC work, expect roughly:
 
 1. New AD (or AD-020 amendment): synthetic fixtures from `docs.examples` are an allowed corpus
@@ -176,6 +183,10 @@ Do **not** invent IDs in this draft file.
   (same discipline as `check_snapshot`).
 
 ## Recommendation
+
+> **Historical (fulfilled 2026-07-12):** the RFC was accepted and the SPEC pass happened; the
+> "do not implement until the SPEC edit lands" condition is satisfied. Generator, fixture wave,
+> and the runner-pin swap are now governed by SPEC §14 (A3 DoD), not by this file.
 
 Accept this RFC as the intended direction for corpus growth and small-model gating. Defer
 normative wording and ID issuance until the author’s SPEC pass. Do not implement generator or

@@ -190,7 +190,9 @@ No console-script product; no MCP.
 - **AD-021 — Synthetic eval corpus from `docs.examples`; small-model primary gate (resolves
   OQ-024; absorbs RFC-001).** The pinned snapshot's flat `docs.examples` corpus (121 templates at
   `transon==0.1.7`) is an allowed **fixture factory** for the FR-017 improvement loop:
-  each example seeds one EvalFixture whose SampleSet outputs come **only** from executing the
+  any example MAY seed exactly one EvalFixture (v1 commits only the FR-029 tagged subset of
+  ~25–30 selected seeds; later waves may extend toward all 121). A seeded fixture's SampleSet
+  outputs come **only** from executing the
   seed template under the pinned engine's AD-017 profile (never model memory, never the snapshot
   `result` taken on faith — the corpus pair is re-executed). The **seed template is
   provenance-only**: committed under `evals/seeds/` (FR-029), never placed in the fixture object,
@@ -280,14 +282,25 @@ No console-script product; no MCP.
   `writes` case for writes-capable seeds — these last two are emitted as `kind: "custom"`
   obligations whose `description` names the behavior and whose `target` is omitted); **case 1 is
   always the example's own `data`/`result` pair re-executed through the pinned engine**;
-  remaining cases are synthetic inputs run the same way. Generated confirmations use
+  remaining cases are synthetic inputs run the same way. **Budget rule:** every case — including
+  ones satisfying `kind: "custom"` obligations — counts toward the 6-case cap; one case MAY
+  satisfy several obligations, and the generator prefers packing obligations into existing cases
+  over adding cases. If distinct cases would still exceed six, applicable kinds are dropped
+  (their obligations not emitted) in this fixed order until the budget fits:
+  `list_singleton`, then `optional_present`, then `list_many`; happy path, `list_empty`,
+  `optional_absent`, and the `NO_CONTENT`/`writes` custom kinds are never dropped (at most six
+  of those can apply, so the cap is always satisfiable). Generated confirmations use
   `confirmed: true`, `confirmed_by: "ci"`, no `confirmed_at` (determinism), and the fingerprint
   from the OQ-015 acquisition path. Fixtures are committed under `evals/cases/` **without any
   seed-template field**; provenance is committed at `evals/seeds/<fixture-id>.json` as
   `{ "source_example": string, "template": <Transon JSON>, "generator": { "version": string,
-  "notes"?: string } }`. `check_evals --lint` verifies that every fixture with a seed file
-  **regenerates bit-identically** (§11.1 SampleSet content subset and `content_fingerprint`)
-  from its seed under the current pin (AC-030) — the same drift discipline as `check_snapshot`. v1 scope: a tagged
+  "notes"?: string } }`. `check_evals --lint` verifies, for every fixture with a seed file:
+  (a) **snapshot provenance** — `source_example` names an entry in the pinned snapshot's
+  `docs.examples`, the seed `template` JSON-equals that entry's `template`, and case 1's `input`
+  JSON-equals that entry's `data` (so a seed cannot smuggle in a template that never originated
+  from the corpus, per AD-021); and (b) **regeneration** — the fixture **regenerates
+  bit-identically** (§11.1 SampleSet content subset and `content_fingerprint`) from its seed
+  under the current pin (AC-030) — the same drift discipline as `check_snapshot`. v1 scope: a tagged
   subset (~25–30 seeds, one per tag family) with the remainder as follow-up waves; the
   should-refuse bucket stays hand-authored (no synthesized refuse intents in v1).
 
@@ -386,8 +399,11 @@ No console-script product; no MCP.
   `fingerprint_mismatch`.
 - **AC-030** — *(FR-029 regen gate)* `check_evals --lint` is **red** when any committed fixture
   with a matching `evals/seeds/<fixture-id>.json` does not regenerate bit-identically (SampleSet
-  content subset and `content_fingerprint`) from its seed under the current pin, or when a seed
-  file has no matching fixture; a repo whose seeds and fixtures agree lints **green**.
+  content subset and `content_fingerprint`) from its seed under the current pin; when a seed
+  file has no matching fixture; or when a seed fails FR-029 snapshot provenance
+  (`source_example` absent from the pinned `docs.examples`, seed `template` ≠ that entry's
+  `template`, or case 1 `input` ≠ that entry's `data`). A repo whose seeds, fixtures, and
+  snapshot agree lints **green**.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → PR with template + SampleSet.
