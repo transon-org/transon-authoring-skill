@@ -136,11 +136,31 @@ be captured into eval fixtures under `evals/cases/`: commit only after privacy r
 1. Run `python -m transon_authoring verify --template <template> --samples <path>`.
 2. Success ONLY when the Verdict has `ok: true` AND `assurance: "matched"` (AD-004, AC-013).
    Anything else is a failure — never report or return the template as success.
-3. On a failed verify: repair placeholder — the full repair loop (verbatim engine errors fed
-   back, up to `repair_attempts` cycles, then `repair-exhausted`) lands in the next slice.
-   Until then, stop and report `status: "verify-failed"` per section 6.
+3. On a failed verify: run the repair protocol 5.1. Never return an unverified template.
 
 <!-- repair protocol: FR-007/NFR-006 -->
+
+### 5.1 Repair loop (FR-007, NFR-006)
+
+1. Read `repair_attempts` from `.transon-authoring.json` (section 1); when the config is absent,
+   use the §11.9 default 3 (allowed range 1..10). Enforcing this bound is YOUR job: the library
+   `verify` is single-shot — it never loops and has no repair flag (FR-003).
+2. The repair count starts at 0 after the first failed verify.
+3. To repair: take the failed Verdict's `errors[]` and `diff[]` arrays and feed them VERBATIM
+   into the next candidate draft — quote every engine error and diff entry exactly as returned;
+   never paraphrase, reword, or summarize engine errors (FR-007). Draft the new candidate under
+   the section 4 rules and re-run `verify`.
+4. Each re-verify after a repair increments the repair count by 1. Total candidates tried is at
+   most `1 + repair_attempts` (NFR-006).
+5. If a re-verify succeeds (`ok: true`, `assurance: "matched"`), go to section 6 with
+   `status: "matched"` and report the repairs consumed in `repair_count`.
+6. When the repair count reaches `repair_attempts` and the last verify still failed: STOP — no
+   further tries; never loop past the bound (AC-019). Emit `status: "repair-exhausted"` with
+   `ok: false`, `repair_count` set to the repairs consumed (= `repair_attempts`), the last
+   failed Verdict in `verdict`, and the last candidate in `last_candidate` (section 6). Never
+   return an unverified template.
+7. If you stop repairing before the budget is exhausted (without scheduling another repair),
+   emit `status: "verify-failed"` instead, with `repair_count` set to the repairs consumed.
 
 ## 6. Result
 

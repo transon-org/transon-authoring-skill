@@ -11,6 +11,9 @@ FR-023/FR-024/FR-025 — the conversational sample-loop protocol (propose /
 present / confirm / exits) with the OQ-023 split: AC-011's conversational
 half (fingerprint bound via the OQ-015 acquisition path) plus a scripted
 AC-010 gap→waiver→confirm simulation over library calls only.
+FR-007/NFR-006 — the bounded repair loop (section 5): verbatim engine
+error/diff feedback, `repair_attempts` from ProjectConfig (default 3), and
+a scripted AC-019 exhaustion simulation over library calls only.
 
 These are text-contract tests: they parse SKILL.md for the normative
 statements and markers the A3 slice locked in, resilient to prose tweaks
@@ -25,9 +28,13 @@ import inspect
 import re
 from pathlib import Path
 
+import pytest
+
 import transon_authoring
-from transon_authoring import check_samples
+from transon_authoring import check_samples, verify
 from transon_authoring.__main__ import _build_parser
+from transon_authoring._ingress import IngressError, schema_violations
+from transon_authoring.config import DEFAULT_REPAIR_ATTEMPTS, build_config
 
 SKILL_PATH = Path(__file__).resolve().parent.parent / "SKILL.md"
 
@@ -447,3 +454,195 @@ def test_ac_010_scripted_gap_waiver_flow_end_to_end():
     assert check["ok_for_verify"] is True
     assert check["gaps"] == []
     assert check["content_fingerprint"] == fingerprint
+
+
+# ---------------------------------------------------------------------------
+# FR-007 / NFR-006 / AC-019 — bounded repair loop (section 5 protocol)
+# ---------------------------------------------------------------------------
+
+
+def _repair_section() -> str:
+    """The `## 5. Verify & repair` section body (up to `## 6.`)."""
+    body = _body()
+    section = body.split("## 5. Verify & repair", 1)[1].split("## 6.", 1)[0]
+    assert "<!-- repair protocol: FR-007/NFR-006 -->" in section, (
+        "repair-protocol traceability marker missing from section 5"
+    )
+    return section
+
+
+def test_fr_007_skill_body_states_verbatim_error_feedback_and_bound():
+    """FR-007 / NFR-006: on a failed verify the body feeds the Verdict's
+    `errors[]`/`diff[]` VERBATIM into the next candidate draft (never
+    paraphrased); each re-verify after a repair increments the repair count;
+    total candidates <= 1 + repair_attempts; the loop never runs past the
+    bound and never returns an unverified template. The bound lives in the
+    skill loop only — the library/CLI `verify` stays single-shot (FR-003)."""
+    section = _repair_section()
+
+    # Verbatim engine error/diff feedback into the next draft (FR-007).
+    assert _has(
+        r"errors\[\].{0,80}?diff\[\].{0,300}?verbatim", section
+    ) or _has(
+        r"verbatim.{0,300}?errors\[\].{0,80}?diff\[\]", section
+    ), "FR-007 verbatim errors[]/diff[] feedback rule missing"
+    assert _has(
+        r"never\s+(paraphrase|reword|re-word|summariz)", section
+    ), "FR-007 never-paraphrase-engine-errors rule missing"
+
+    # Counting semantics (FR-007): each re-verify after a repair increments
+    # the repair count; total candidates <= 1 + repair_attempts.
+    assert _has(
+        r"re-?verify.{0,200}?increments?.{0,80}?repair\s+count", section
+    ), "FR-007 repair-count increment rule missing"
+    assert _has(r"1\s*\+\s*`?repair_attempts`?", section), (
+        "FR-007 total-candidates <= 1 + repair_attempts bound missing"
+    )
+
+    # NFR-006: hard stop at the bound; exhaustion is an honest failure.
+    assert _has(r"never\s+loop\s+past\s+the\s+bound", section), (
+        "NFR-006 never-loop-past-the-bound rule missing"
+    )
+    assert _has(
+        r"never\s+return\s+an\s+unverified\s+template", section
+    ), "FR-008 never-return-unverified-template rule missing"
+    assert _has(
+        r"status:\s*\"repair-exhausted\".{0,300}?repair_count", section
+    ), "AC-019 repair-exhausted + repair_count emission rule missing"
+
+    # FR-003 / FR-007: the loop is a SKILL concern; the library verify is
+    # single-shot and its real CLI surface has no --repair-attempts flag.
+    assert _has(r"single.shot", section), (
+        "FR-007 library-verify-is-single-shot statement missing"
+    )
+    assert "--repair-attempts" not in _real_cli_surface()[("verify",)], (
+        "verify must not grow a --repair-attempts flag (FR-003/FR-007)"
+    )
+
+
+def test_nfr_006_bound_read_from_project_config_default_3():
+    """NFR-006 / §11.9: the body reads `repair_attempts` from
+    `.transon-authoring.json`, defaulting to 3 when the config is absent —
+    and the real config code defaults and validates exactly as the body
+    states (derived by running build_config, never from memory)."""
+    section = _repair_section()
+
+    # The body names the config source and the absent => default-3 rule.
+    assert _has(
+        r"repair_attempts.{0,300}?\.transon-authoring\.json", section
+    ) or _has(
+        r"\.transon-authoring\.json.{0,300}?repair_attempts", section
+    ), "repair_attempts config source not stated in section 5"
+    assert _has(r"absent.{0,120}?default.{0,20}?3", section), (
+        "absent-config => default 3 rule missing"
+    )
+    assert _has(r"1\s*\.\.\s*10|range\s+1\s*(to|-|\.\.)\s*10", section), (
+        "section 5 does not state the §11.9 1..10 range"
+    )
+
+    # The stated contract is what the config code actually implements.
+    assert DEFAULT_REPAIR_ATTEMPTS == 3
+    assert build_config("sibling")["repair_attempts"] == 3  # default applied
+    for endpoint in (1, 10):  # §11.9 allowed range endpoints accepted
+        built = build_config("sibling", repair_attempts=endpoint)
+        assert built["repair_attempts"] == endpoint
+    for out_of_range in (0, 11):  # outside 1..10 rejected at ingress
+        with pytest.raises(IngressError):
+            build_config("sibling", repair_attempts=out_of_range)
+
+
+def _contradictory_confirmed_sample_set() -> dict:
+    """A confirmed, ok_for_verify SampleSet NO deterministic template can
+    match: two cases share the same input but demand different outputs, so
+    any candidate mismatches at least one case (§11.4 deep-equality).
+    Fingerprint bound via the OQ-015 acquisition path — check_samples on the
+    not-yet-confirmed set, copied verbatim (test code plays the user for
+    `confirmed`; the library never sets it, AD-016)."""
+    sample_set = {
+        "schema_version": "1.0",
+        "intent_nl": "impossible: one input must map to two different outputs",
+        "coverage": [
+            {
+                "id": "happy",
+                "kind": "happy_path",
+                "description": "same input, contradictory outputs",
+                "acceptance": "accepted",
+            }
+        ],
+        "cases": [
+            {"id": "c1", "input": {"x": 1}, "output": 1, "satisfies": ["happy"]},
+            {"id": "c2", "input": {"x": 1}, "output": 2, "satisfies": ["happy"]},
+        ],
+        "waivers": [],
+        "confirmation": {"confirmed": False, "content_fingerprint": ""},
+    }
+    check = check_samples(sample_set)
+    assert check["coverage_complete"] is True
+    sample_set["confirmation"] = {
+        "confirmed": True,
+        "confirmed_by": "user",
+        "content_fingerprint": check["content_fingerprint"],
+    }
+    assert check_samples(sample_set)["ok_for_verify"] is True
+    return sample_set
+
+
+def test_ac_019_scripted_loop_exhausts_after_repair_attempts():
+    """AC-019 / FR-007 / NFR-006 — scripted simulation of the section-5
+    repair protocol using ONLY library calls: first candidate fails verify,
+    each repair feeds the previous Verdict's diff verbatim into the next
+    candidate and re-verifies, and after exactly `repair_attempts` repairs
+    the loop stops — no further tries — emitting a schema-valid
+    `repair-exhausted` AuthoringResult with `repair_count` set. Every verify
+    outcome below is what the pinned engine actually returns (AD-018)."""
+    sample_set = _contradictory_confirmed_sample_set()
+
+    # Section 5 step: config absent => §11.9 default 3 (the same default the
+    # real config code applies when building a ProjectConfig).
+    repair_attempts = build_config("sibling")["repair_attempts"]
+    assert repair_attempts == 3
+
+    # Section 4 draft: a snapshot-grounded first candidate.
+    candidate = {"$": "attr", "name": "x"}
+    candidates_tried = [candidate]
+    verdict = verify(candidate, sample_set)
+    assert verdict["ok"] is False  # failed verify; repair count starts at 0
+    repair_count = 0
+
+    while verdict["ok"] is False and repair_count < repair_attempts:
+        # FR-007: the next draft consumes the failed Verdict's errors[]/diff[]
+        # VERBATIM — this scripted "draft" adopts the engine's own expected
+        # value from the first diff entry, unmodified (a literal template).
+        assert verdict["failed_stage"] == "match"
+        assert verdict["errors"] == []
+        assert verdict["diff"], "match failure must carry a §11.4 diff"
+        candidate = verdict["diff"][0]["expected"]
+        candidates_tried.append(candidate)
+        verdict = verify(candidate, sample_set)  # re-verify = one repair
+        repair_count += 1
+
+    # AC-019: exhaustion after exactly repair_attempts repairs, still failed;
+    # NFR-006/FR-007: total candidates tried == 1 + repair_attempts.
+    assert repair_count == repair_attempts
+    assert verdict["ok"] is False
+    assert "assurance" not in verdict
+    assert len(candidates_tried) == 1 + repair_attempts
+
+    # Section 6 / §11.5: the final envelope per the documented rules — the
+    # only success is matched; exhaustion is ok: false, repair-exhausted,
+    # repair_count = repairs consumed, last failed verdict, no template.
+    result = {
+        "schema_version": "1.0",
+        "ok": False,
+        "status": "repair-exhausted",
+        "explanation": (
+            f"all {repair_attempts} repair_attempts repair cycles consumed"
+            " without a matched verdict"
+        ),
+        "verdict": verdict,
+        "last_candidate": candidate,
+        "repair_count": repair_count,
+    }
+    assert schema_violations(result, "authoring_result.json") == []
+    assert result["repair_count"] == repair_attempts
+    assert "template" not in result
