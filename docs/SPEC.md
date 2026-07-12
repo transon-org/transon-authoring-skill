@@ -278,8 +278,8 @@ No console-script product; no MCP.
   Only matched candidates are ever presented for review — user approval is **additional** to,
   never a substitute for, the AD-004 verify gate. The review loop is unbounded until exactly one
   exit (same discipline as FR-023); never auto-approve; never treat silence as approval.
-  Non-interactive/CI runs (AC-014) have no reviewer: the matched result is emitted directly —
-  the §11.8 eval harness is unaffected.
+  Non-interactive/CI runs (AC-014 semantics; direct emission covered by AC-031) have no
+  reviewer: the matched result is emitted directly — the §11.8 eval harness is unaffected.
 
 ### Grounding & corpus
 - **FR-009** — Bundle pinned `get_editor_metadata()` snapshot as the structural grounding catalog.
@@ -367,11 +367,13 @@ No console-script product; no MCP.
   Full `check_evals` runs persist one `EpisodeTranscript` per episode (shape in §11.8) under a
   run-artifact directory (`--transcripts-dir`); transcripts are **never committed** to the repo
   (repo hygiene + NFR-011) — the credential-holding dispatch workflow retains them as build
-  artifacts. The gate report gains a `failure_modes` aggregation per bucket, derived
-  mechanically from episode results: for submitted envelopes the §11.5 `status` (suffixed with
-  `verdict.failed_stage` when present, e.g. `verify-failed/match`), otherwise the harness
-  outcome class (`no_submit`, `budget_exceeded`, `infra_error`). Scoring, targets, baseline,
-  and lint semantics are unchanged by the presence or absence of transcripts.
+  artifacts. The gate report gains a `failure_modes` aggregation per bucket over runs that
+  **failed their bucket's OQ-016 success rule** (plus reported-only `infra_error` runs), keyed
+  by the final **scored** harness outcome — closed key set and precedence in §11.8 (harness
+  outcome classes, `invalid_submission`, `reverify_failed`, or the submitted §11.5 `status`
+  suffixed with `verdict.failed_stage`); the submitted status only ever labels a failure, it is
+  never trusted as the score (AD-004). Scoring, targets, baseline, and lint semantics are
+  unchanged by the presence or absence of transcripts.
 
 ### Install CI
 - **FR-019** — CI install checks:
@@ -507,9 +509,10 @@ No console-script product; no MCP.
   field.
 - **AC-034** — *(FR-032, added 2026-07-12)* A full `check_evals` run with `--transcripts-dir`
   writes one `EpisodeTranscript` per episode, each carrying the episode's ordered `tool_calls`
-  and the submitted envelope verbatim; the report's `failure_modes` equals a hand-computed
-  histogram over the same episode results; the same run without `--transcripts-dir` produces
-  identical scoring and gate outcomes.
+  and the `submit_result` payload verbatim (even when schema-invalid); the report's
+  `failure_modes` equals a hand-computed histogram over the same **scored** episode results
+  under the §11.8 key precedence; the same run without `--transcripts-dir` produces identical
+  scoring and gate outcomes.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -1145,20 +1148,28 @@ EvalFixture = {
                                     # episode ended without submit (OQ-017c) / tool budget
                                     # exceeded (OQ-017c) / provider or infra failure (§11.8)
     tool_calls: [ { seq: integer, name: string, input: JsonValue, result: JsonValue } ],
-    submitted: AuthoringResult | null,
+    submitted: JsonValue | null,    # the submit_result payload VERBATIM — possibly
+                                    # schema-invalid (retained so OQ-016(b) failures
+                                    # stay diagnosable)
     error: string | null
   }
   ```
-  The gate report gains `failure_modes`: per bucket, a histogram keyed by the submitted §11.5
-  `status` (suffixed with `verdict.failed_stage` when present, e.g. `"verify-failed/match"`) or,
-  when nothing was submitted, the outcome class (`no_submit` | `budget_exceeded` |
-  `infra_error` — the same closed enum as `EpisodeTranscript.outcome`). Derived mechanically
-  from episode results;
+  The gate report gains `failure_modes`: per bucket, a histogram over the runs that **failed
+  that bucket's OQ-016 success rule**, plus reported-only `infra_error` runs. Each failed run
+  is keyed by its final **scored** outcome, first match in this precedence wins:
+  `infra_error` | `no_submit` | `budget_exceeded` | `invalid_submission` (payload fails the
+  bundled AuthoringResult schema — OQ-016(b)) | `reverify_failed` (a submitted `matched` whose
+  OQ-016(a) independent re-verify failed — the claim is never trusted, AD-004) | otherwise the
+  submitted §11.5 `status`, suffixed with `verdict.failed_stage` when present (e.g.
+  `"verify-failed/match"`; in the refuse bucket a key of `"matched"` means an invented success
+  where refusal was expected). The submitted status only labels a failure — it is never the
+  score itself. Derived mechanically from scored episode results;
   transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
   a run without `--transcripts-dir` scores identically.
   **Privacy & retention** *(rev 2026-07-13)*: an episode transcript contains only (a) fixture
-  content already committed under `evals/cases/` — which passed the NFR-011 lint (redaction +
-  consent) before commit — and (b) library envelopes and gate-model output over that content,
+  content already committed under `evals/cases/` — real-use fixtures having passed the NFR-011
+  redaction + consent lint before commit, synthetic fixtures (AD-021) containing no real-use
+  data by construction — and (b) library envelopes and gate-model output over that content,
   so no new real-use data can enter a transcript. Access and retention follow the dispatch
   workflow's build-artifact policy (repo CI access; default artifact expiry deletes them);
   transcripts MUST NOT be re-committed to the repo. Capturing a **real-use** failing
