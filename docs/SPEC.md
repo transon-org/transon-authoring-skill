@@ -1156,6 +1156,14 @@ EvalFixture = {
   from episode results;
   transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
   a run without `--transcripts-dir` scores identically.
+  **Privacy & retention** *(rev 2026-07-13)*: an episode transcript contains only (a) fixture
+  content already committed under `evals/cases/` — which passed the NFR-011 lint (redaction +
+  consent) before commit — and (b) library envelopes and gate-model output over that content,
+  so no new real-use data can enter a transcript. Access and retention follow the dispatch
+  workflow's build-artifact policy (repo CI access; default artifact expiry deletes them);
+  transcripts MUST NOT be re-committed to the repo. Capturing a **real-use** failing
+  conversation remains governed by FR-018/NFR-011 — the transcript mechanism records eval
+  episodes only, never interactive sessions.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
 - **Synthetic fixtures (AD-021 / FR-029):** fixtures minted from snapshot `docs.examples` are
