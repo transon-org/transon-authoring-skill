@@ -1,0 +1,10 @@
+{
+  "source_example": "AttrSimpleFixedName",
+  "template": {
+    "$": "attr",
+    "name": "a"
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

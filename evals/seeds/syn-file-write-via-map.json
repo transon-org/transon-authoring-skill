@@ -1,0 +1,29 @@
+{
+  "source_example": "FileWriteViaMap",
+  "template": {
+    "$": "map",
+    "item": {
+      "$": "file",
+      "content": {
+        "$": "item"
+      },
+      "name": {
+        "$": "join",
+        "items": [
+          "output_",
+          {
+            "$": "call",
+            "name": "str",
+            "value": {
+              "$": "index"
+            }
+          },
+          ".json"
+        ]
+      }
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-join-with-static-no-overrides",
+  "expect": "matched",
+  "intent_nl": "Return the input object enriched with a default: make sure a key \"a\" exists, filling in the value \"default\" only when the input does not already provide its own \"a\"; every other entry passes through unchanged.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Return the input object enriched with a default: make sure a key \"a\" exists, filling in the value \"default\" only when the input does not already provide its own \"a\"; every other entry passes through unchanged.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "a": "b",
+          "c": "d"
+        },
+        "output": {
+          "a": "b",
+          "c": "d"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "a": "variation-alpha",
+          "c": "variation-beta"
+        },
+        "output": {
+          "a": "variation-alpha",
+          "c": "variation-beta"
+        },
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "a": "variation-beta",
+          "c": "variation-gamma"
+        },
+        "output": {
+          "a": "variation-beta",
+          "c": "variation-gamma"
+        },
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "e777cd4874433ad1ad22c9a78b458395e8117fca1a806b407c1d6105a43fa448"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'JoinWithStaticNoOverrides' (AD-021 / FR-029); seed provenance at evals/seeds/syn-join-with-static-no-overrides.json.",
+  "redacted": false
+}

@@ -1,0 +1,299 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-include",
+  "expect": "matched",
+  "intent_nl": "Each item in my input list has a \"keys\" list and a \"values\" list, and there is already a shared template named MapListsToDict that turns one such item into an object by pairing them up. Apply that existing template to every item and return the list of resulting objects.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Each item in my input list has a \"keys\" list and a \"values\" list, and there is already a shared template named MapListsToDict that turns one such item into an object by pairing them up. Apply that existing template to every item and return the list of resulting objects.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--0-keys",
+        "kind": "list_empty",
+        "target": "/0/keys",
+        "description": "Array at /0/keys is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--0-keys",
+        "kind": "list_singleton",
+        "target": "/0/keys",
+        "description": "Array at /0/keys has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--0-keys",
+        "kind": "list_many",
+        "target": "/0/keys",
+        "description": "Array at /0/keys has two or more elements.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--0-values",
+        "kind": "list_empty",
+        "target": "/0/values",
+        "description": "Array at /0/values is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--0-values",
+        "kind": "list_singleton",
+        "target": "/0/values",
+        "description": "Array at /0/values has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--0-values",
+        "kind": "list_many",
+        "target": "/0/values",
+        "description": "Array at /0/values has two or more elements.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": [
+          {
+            "keys": [
+              "a",
+              "b",
+              "c"
+            ],
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "keys": [
+              "d",
+              "e",
+              "f"
+            ],
+            "values": [
+              4,
+              5,
+              6
+            ]
+          }
+        ],
+        "output": [
+          {
+            "a": 1,
+            "b": 2,
+            "c": 3
+          },
+          {
+            "d": 4,
+            "e": 5,
+            "f": 6
+          }
+        ],
+        "satisfies": [
+          "ob-happy",
+          "ob-list-many--0-keys",
+          "ob-list-many--0-values"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": [
+          {
+            "keys": [],
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "keys": [
+              "d",
+              "e",
+              "f"
+            ],
+            "values": [
+              4,
+              5,
+              6
+            ]
+          }
+        ],
+        "output": [
+          {},
+          {
+            "d": 4,
+            "e": 5,
+            "f": 6
+          }
+        ],
+        "satisfies": [
+          "ob-list-empty--0-keys"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": [
+          {
+            "keys": [
+              "a"
+            ],
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "keys": [
+              "d",
+              "e",
+              "f"
+            ],
+            "values": [
+              4,
+              5,
+              6
+            ]
+          }
+        ],
+        "output": [
+          {
+            "a": 1
+          },
+          {
+            "d": 4,
+            "e": 5,
+            "f": 6
+          }
+        ],
+        "satisfies": [
+          "ob-list-singleton--0-keys"
+        ]
+      },
+      {
+        "id": "c-4",
+        "input": [
+          {
+            "keys": [
+              "a",
+              "b",
+              "c"
+            ],
+            "values": []
+          },
+          {
+            "keys": [
+              "d",
+              "e",
+              "f"
+            ],
+            "values": [
+              4,
+              5,
+              6
+            ]
+          }
+        ],
+        "output": [
+          {},
+          {
+            "d": 4,
+            "e": 5,
+            "f": 6
+          }
+        ],
+        "satisfies": [
+          "ob-list-empty--0-values"
+        ]
+      },
+      {
+        "id": "c-5",
+        "input": [
+          {
+            "keys": [
+              "a",
+              "b",
+              "c"
+            ],
+            "values": [
+              1
+            ]
+          },
+          {
+            "keys": [
+              "d",
+              "e",
+              "f"
+            ],
+            "values": [
+              4,
+              5,
+              6
+            ]
+          }
+        ],
+        "output": [
+          {
+            "a": 1
+          },
+          {
+            "d": 4,
+            "e": 5,
+            "f": 6
+          }
+        ],
+        "satisfies": [
+          "ob-list-singleton--0-values"
+        ]
+      }
+    ],
+    "waivers": [],
+    "includes": {
+      "MapListsToDict": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "zip",
+            "items": [
+              {
+                "$": "attr",
+                "name": "keys"
+              },
+              {
+                "$": "attr",
+                "name": "values"
+              }
+            ]
+          },
+          {
+            "$": "map",
+            "key": {
+              "$": "attr",
+              "name": 0
+            },
+            "value": {
+              "$": "attr",
+              "name": 1
+            }
+          }
+        ]
+      }
+    },
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "5f330193680b5162b7fd7c141e1b0b4aa05289f925983b7fcf7ca1222f69f9dd"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'Include' (AD-021 / FR-029); seed provenance at evals/seeds/syn-include.json.",
+  "redacted": false
+}

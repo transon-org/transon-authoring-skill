@@ -1,0 +1,19 @@
+{
+  "source_example": "FilterListByOddIndex",
+  "template": {
+    "$": "filter",
+    "cond": {
+      "$": "expr",
+      "op": "mod",
+      "values": [
+        {
+          "$": "index"
+        },
+        2
+      ]
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

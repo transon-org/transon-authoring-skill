@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-expr-simple-values1",
+  "expect": "matched",
+  "intent_nl": "Append the suffix \"_suffix\" to the input string and return the result.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Append the suffix \"_suffix\" to the input string and return the result.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": "value",
+        "output": "value_suffix",
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": "variation-alpha",
+        "output": "variation-alpha_suffix",
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": "variation-beta",
+        "output": "variation-beta_suffix",
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "e01cb4826783e45ba81726f9f4e98c4eb09b102d28d76a96a41d518159894706"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'ExprSimpleValues1' (AD-021 / FR-029); seed provenance at evals/seeds/syn-expr-simple-values1.json.",
+  "redacted": false
+}

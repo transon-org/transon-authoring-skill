@@ -1,0 +1,13 @@
+{
+  "source_example": "RecipeReadNestedValue",
+  "template": {
+    "$": "attr",
+    "names": [
+      "address",
+      "city"
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

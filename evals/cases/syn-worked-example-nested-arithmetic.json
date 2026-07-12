@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-worked-example-nested-arithmetic",
+  "expect": "matched",
+  "intent_nl": "Given an object with numeric fields a, b, and c, compute (a + b) * c and return the resulting number.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Given an object with numeric fields a, b, and c, compute (a + b) * c and return the resulting number.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "a": 2,
+          "b": 3,
+          "c": 4
+        },
+        "output": 20,
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "a": 7,
+          "b": 11,
+          "c": 13
+        },
+        "output": 234,
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "a": 11,
+          "b": 13,
+          "c": 7
+        },
+        "output": 168,
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "8cc55500b77ba94d5b2dae6c73b920512eca15a7536cc14e0f572ae2a64b9fcd"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'WorkedExampleNestedArithmetic' (AD-021 / FR-029); seed provenance at evals/seeds/syn-worked-example-nested-arithmetic.json.",
+  "redacted": false
+}

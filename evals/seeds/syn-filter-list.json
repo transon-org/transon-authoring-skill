@@ -1,0 +1,19 @@
+{
+  "source_example": "FilterList",
+  "template": {
+    "$": "filter",
+    "cond": {
+      "$": "expr",
+      "op": "mod",
+      "values": [
+        {
+          "$": "item"
+        },
+        2
+      ]
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

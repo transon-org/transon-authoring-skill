@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-format-with-default",
+  "expect": "matched",
+  "intent_nl": "Produce a text label from the input object's \"label\" field; when the label is missing, return the fallback text \"unknown\" instead.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Produce a text label from the input object's \"label\" field; when the label is missing, return the fallback text \"unknown\" instead.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-1",
+        "kind": "custom",
+        "description": "Value variation 1: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-variation-2",
+        "kind": "custom",
+        "description": "Value variation 2: the corpus data shape with leaf scalars replaced from the fixed per-JSON-type substitution table (FR-029).",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "other": 1
+        },
+        "output": "unknown",
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "other": 7
+        },
+        "output": "unknown",
+        "satisfies": [
+          "ob-variation-1"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "other": 11
+        },
+        "output": "unknown",
+        "satisfies": [
+          "ob-variation-2"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "50128803f46545b5634f21042f67d996ded4443366d5bd6ac5aaa8f07208b40e"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'FormatWithDefault' (AD-021 / FR-029); seed provenance at evals/seeds/syn-format-with-default.json.",
+  "redacted": false
+}

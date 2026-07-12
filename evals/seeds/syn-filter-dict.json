@@ -1,0 +1,19 @@
+{
+  "source_example": "FilterDict",
+  "template": {
+    "$": "filter",
+    "cond": {
+      "$": "expr",
+      "op": "mod",
+      "values": [
+        {
+          "$": "value"
+        },
+        2
+      ]
+    }
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

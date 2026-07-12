@@ -1,0 +1,17 @@
+{
+  "source_example": "JoinWithStaticNoOverrides",
+  "template": {
+    "$": "join",
+    "items": [
+      {
+        "a": "default"
+      },
+      {
+        "$": "this"
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

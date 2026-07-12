@@ -1,0 +1,37 @@
+{
+  "source_example": "AttrDynamicReferenceMultipleNames",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "set",
+        "name": "root"
+      },
+      {
+        "$": "attr",
+        "name": "paths"
+      },
+      {
+        "$": "map",
+        "item": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "get",
+              "name": "root"
+            },
+            {
+              "$": "attr",
+              "names": {
+                "$": "item"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "generator": {
+    "version": "1.0.0"
+  }
+}

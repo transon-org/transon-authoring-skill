@@ -1,0 +1,290 @@
+{
+  "schema_version": "1.0",
+  "id": "syn-attr-dynamic-reference-multiple-names",
+  "expect": "matched",
+  "intent_nl": "My input has a nested structure of objects plus a list of key paths under \"paths\". For each path, look up the value it points to inside the nested structure and return the list of those values, in the same order as the paths.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "My input has a nested structure of objects plus a list of key paths under \"paths\". For each path, look up the value it points to inside the nested structure and return the list of those values, in the same order as the paths.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Happy path: the corpus example's own data/result pair re-executed through the pinned engine (AD-021 corpus pair).",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--paths",
+        "kind": "list_empty",
+        "target": "/paths",
+        "description": "Array at /paths is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--paths",
+        "kind": "list_singleton",
+        "target": "/paths",
+        "description": "Array at /paths has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--paths",
+        "kind": "list_many",
+        "target": "/paths",
+        "description": "Array at /paths has two or more elements.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-empty--paths-0",
+        "kind": "list_empty",
+        "target": "/paths/0",
+        "description": "Array at /paths/0 is empty.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-singleton--paths-0",
+        "kind": "list_singleton",
+        "target": "/paths/0",
+        "description": "Array at /paths/0 has exactly one element.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-list-many--paths-0",
+        "kind": "list_many",
+        "target": "/paths/0",
+        "description": "Array at /paths/0 has two or more elements.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-1",
+        "input": {
+          "a": {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          "paths": [
+            [
+              "a",
+              "b",
+              "d"
+            ],
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "a",
+              "e",
+              "g"
+            ],
+            [
+              "a",
+              "e",
+              "f"
+            ]
+          ]
+        },
+        "output": [
+          2,
+          1,
+          4,
+          3
+        ],
+        "satisfies": [
+          "ob-happy",
+          "ob-list-many--paths",
+          "ob-list-many--paths-0"
+        ]
+      },
+      {
+        "id": "c-2",
+        "input": {
+          "a": {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          "paths": []
+        },
+        "output": [],
+        "satisfies": [
+          "ob-list-empty--paths"
+        ]
+      },
+      {
+        "id": "c-3",
+        "input": {
+          "a": {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          "paths": [
+            [
+              "a",
+              "b",
+              "d"
+            ]
+          ]
+        },
+        "output": [
+          2
+        ],
+        "satisfies": [
+          "ob-list-singleton--paths"
+        ]
+      },
+      {
+        "id": "c-4",
+        "input": {
+          "a": {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          "paths": [
+            [],
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "a",
+              "e",
+              "g"
+            ],
+            [
+              "a",
+              "e",
+              "f"
+            ]
+          ]
+        },
+        "output": [
+          {
+            "a": {
+              "b": {
+                "c": 1,
+                "d": 2
+              },
+              "e": {
+                "f": 3,
+                "g": 4
+              }
+            },
+            "paths": [
+              [],
+              [
+                "a",
+                "b",
+                "c"
+              ],
+              [
+                "a",
+                "e",
+                "g"
+              ],
+              [
+                "a",
+                "e",
+                "f"
+              ]
+            ]
+          },
+          1,
+          4,
+          3
+        ],
+        "satisfies": [
+          "ob-list-empty--paths-0"
+        ]
+      },
+      {
+        "id": "c-5",
+        "input": {
+          "a": {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          "paths": [
+            [
+              "a"
+            ],
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "a",
+              "e",
+              "g"
+            ],
+            [
+              "a",
+              "e",
+              "f"
+            ]
+          ]
+        },
+        "output": [
+          {
+            "b": {
+              "c": 1,
+              "d": 2
+            },
+            "e": {
+              "f": 3,
+              "g": 4
+            }
+          },
+          1,
+          4,
+          3
+        ],
+        "satisfies": [
+          "ob-list-singleton--paths-0"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "b3031f26a70b104ca9aa57dc072121b952e978506250074b3fef571387647ad3"
+    }
+  },
+  "notes": "Synthetic fixture minted from the pinned snapshot docs.examples entry 'AttrDynamicReferenceMultipleNames' (AD-021 / FR-029); seed provenance at evals/seeds/syn-attr-dynamic-reference-multiple-names.json.",
+  "redacted": false
+}
