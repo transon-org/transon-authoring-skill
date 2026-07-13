@@ -385,11 +385,19 @@ No console-script product; no MCP.
   (a) **engine-freeze** — re-executing the seed `template` through the pinned engine's AD-017
   sandbox on each fixture case's `input` yields output that JSON-equals (§11.4) that case's
   committed `output` (and the captured `writes` for a `writes`-declaring case); (b) **no leakage** —
-  the fixture object carries no template/answer field outside its SampleSet `cases`; (c) the
-  SampleSet is `ok_for_verify` (FR-027) with coverage obligations over the transform's edges (empty
-  arrays, missing→`null`). A transform the pin cannot express has **no** seed template that
-  engine-freezes, so it cannot land as a matched fixture — it is authored `expect: "refuse"` with no
-  seed (AD-023). The pack counts in the §11.8 authoring/adversarial denominators and is expected to
+  the fixture object carries no template/answer field outside its SampleSet `cases` (enforced by the
+  closed `eval_fixture.json` schema, `additionalProperties: false`); (c) the SampleSet is
+  `ok_for_verify` (FR-027); and (d) **provenance link** — the seed `source_ref`'s file portion
+  (before any `#`/whitespace) resolves to an existing repo file. Real-world-pack SampleSets SHOULD
+  additionally carry edge obligations (empty arrays, missing→`null`) — a review-time authoring
+  expectation (§12 maker ≠ checker), not a lint-enforced one. **Enforcement boundary:** the
+  engine-freeze gate binds every fixture that **has** a constructed seed, and a real-world-pack
+  *matched* fixture MUST carry its seed (that is what engine-freezes it). The lint cannot distinguish
+  a seedless matched fixture from an ordinary hand-authored one (`seed-matched-*`), so a matched
+  fixture committed **without** a seed is treated as hand-authored — trusted via §12 review, not
+  engine-frozen. A genuinely inexpressible transform is authored `expect: "refuse"` with no seed
+  (AD-023); a matched real-world fixture that omits its seed is a review defect, never a lint-passed
+  faked output. The pack counts in the §11.8 authoring/adversarial denominators and is expected to
   lower the measured authoring rate, corrected by improving `SKILL.md`, never by lowering the §11.8
   targets.
 
@@ -556,10 +564,12 @@ No console-script product; no MCP.
   does not engine-freeze — some case's committed `output` differs from re-executing the seed
   `template` through the pinned engine on that case's `input` (§11.4 equality) — or when the fixture
   object carries a template/answer field outside its SampleSet `cases` (leakage), or when a
-  constructed-seed fixture's SampleSet is not `ok_for_verify`. A real-world pack whose fixtures,
-  seeds, and pinned engine agree lints **green**. (A transform the pin cannot express has no seed
-  template that engine-freezes, so it cannot land matched — it is authored `expect: "refuse"` per
-  AD-023.)
+  constructed-seed fixture's SampleSet is not `ok_for_verify`, or when the seed `source_ref`'s file
+  portion does not resolve to a repo file. A real-world pack whose fixtures, seeds, and pinned engine
+  agree lints **green**. The gate binds only fixtures that carry a constructed seed; a matched
+  fixture committed without one is treated as hand-authored (trusted via §12 review, not
+  engine-frozen), and a genuinely inexpressible transform is authored `expect: "refuse"` with no seed
+  (AD-023) — see FR-033's enforcement boundary.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →

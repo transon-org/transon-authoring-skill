@@ -432,6 +432,12 @@ def mint_constructed_into(root: Path) -> tuple[Path, Path]:
         "template": copy.deepcopy(CONSTRUCTED_TEMPLATE),
         "notes": "Missing name defaults to null; empty items list yields an empty list.",
     }
+    # FR-033d: the seed source_ref's file portion must resolve under the lint
+    # root; provide the referenced provenance doc in the tmp repo (the tmp_repo
+    # fixture copies only evals/).
+    doc = root / "docs" / "proposals" / "big-real-world-transform-samples.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("stub provenance doc for the constructed-seed test\n", encoding="utf-8")
     seeds_dir = root / "evals" / "seeds"
     seeds_dir.mkdir(parents=True, exist_ok=True)
     fixture_path = root / "evals" / "cases" / f"{CONSTRUCTED_ID}.json"
@@ -497,6 +503,48 @@ def test_ac_035_constructed_seed_without_fixture_red(tmp_repo: Path):
     failures = lint_evals(tmp_repo)
     assert any(
         str(seed_path) in f and "no matching fixture" in f for f in failures
+    ), failures
+
+
+def test_ac_035_leakage_extra_fixture_field_red(tmp_repo: Path):
+    # AC-035 (no-leakage branch) — a constructed-seed fixture carrying any
+    # field outside its SampleSet `cases` (here a leaked answer template at the
+    # top level) is red: the closed eval_fixture.json schema
+    # (additionalProperties: false) rejects it (lint check 2).
+    fixture_path, _seed_path = mint_constructed_into(tmp_repo)
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    fixture["leaked_template"] = {"$": "this"}  # answer field outside `cases`
+    fixture_path.write_text(json.dumps(fixture) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    assert any(str(fixture_path) in f for f in failures), failures
+
+
+def test_ac_035_non_ok_for_verify_red(tmp_repo: Path):
+    # AC-035 (ok_for_verify branch) — a constructed-seed fixture whose SampleSet
+    # is not ok_for_verify (confirmation withdrawn) is red (lint check 4,
+    # FR-027), naming the file.
+    fixture_path, _seed_path = mint_constructed_into(tmp_repo)
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    fixture["samples"]["confirmation"]["confirmed"] = False
+    fixture_path.write_text(json.dumps(fixture) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(fixture_path) in f and "ok_for_verify" in f for f in failures
+    ), failures
+
+
+def test_ac_035_bad_source_ref_file_red(tmp_repo: Path):
+    # AC-035 / FR-033d (provenance link) — a constructed seed whose source_ref
+    # file portion does not resolve to a repo file is red, even when the anchor
+    # is stripped.
+    _fixture_path, seed_path = mint_constructed_into(tmp_repo)
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    seed["source_ref"] = "docs/proposals/does-not-exist.md#anchor"
+    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(seed_path) in f and "source_ref" in f and "does not resolve" in f
+        for f in failures
     ), failures
 
 

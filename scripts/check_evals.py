@@ -304,6 +304,19 @@ def _lint_constructed_seed(
             for error in shape_errors
         )
         return failures
+
+    # (d) provenance link (FR-033d / AC-035): the source_ref's file portion
+    # (before any '#' anchor or trailing whitespace/section label) must resolve
+    # to an existing repo file, so a stale/typo'd provenance pointer is caught.
+    repo_root = cases_dir.parent.parent
+    file_part = re.split(r"[#\s]", seed["source_ref"], maxsplit=1)[0]
+    if file_part and not (repo_root / file_part).is_file():
+        failures.append(
+            f"{path}: source_ref file {file_part!r} does not resolve to a repo "
+            "file (FR-033d provenance link / AC-035)"
+        )
+        return failures
+
     fixture = fixtures_by_stem.get(path.stem)
     if fixture is None:
         failures.append(

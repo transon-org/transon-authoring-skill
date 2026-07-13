@@ -2,6 +2,6 @@
   "schema_version": "1.0",
   "id": "refuse-epoch-to-iso",
   "expect": "refuse",
-  "intent_nl": "Convert the Stripe event's `created` Unix epoch timestamp (e.g. 1752364800) into an ISO-8601 datetime string like \"2026-07-13T00:00:00Z\".",
+  "intent_nl": "Convert the Stripe event's `created` Unix epoch timestamp (e.g. 1752364800) into an ISO-8601 datetime string like \"2025-07-13T00:00:00Z\".",
   "redacted": false
 }
