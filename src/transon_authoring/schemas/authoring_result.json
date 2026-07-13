@@ -55,9 +55,53 @@
     "repair_count": {
       "description": "repairs consumed by the skill loop",
       "type": "number"
+    },
+    "trace": {
+      "description": "FR-031 self-reported step log; diagnostic only (AD-022)",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/traceEntry"
+      }
     }
   },
   "$defs": {
+    "traceEntry": {
+      "type": "object",
+      "required": [
+        "seq",
+        "step",
+        "summary"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "type": "integer"
+        },
+        "step": {
+          "enum": [
+            "config",
+            "ground",
+            "propose",
+            "present-gaps",
+            "confirm",
+            "draft",
+            "verify",
+            "repair",
+            "review",
+            "result"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string"
+        }
+      }
+    },
     "verdict": {
       "type": "object",
       "required": [

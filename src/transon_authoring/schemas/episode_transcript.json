@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EpisodeTranscript",
+  "description": "SPEC 11.8 EpisodeTranscript (FR-032 / AD-022 / AC-034, added 2026-07-12). One record per eval episode a full check_evals run persists under --transcripts-dir; never committed to the repo. The ordered tool_calls plus the verbatim submitted payload (possibly schema-invalid) make OQ-016 failures diagnosable. A build artifact only: transcripts change no scoring, target, baseline, or lint semantics.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "fixture_id",
+    "run_index",
+    "model_id",
+    "outcome",
+    "tool_calls",
+    "submitted",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "fixture_id": {
+      "type": "string"
+    },
+    "run_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "0-based index within runs_per_fixture."
+    },
+    "model_id": {
+      "type": "string"
+    },
+    "outcome": {
+      "description": "The harness episode outcome (OQ-017c / SPEC 11.8): submit_result called, episode ended without submit, tool budget exceeded, or a provider/infra failure.",
+      "enum": [
+        "submitted",
+        "no_submit",
+        "budget_exceeded",
+        "infra_error"
+      ]
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/toolCall"
+      }
+    },
+    "submitted": true,
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "toolCall": {
+      "description": "One dispatched tool call in episode order; seq is the 1-based tool-call counter at that call. input/result are arbitrary JSON values (result is null for submit_result).",
+      "type": "object",
+      "required": [
+        "seq",
+        "name",
+        "input",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "input": true,
+        "result": true
+      }
+    }
+  }
+}

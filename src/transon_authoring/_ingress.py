@@ -35,6 +35,7 @@ SUPPORTED_SCHEMA_VERSION = "1.0"
 SCHEMA_FILES = (
     "authoring_result.json",
     "cli_error.json",
+    "episode_transcript.json",
     "eval_baseline.json",
     "eval_fixture.json",
     "eval_runner.json",

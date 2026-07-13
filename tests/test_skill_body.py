@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import json
 import re
 from pathlib import Path
 
@@ -45,6 +46,19 @@ def _body() -> str:
 
 def _has(pattern: str, text: str) -> bool:
     return re.search(pattern, text, re.IGNORECASE | re.DOTALL) is not None
+
+
+def _bounded_bullet(section: str, name: str) -> str:
+    """Return the Markdown bullet ``- **<name>**`` in *section*, bounded to just
+    that bullet — from ``- **name**`` up to the next blank line, the next
+    top-level ``- **`` exit bullet, or the section end. Scoping every per-exit
+    assertion this way keeps a phrase from a sibling bullet or trailing prose
+    from satisfying a check meant for one exit (FR-030 / AC-031)."""
+    match = re.search(
+        rf"(?ms)^- \*\*{re.escape(name)}\*\*.*?(?=^\s*$|^- \*\*|\Z)", section
+    )
+    assert match, f"FR-030 {name!r} exit missing from section 6"
+    return match.group(0)
 
 
 def test_fr_001_skill_body_documents_grounded_flow():
@@ -93,14 +107,15 @@ def test_fr_001_skill_body_documents_grounded_flow():
         "## 3. Sample loop",
         "## 4. Draft",
         "## 5. Verify & repair",
-        "## 6. Result",
+        "## 6. Review",
+        "## 7. Result",
     ):
         assert heading in body, f"missing section heading: {heading}"
     assert "<!-- sample-loop protocol: FR-023/024/025 -->" in body
     assert "<!-- repair protocol: FR-007/NFR-006 -->" in body
 
-    # Section 6 carries the full section-11.5 status table: all nine statuses.
-    result_section = body.split("## 6. Result", 1)[1]
+    # Section 7 carries the full section-11.5 status table: all nine statuses.
+    result_section = body.split("## 7. Result", 1)[1]
     for status in (
         "matched",
         "need-samples",
@@ -646,3 +661,186 @@ def test_ac_019_scripted_loop_exhausts_after_repair_attempts():
     assert schema_violations(result, "authoring_result.json") == []
     assert result["repair_count"] == repair_attempts
     assert "template" not in result
+
+
+# ---------------------------------------------------------------------------
+# FR-030 / AC-031 / AC-012 — interactive review loop (section 6 protocol) and
+# the UC-001 approve walkthrough.
+# ---------------------------------------------------------------------------
+
+
+def _review_section() -> str:
+    """The `## 6. Review` section body (up to `## 7.`)."""
+    body = _body()
+    section = body.split("## 6. Review", 1)[1].split("## 7.", 1)[0]
+    assert "<!-- interactive review: FR-030 / AC-031 / AC-012 -->" in section, (
+        "review-loop traceability marker missing from section 6"
+    )
+    return section
+
+
+def test_fr_030_ac_031_review_loop():
+    """FR-030 / AC-031 / AC-012: in an interactive session a matched template
+    is presented WITH its Verdict for user review before emission; exactly
+    three bold exits (approve / revise / stop); approve -> `matched`; NL revise
+    -> a fresh `repair_attempts` budget + re-verify + re-present only when
+    matched; sample-feedback revise -> `fingerprint_mismatch` -> re-enter the
+    sample loop; stop -> `deferred` / `aborted` with no template; the loop is
+    unbounded and never auto-approves; review is ADDITIONAL to, not a
+    substitute for, the verify gate; non-interactive/CI emits matched without
+    review."""
+    section = _review_section()
+
+    # Presented only after a matched verify, template together with its Verdict.
+    assert _has(
+        r"ok:\s*true.{0,80}?assurance:\s*\"matched\"", section
+    ), "review does not gate presentation on a matched verify"
+    assert _has(
+        r"present.{0,200}?template.{0,120}?verdict", section
+    ), "review does not present the matched template together with its Verdict"
+
+    # EXACTLY three bold exits — the set of top-level `- **exit**` bullets must
+    # be precisely {approve, revise, stop}; a fourth (or a missing one) regresses
+    # FR-030's "exactly three exits" contract.
+    exits = re.findall(r"(?m)^- \*\*([a-z]+)\*\*", section)
+    assert len(exits) == 3, (
+        f"FR-030 requires exactly three review exit bullets; section 6 lists {exits}"
+    )
+    assert set(exits) == {"approve", "revise", "stop"}, (
+        f"FR-030 review exits must be approve/revise/stop; got {sorted(set(exits))}"
+    )
+
+    # approve -> matched success envelope — scoped to the approve bullet itself,
+    # so an earlier `auto-approve` mention plus a later branch's
+    # `status: "matched"` cannot satisfy it.
+    assert _has(r"status:\s*\"matched\"", _bounded_bullet(section, "approve")), (
+        "approve exit does not emit status matched"
+    )
+
+    # NL-only revise -> fresh repair_attempts budget + re-verify + re-present
+    # only when the new candidate verifies matched.
+    assert _has(r"fresh\s+`?repair_attempts`?\s+budget", section), (
+        "NL revise does not grant a fresh repair_attempts budget"
+    )
+    assert _has(
+        r"re-?present.{0,120}?only\s+when.{0,60}?matched", section
+    ), "NL revise does not re-present only on a matched re-verify"
+
+    # Sample-feedback revise -> SampleSet edit flips confirmed via
+    # fingerprint_mismatch and re-enters the sample loop.
+    assert _has(
+        r"sampleset\s+edit.{0,200}?fingerprint_mismatch", section
+    ), "sample-feedback revise does not flip confirmed via fingerprint_mismatch"
+    assert _has(
+        r"re-?enter.{0,80}?sample\s+loop", section
+    ), "sample-feedback revise does not re-enter the sample loop"
+
+    # stop branch binds BOTH outcomes (deferred/aborted) AND withholds the
+    # template — scoped to the stop bullet ITSELF (from `- **stop**` up to the
+    # next blank line, next top-level exit bullet, or section end), so a
+    # deferred/aborted/no-template phrase in the trailing non-interactive or
+    # "unbounded" paragraphs can never satisfy these checks.
+    stop_branch = _bounded_bullet(section, "stop")
+    assert _has(r"status:\s*\"deferred\"", stop_branch), (
+        "stop exit does not emit status deferred"
+    )
+    assert _has(r"status:\s*\"aborted\"", stop_branch), (
+        "stop exit does not emit status aborted"
+    )
+    assert _has(r"no\s+template", stop_branch), (
+        "stop exit does not withhold the template"
+    )
+
+    # Unbounded discipline; never auto-approve; silence is not approval.
+    assert _has(r"unbounded", section), "review loop is not stated unbounded"
+    assert _has(r"never\s+auto.approve", section), "review does not forbid auto-approve"
+
+    # Additional to, not a substitute for, the verify gate.
+    assert _has(
+        r"additional\s+to.{0,80}?substitute", section
+    ), "review is not stated as additional to (not a substitute for) verify"
+
+    # Non-interactive/CI emits matched without a review step.
+    assert _has(
+        r"non-interactive.{0,200}?(no\s+review|matched.{0,80}?directly)", section
+    ), "non-interactive/CI direct-emit rule missing from review section"
+    # The CI branch is verified independently of the "non-interactive" phrasing:
+    # it MUST state matched is emitted directly, with no review step.
+    assert _has(r"\bCI\b.{0,160}?matched.{0,80}?directly", section), (
+        "CI branch does not state matched is emitted directly"
+    )
+    assert _has(r"\bCI\b.{0,200}?no\s+review\b", section), (
+        "CI branch does not state there is no review step"
+    )
+
+
+def test_uc_001_walkthrough_review_approve():
+    """UC-001 (rev 2026-07-12, FR-030) — scripted happy path over library calls
+    only: a confirmed, coverage-complete SampleSet clears the section-3 gate
+    (`ok_for_verify`), its template verifies matched (section 5), and the user's
+    **approve** review exit (section 6) assembles the final success envelope — a
+    schema-valid `matched` AuthoringResult carrying the template. Fixtures are
+    the committed AC-001 hand-path artifacts (engine-verified at authoring
+    time)."""
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "ac001"
+    sample_set = json.loads(
+        (fixtures / "sample_set.json").read_text(encoding="utf-8")
+    )
+    template = json.loads((fixtures / "template.json").read_text(encoding="utf-8"))
+
+    # Section 3 gate: the confirmed, coverage-complete SampleSet is ready.
+    check = check_samples(sample_set)
+    assert check["ok_for_verify"] is True
+
+    # Section 5 gate: the template verifies matched (AD-004).
+    verdict = verify(template, sample_set)
+    assert verdict["ok"] is True
+    assert verdict["assurance"] == "matched"
+
+    # Section 6 approve exit: the reviewer accepts, so the final envelope is the
+    # success AuthoringResult — the ONLY place a `template` is emitted.
+    result = {
+        "schema_version": "1.0",
+        "ok": True,
+        "status": "matched",
+        "explanation": "User reviewed the matched template and approved emission.",
+        "template": template,
+        "verdict": verdict,
+        "repair_count": 0,  # §7 mandates repair_count on a matched success
+    }
+    assert schema_violations(result, "authoring_result.json") == []
+    assert result["template"] == template
+    assert result["status"] == "matched"
+
+
+def test_fr_008_result_section_specifies_full_authoring_result_envelope():
+    """FR-008 / §11.5 — the Result section spells out the COMPLETE required
+    AuthoringResult envelope so a small gate model (AD-021) emits every
+    mandatory field: `schema_version` `"1.0"`, `ok`, `status`, `explanation`
+    always; and on a matched success also `template`, the verify `verdict`
+    (carrying `ok` + `assurance: "matched"`), and `repair_count`.
+
+    Locked after the A3 improvement loop: driving the skill body under the
+    gate model surfaced envelopes that authored/refused correctly but dropped
+    `schema_version`/`explanation`/`verdict`, failing the §11.8 scoring even
+    though the template itself verified matched."""
+    result_section = _body().split("## 7. Result", 1)[1]
+
+    # The four always-required envelope fields are named, and schema_version's
+    # literal value is shown (not just described).
+    for field in ("schema_version", "ok", "status", "explanation"):
+        assert f"`{field}`" in result_section, (
+            f"Result section does not name the required envelope field {field!r}"
+        )
+    assert _has(r"schema_version.{0,24}?\"1\.0\"", result_section), (
+        "Result section does not show the required schema_version \"1.0\""
+    )
+
+    # On a matched success the verify Verdict MUST be included — the §11.8
+    # OQ-016a scoring rule reads verdict.ok + assurance from the submission.
+    assert _has(
+        r"success.{0,240}?include.{0,240}?verdict", result_section
+    ), "Result section does not mandate including the verify Verdict on success"
+    assert _has(
+        r"verdict.{0,160}?assurance.{0,24}?\"matched\"", result_section
+    ), "Result section does not show the success Verdict carries assurance matched"

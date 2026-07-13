@@ -321,6 +321,63 @@ def test_fr_017_oq_017_samples_written_and_skill_md_injected(monkeypatch):
     assert fixture["intent_nl"] in provider.message_log[0]["content"]
 
 
+def test_fr_032_run_fixture_records_ordered_tool_call_log(monkeypatch):
+    # FR-032 / AC-034 — run_fixture records tool_call_log: an ordered
+    # [{seq,name,input,result}] record for every EXECUTED dispatch. tool_calls
+    # stays the int call *count* (the existing scoring contract, unchanged).
+    provider = FakeProvider(
+        [
+            tool_turn("write_file", {"path": "t.json", "content": TRIVIAL_TEMPLATE}, "w1"),
+            tool_turn(
+                "transon_authoring", {"argv": ["validate", "--template", "t.json"]}, "r1"
+            ),
+            tool_turn("submit_result", {"result": AUTHORING_RESULT}, "s1"),
+        ]
+    )
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "read attribute a"}, RUNNER_CFG, provider, REPO_ROOT
+    )
+
+    assert episode["tool_calls"] == 3  # still the int call count (unchanged)
+
+    log = episode["tool_call_log"]
+    assert [r["seq"] for r in log] == [1, 2, 3]  # contiguous 1..N, in order
+    assert [r["name"] for r in log] == [
+        "write_file",
+        "transon_authoring",
+        "submit_result",
+    ]
+    # write_file record: verbatim input + the {ok, path} payload sent to the model.
+    assert log[0]["input"] == {"path": "t.json", "content": TRIVIAL_TEMPLATE}
+    assert log[0]["result"] == {"ok": True, "path": "t.json"}
+    # transon_authoring record: result is the real {exit_code, stdout, stderr}.
+    assert log[1]["input"] == {"argv": ["validate", "--template", "t.json"]}
+    assert log[1]["result"]["exit_code"] == 0
+    assert json.loads(log[1]["result"]["stdout"])["ok"] is True
+    # submit_result terminal record: result is None; input carries the verbatim
+    # submitted AuthoringResult payload.
+    assert log[2]["result"] is None
+    assert log[2]["input"] == {"result": AUTHORING_RESULT}
+    assert episode["submitted"] == AUTHORING_RESULT
+
+
+def test_fr_032_budget_crossing_call_not_logged():
+    # FR-032 — the tool call that crosses tool_budget never executes, so it is
+    # not appended to tool_call_log; the log stays contiguous over the executed
+    # calls (seq 1..3 for budget 3) even though tool_calls counts the crossing.
+    endless_write = tool_turn("write_file", {"path": "loop.txt", "content": "x"})
+    provider = FakeProvider([copy.deepcopy(endless_write) for _ in range(50)])
+    cfg = {"tool_budget": 3}
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "loop forever"}, cfg, provider, REPO_ROOT
+    )
+    assert episode["outcome"] == "budget_exceeded"
+    assert episode["tool_calls"] == 4  # the call that crossed the budget
+    log = episode["tool_call_log"]
+    assert [r["seq"] for r in log] == [1, 2, 3]  # crossing 4th call not logged
+    assert all(r["name"] == "write_file" for r in log)
+
+
 def test_fr_017_oq_017_module_imports_without_anthropic_sdk(monkeypatch):
     # OQ-017d — the anthropic SDK is an optional extra imported lazily inside
     # AnthropicProvider.__init__; module import must succeed without it.

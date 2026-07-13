@@ -260,12 +260,17 @@ def _episode_result(
     outcome: str,
     tool_calls: int,
     error: Optional[str] = None,
+    tool_call_log: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
+    # ``tool_calls`` stays the int call *count* (existing scoring contract).
+    # ``tool_call_log`` is the ordered [{seq, name, input, result}] record the
+    # FR-032 EpisodeTranscript persists (additive; changes no scoring, AC-034).
     return {
         "submitted": submitted,
         "outcome": outcome,
         "tool_calls": tool_calls,
         "error": error,
+        "tool_call_log": tool_call_log if tool_call_log is not None else [],
     }
 
 
@@ -279,10 +284,17 @@ def run_fixture(
 
     EpisodeResult: ``{"submitted": AuthoringResult|None, "outcome":
     "submitted"|"budget_exceeded"|"no_submit"|"infra_error",
-    "tool_calls": int, "error": str|None}``.
+    "tool_calls": int, "error": str|None, "tool_call_log":
+    [{seq, name, input, result}, …]}``. ``tool_calls`` stays the int call
+    count; ``tool_call_log`` is the ordered per-call record the FR-032
+    EpisodeTranscript persists (additive — no scoring impact, AC-034).
     """
     workspace = Path(tempfile.mkdtemp(prefix="transon-eval-"))
     tool_calls = 0
+    # FR-032 ordered tool-call record for the EpisodeTranscript; accumulates
+    # one {seq, name, input, result} per *executed* dispatch (the budget-
+    # crossing call and fault early returns are never appended — no result).
+    tool_call_log: list[dict[str, Any]] = []
     try:
         try:
             # OQ-017a: system prompt = verbatim SKILL.md bytes + fixed preamble.
@@ -303,6 +315,7 @@ def run_fixture(
                 outcome="infra_error",
                 tool_calls=tool_calls,
                 error=f"harness setup fault: {type(exc).__name__}: {exc}",
+                tool_call_log=tool_call_log,
             )
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
@@ -316,11 +329,16 @@ def run_fixture(
                     outcome="infra_error",
                     tool_calls=tool_calls,
                     error=f"{type(exc).__name__}: {exc}",
+                    tool_call_log=tool_call_log,
                 )
 
             if not turn.tool_uses:
                 # Model stopped without submit_result: bucket-failure (OQ-017c).
-                return _episode_result(outcome="no_submit", tool_calls=tool_calls)
+                return _episode_result(
+                    outcome="no_submit",
+                    tool_calls=tool_calls,
+                    tool_call_log=tool_call_log,
+                )
 
             assistant_content: list[dict[str, Any]] = []
             if turn.text:
@@ -340,15 +358,29 @@ def run_fixture(
             for tool_use in turn.tool_uses:
                 tool_calls += 1
                 if tool_calls > tool_budget:
-                    # Bucket-failure, not infra (OQ-017c).
+                    # Bucket-failure, not infra (OQ-017c). The budget-crossing
+                    # call never executes, so it is not appended to the log.
                     return _episode_result(
-                        outcome="budget_exceeded", tool_calls=tool_calls
+                        outcome="budget_exceeded",
+                        tool_calls=tool_calls,
+                        tool_call_log=tool_call_log,
                     )
                 if tool_use.name == "submit_result":
+                    # Record the terminal submit before ending the episode; it
+                    # returns no tool result, so result is null (FR-032).
+                    tool_call_log.append(
+                        {
+                            "seq": tool_calls,
+                            "name": "submit_result",
+                            "input": tool_use.input,
+                            "result": None,
+                        }
+                    )
                     return _episode_result(
                         submitted=tool_use.input.get("result"),
                         outcome="submitted",
                         tool_calls=tool_calls,
+                        tool_call_log=tool_call_log,
                     )
                 # A harness fault (tool timeout, OS error) is infra_error per
                 # OQ-016d — never a crash of the whole multi-fixture run.
@@ -365,7 +397,18 @@ def run_fixture(
                         tool_calls=tool_calls,
                         error=f"harness fault in {tool_use.name}: "
                         f"{type(exc).__name__}: {exc}",
+                        tool_call_log=tool_call_log,
                     )
+                # Record the executed dispatch with the same payload handed
+                # back to the model (FR-032 EpisodeTranscript tool_calls).
+                tool_call_log.append(
+                    {
+                        "seq": tool_calls,
+                        "name": tool_use.name,
+                        "input": tool_use.input,
+                        "result": payload,
+                    }
+                )
                 tool_results.append(
                     {
                         "type": "tool_result",
