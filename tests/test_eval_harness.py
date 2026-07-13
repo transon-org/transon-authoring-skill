@@ -393,3 +393,65 @@ def test_fr_017_oq_017_module_imports_without_anthropic_sdk(monkeypatch):
         module.AnthropicProvider(
             {"model_id": "m", "max_output_tokens": 1, "seed": None}
         )
+
+
+# --- Prompt caching + local OpenAI-compatible provider (non-normative) --------
+
+
+def test_with_cache_control_marks_system_and_last_block_without_mutating():
+    # Caching is semantically transparent: it only annotates the request with
+    # ephemeral breakpoints (system + last message block), never mutating the
+    # caller's messages, so scoring/determinism (NFR-002) are untouched.
+    messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "r1"},
+            {"type": "tool_result", "tool_use_id": "t2", "content": "r2"},
+        ]},
+    ]
+    before = copy.deepcopy(messages)
+    system_param, messages_param = harness.with_cache_control("SYS", messages)
+
+    assert system_param == [
+        {"type": "text", "text": "SYS", "cache_control": {"type": "ephemeral"}}
+    ]
+    # Only the LAST block of the LAST message carries a breakpoint.
+    last_blocks = messages_param[-1]["content"]
+    assert last_blocks[-1]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in last_blocks[0]
+    # Earlier message untouched; input object never mutated.
+    assert "cache_control" not in str(messages_param[0])
+    assert messages == before
+
+
+def test_with_cache_control_wraps_string_last_message():
+    # NFR-002: a string last-message is wrapped into a cacheable text block
+    # (transparent — only annotates the request, never changes model input).
+    _system_param, messages_param = harness.with_cache_control(
+        "SYS", [{"role": "user", "content": "just text"}]
+    )
+    block = messages_param[-1]["content"][-1]
+    assert block == {
+        "type": "text", "text": "just text", "cache_control": {"type": "ephemeral"},
+    }
+
+
+def test_run_fixture_accumulates_token_usage_additively():
+    # AC-034: Turn.usage is *accumulated* across turns into
+    # EpisodeResult["tokens"] (summed, never overwritten); additive telemetry
+    # that never affects scoring. Two usage-bearing turns with distinct values
+    # so a "last-turn-wins" bug would fail the sum assertions.
+    first = tool_turn("write_file", {"path": "t.txt", "content": "x"})
+    first.usage = {"input": 100, "output": 20, "cache_read": 40, "cache_creation": 10}
+    submit = tool_turn("submit_result", {"result": AUTHORING_RESULT})
+    submit.usage = {"input": 200, "output": 5, "cache_read": 60, "cache_creation": 2}
+    provider = FakeProvider([first, submit])
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "x"}, {"tool_budget": 8}, provider, REPO_ROOT
+    )
+    assert episode["outcome"] == "submitted"
+    assert episode["tokens"]["input"] == 300
+    assert episode["tokens"]["output"] == 25
+    assert episode["tokens"]["cache_read"] == 100
+    assert episode["tokens"]["cache_creation"] == 12
+    assert episode["tokens"]["turns"] == 2

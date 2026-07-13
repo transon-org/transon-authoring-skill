@@ -123,6 +123,12 @@ class Turn:
 
     text: str = ""
     tool_uses: list[ToolUse] = field(default_factory=list)
+    #: Optional per-call token usage the provider reports, keyed
+    #: ``input`` / ``output`` / ``cache_read`` / ``cache_creation``. Telemetry
+    #: only — accumulated into the EpisodeResult ``tokens`` field for cost
+    #: reporting; never consulted by scoring (AC-034). ``None`` when the
+    #: provider does not report usage.
+    usage: Optional[dict[str, int]] = None
 
 
 class Provider(Protocol):
@@ -134,6 +140,61 @@ class Provider(Protocol):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Turn: ...
+
+
+def with_cache_control(
+    system: str, messages: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return ``(system_param, messages_param)`` with prompt-cache breakpoints.
+
+    Prompt caching is a **prefix match and semantically transparent**: the model
+    receives byte-identical input and returns identical output whether a prefix
+    was served from cache or not (Anthropic guarantee). So this changes billing
+    only — never scoring or determinism (NFR-002), and it is not a
+    gate-identity field (``runner.json`` is unchanged). Pure and SDK-free so it
+    is unit-testable without the ``anthropic`` extra.
+
+    Two ephemeral breakpoints (well under the 4-breakpoint cap):
+
+    1. the **system** block — since render order is tools → system → messages, a
+       breakpoint here caches tools + system together: the large stable prefix
+       (SKILL.md + preamble + tool defs) re-sent on every turn of every episode;
+    2. the **last content block of the last message** — caches the growing
+       transcript prefix so each turn reads the prior turn's cache.
+    """
+    system_param = [
+        {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+    ]
+    if not messages:
+        return system_param, messages
+    cached = [dict(m) for m in messages]
+    last = cached[-1]
+    content = last.get("content")
+    if isinstance(content, str):
+        last["content"] = [
+            {
+                "type": "text",
+                "text": content,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+    elif isinstance(content, list) and content:
+        blocks = [dict(b) for b in content]
+        blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+        last["content"] = blocks
+    return system_param, cached
+
+
+def _usage_dict(usage: Any) -> Optional[dict[str, int]]:
+    """Normalize a provider usage object into the Turn.usage shape, or None."""
+    if usage is None:
+        return None
+    return {
+        "input": int(getattr(usage, "input_tokens", 0) or 0),
+        "output": int(getattr(usage, "output_tokens", 0) or 0),
+        "cache_read": int(getattr(usage, "cache_read_input_tokens", 0) or 0),
+        "cache_creation": int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
+    }
 
 
 class AnthropicProvider:
@@ -161,13 +222,16 @@ class AnthropicProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Turn:
+        # Prompt-cache the stable system+tools prefix and growing transcript
+        # (semantically transparent — no effect on output/scoring, NFR-002).
+        system_param, messages_param = with_cache_control(system, messages)
         # No sampling parameters (SPEC §11.8 rev 2026-07-12): the pinned
         # model rejects non-default temperature/top_p/top_k with a 400.
         response = self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            system=system,
-            messages=messages,
+            system=system_param,
+            messages=messages_param,
             tools=tools,
         )
         text_parts: list[str] = []
@@ -179,7 +243,11 @@ class AnthropicProvider:
                 tool_uses.append(
                     ToolUse(id=block.id, name=block.name, input=dict(block.input))
                 )
-        return Turn(text="".join(text_parts), tool_uses=tool_uses)
+        return Turn(
+            text="".join(text_parts),
+            tool_uses=tool_uses,
+            usage=_usage_dict(getattr(response, "usage", None)),
+        )
 
 
 def _confine(workspace: Path, raw_path: str) -> Optional[Path]:
@@ -254,6 +322,16 @@ def _tool_transon_authoring(
     }
 
 
+def _new_tokens() -> dict[str, int]:
+    return {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_creation": 0,
+        "turns": 0,
+    }
+
+
 def _episode_result(
     *,
     submitted: Optional[dict[str, Any]] = None,
@@ -261,16 +339,20 @@ def _episode_result(
     tool_calls: int,
     error: Optional[str] = None,
     tool_call_log: Optional[list[dict[str, Any]]] = None,
+    tokens: Optional[dict[str, int]] = None,
 ) -> dict[str, Any]:
     # ``tool_calls`` stays the int call *count* (existing scoring contract).
     # ``tool_call_log`` is the ordered [{seq, name, input, result}] record the
     # FR-032 EpisodeTranscript persists (additive; changes no scoring, AC-034).
+    # ``tokens`` is per-episode provider usage (additive cost telemetry; never
+    # consulted by scoring).
     return {
         "submitted": submitted,
         "outcome": outcome,
         "tool_calls": tool_calls,
         "error": error,
         "tool_call_log": tool_call_log if tool_call_log is not None else [],
+        "tokens": tokens if tokens is not None else _new_tokens(),
     }
 
 
@@ -295,6 +377,8 @@ def run_fixture(
     # one {seq, name, input, result} per *executed* dispatch (the budget-
     # crossing call and fault early returns are never appended — no result).
     tool_call_log: list[dict[str, Any]] = []
+    # Per-episode provider token usage (additive telemetry; never scored).
+    tokens = _new_tokens()
     try:
         try:
             # OQ-017a: system prompt = verbatim SKILL.md bytes + fixed preamble.
@@ -316,6 +400,7 @@ def run_fixture(
                 tool_calls=tool_calls,
                 error=f"harness setup fault: {type(exc).__name__}: {exc}",
                 tool_call_log=tool_call_log,
+                tokens=tokens,
             )
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
@@ -330,7 +415,13 @@ def run_fixture(
                     tool_calls=tool_calls,
                     error=f"{type(exc).__name__}: {exc}",
                     tool_call_log=tool_call_log,
+                    tokens=tokens,
                 )
+
+            if turn.usage:  # accumulate additive cost telemetry
+                for key in ("input", "output", "cache_read", "cache_creation"):
+                    tokens[key] += int(turn.usage.get(key, 0) or 0)
+                tokens["turns"] += 1
 
             if not turn.tool_uses:
                 # Model stopped without submit_result: bucket-failure (OQ-017c).
@@ -338,6 +429,7 @@ def run_fixture(
                     outcome="no_submit",
                     tool_calls=tool_calls,
                     tool_call_log=tool_call_log,
+                    tokens=tokens,
                 )
 
             assistant_content: list[dict[str, Any]] = []
@@ -364,6 +456,7 @@ def run_fixture(
                         outcome="budget_exceeded",
                         tool_calls=tool_calls,
                         tool_call_log=tool_call_log,
+                        tokens=tokens,
                     )
                 if tool_use.name == "submit_result":
                     # Record the terminal submit before ending the episode; it
@@ -381,6 +474,7 @@ def run_fixture(
                         outcome="submitted",
                         tool_calls=tool_calls,
                         tool_call_log=tool_call_log,
+                        tokens=tokens,
                     )
                 # A harness fault (tool timeout, OS error) is infra_error per
                 # OQ-016d — never a crash of the whole multi-fixture run.
@@ -398,6 +492,7 @@ def run_fixture(
                         error=f"harness fault in {tool_use.name}: "
                         f"{type(exc).__name__}: {exc}",
                         tool_call_log=tool_call_log,
+                        tokens=tokens,
                     )
                 # Record the executed dispatch with the same payload handed
                 # back to the model (FR-032 EpisodeTranscript tool_calls).

@@ -9,3 +9,7 @@ build/
 .mypy_cache/
 .ruff_cache/
 .DS_Store
+
+# Local secrets (API keys for cache_ab / evals) — never commit
+.env
+.env.*
