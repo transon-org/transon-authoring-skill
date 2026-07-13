@@ -56,8 +56,13 @@ def run_check(*args: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
-    """A tmp repo root with the committed evals/ corpus copied in."""
+    """A tmp repo root with the committed evals/ corpus copied in, plus the
+    docs/proposals/ tree the constructed real-world-pack seeds' source_ref
+    pointers resolve to (FR-033d provenance-link check)."""
     shutil.copytree(REPO_ROOT / "evals", tmp_path / "evals")
+    shutil.copytree(
+        REPO_ROOT / "docs" / "proposals", tmp_path / "docs" / "proposals"
+    )
     return tmp_path
 
 
@@ -433,11 +438,12 @@ def mint_constructed_into(root: Path) -> tuple[Path, Path]:
         "notes": "Missing name defaults to null; empty items list yields an empty list.",
     }
     # FR-033d: the seed source_ref's file portion must resolve under the lint
-    # root; provide the referenced provenance doc in the tmp repo (the tmp_repo
-    # fixture copies only evals/).
+    # root; the tmp_repo fixture already copies docs/proposals/, but guard for
+    # callers passing a bare root (create the referenced doc if it is absent).
     doc = root / "docs" / "proposals" / "big-real-world-transform-samples.md"
-    doc.parent.mkdir(parents=True, exist_ok=True)
-    doc.write_text("stub provenance doc for the constructed-seed test\n", encoding="utf-8")
+    if not doc.is_file():
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text("stub provenance doc for the constructed-seed test\n", encoding="utf-8")
     seeds_dir = root / "evals" / "seeds"
     seeds_dir.mkdir(parents=True, exist_ok=True)
     fixture_path = root / "evals" / "cases" / f"{CONSTRUCTED_ID}.json"
