@@ -434,41 +434,6 @@ def test_with_cache_control_wraps_string_last_message():
     }
 
 
-def test_extract_tool_calls_from_content_recovers_ollama_shapes():
-    # Ollama returns some models' tool calls as content text; the local provider
-    # recovers bare JSON, <tool_call> tags, and fenced blocks (order preserved).
-    assert harness._extract_tool_calls_from_content(
-        '{"name": "write_file", "arguments": {"path": "a", "content": "b"}}'
-    ) == [("write_file", {"path": "a", "content": "b"})]
-    assert harness._extract_tool_calls_from_content(
-        '<tool_call>{"name": "submit_result", "arguments": {"result": {"ok": true}}}</tool_call>'
-    ) == [("submit_result", {"result": {"ok": True}})]
-    assert harness._extract_tool_calls_from_content("no call here") == []
-
-
-def test_to_openai_messages_maps_tool_results_and_tool_uses():
-    system = "SYS"
-    messages = [
-        {"role": "user", "content": "author X"},
-        {"role": "assistant", "content": [
-            {"type": "text", "text": "ok"},
-            {"type": "tool_use", "id": "tc1", "name": "write_file",
-             "input": {"path": "t.json", "content": "{}"}},
-        ]},
-        {"role": "user", "content": [
-            {"type": "tool_result", "tool_use_id": "tc1", "content": "{\"ok\": true}"},
-        ]},
-    ]
-    out = harness._to_openai_messages(system, messages)
-    assert out[0] == {"role": "system", "content": "SYS"}
-    assert out[1] == {"role": "user", "content": "author X"}
-    assistant = out[2]
-    assert assistant["role"] == "assistant"
-    assert assistant["tool_calls"][0]["function"]["name"] == "write_file"
-    assert json.loads(assistant["tool_calls"][0]["function"]["arguments"]) == {
-        "path": "t.json", "content": "{}",
-    }
-    assert out[3] == {"role": "tool", "tool_call_id": "tc1", "content": "{\"ok\": true}"}
 
 
 def test_run_fixture_accumulates_token_usage_additively():

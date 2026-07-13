@@ -25,7 +25,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol
@@ -206,7 +205,7 @@ class AnthropicProvider:
     importing this module works without the SDK installed.
     """
 
-    def __init__(self, runner_cfg: dict[str, Any], *, use_cache: bool = True):
+    def __init__(self, runner_cfg: dict[str, Any]):
         import anthropic  # lazy: optional [evals] extra only (OQ-017d)
 
         self._client = anthropic.Anthropic()
@@ -216,10 +215,6 @@ class AnthropicProvider:
         # the Anthropic Messages API has no seed parameter, so a non-null seed
         # is recorded but not sent (runner.json pins seed: null).
         self._seed = runner_cfg.get("seed")
-        # Prompt caching is on by default (the shipped behaviour). The toggle
-        # exists only to A/B the cache effect against real `usage` — caching is
-        # semantically transparent, so it never changes output or scoring.
-        self._use_cache = use_cache
 
     def create_turn(
         self,
@@ -227,12 +222,9 @@ class AnthropicProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Turn:
-        if self._use_cache:
-            # Prompt-cache the stable system+tools prefix and growing transcript
-            # (semantically transparent — no effect on output/scoring, NFR-002).
-            system_param, messages_param = with_cache_control(system, messages)
-        else:
-            system_param, messages_param = system, messages
+        # Prompt-cache the stable system+tools prefix and growing transcript
+        # (semantically transparent — no effect on output/scoring, NFR-002).
+        system_param, messages_param = with_cache_control(system, messages)
         # No sampling parameters (SPEC §11.8 rev 2026-07-12): the pinned
         # model rejects non-default temperature/top_p/top_k with a 400.
         response = self._client.messages.create(
@@ -255,219 +247,6 @@ class AnthropicProvider:
             text="".join(text_parts),
             tool_uses=tool_uses,
             usage=_usage_dict(getattr(response, "usage", None)),
-        )
-
-
-def _extract_tool_calls_from_content(text: str) -> list[tuple[str, dict[str, Any]]]:
-    """Best-effort ``(name, args)`` extraction from assistant *content* text.
-
-    Some OpenAI-compatible servers (notably Ollama with models whose chat
-    template emits bare JSON or ``<tool_call>`` tags — e.g. qwen2.5-coder)
-    return the tool call as text in ``content`` with ``tool_calls`` empty. This
-    recovers those so the NON-NORMATIVE local loop still works.
-
-    Robust to surrounding prose, stray/one-sided code fences, and trailing junk:
-    it scans each ``<tool_call>`` segment (or the whole text) and JSON-decodes
-    every ``{…}`` / ``[…]`` value with :meth:`json.JSONDecoder.raw_decode`,
-    which stops at the end of the first valid value and ignores what follows.
-    Order preserved.
-    """
-    import re
-
-    if not isinstance(text, str) or not text.strip():
-        return []
-    segments = re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.DOTALL) or [
-        text
-    ]
-    calls: list[tuple[str, dict[str, Any]]] = []
-    decoder = json.JSONDecoder()
-    for segment in segments:
-        i = 0
-        while i < len(segment):
-            if segment[i] not in "{[":
-                i += 1
-                continue
-            try:
-                obj, end = decoder.raw_decode(segment, i)
-            except json.JSONDecodeError:
-                i += 1
-                continue
-            for item in obj if isinstance(obj, list) else [obj]:
-                if not isinstance(item, dict) or "name" not in item:
-                    continue
-                args = item.get("arguments", item.get("parameters", {}))
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args)
-                    except json.JSONDecodeError:
-                        args = {}
-                # Some models emit a positional list instead of the tool's named
-                # object; among the three harness tools only transon_authoring
-                # takes a list arg, so a bare list becomes its {argv: […]} shape.
-                if isinstance(args, list):
-                    args = {"argv": args}
-                if isinstance(args, dict):
-                    calls.append((str(item["name"]), args))
-            i = end
-    return calls
-
-
-#: Anthropic-shaped block/message → OpenAI chat-completions translation for the
-#: NON-NORMATIVE local provider below.
-def _to_openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "parameters": t["input_schema"],
-            },
-        }
-        for t in tools
-    ]
-
-
-def _to_openai_messages(
-    system: str, messages: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
-    for m in messages:
-        role = m["role"]
-        content = m["content"]
-        if role == "user":
-            if isinstance(content, str):
-                out.append({"role": "user", "content": content})
-                continue
-            # A user turn in this harness is a list of tool_result blocks; map
-            # each to an OpenAI role:"tool" message keyed by tool_call_id.
-            texts: list[str] = []
-            for b in content:
-                if b.get("type") == "tool_result":
-                    out.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": b.get("tool_use_id", ""),
-                            "content": b.get("content", ""),
-                        }
-                    )
-                elif b.get("type") == "text":
-                    texts.append(b.get("text", ""))
-            if texts:
-                out.append({"role": "user", "content": "\n".join(texts)})
-        elif role == "assistant":
-            texts = []
-            tool_calls: list[dict[str, Any]] = []
-            for b in content if isinstance(content, list) else []:
-                if b.get("type") == "text":
-                    texts.append(b.get("text", ""))
-                elif b.get("type") == "tool_use":
-                    tool_calls.append(
-                        {
-                            "id": b.get("id", ""),
-                            "type": "function",
-                            "function": {
-                                "name": b.get("name", ""),
-                                "arguments": json.dumps(b.get("input", {})),
-                            },
-                        }
-                    )
-            msg: dict[str, Any] = {
-                "role": "assistant",
-                "content": "\n".join(texts),
-            }
-            if tool_calls:
-                msg["tool_calls"] = tool_calls
-            out.append(msg)
-    return out
-
-
-class OpenAICompatibleProvider:
-    """OpenAI-compatible chat-completions provider (e.g. a local Ollama server).
-
-    **NON-NORMATIVE** — this is *not* the §11.8 gate provider (that is
-    :class:`AnthropicProvider`, pinned by ``runner.json`` to the small-model
-    Anthropic pin). It exists only for local, offline iteration against an
-    OpenAI-compatible endpoint. It translates the harness's Anthropic-shaped
-    ``(system, messages, tools)`` into OpenAI chat/completions and back, using
-    only the standard library — no SDK, no dependency beyond the local endpoint.
-    """
-
-    def __init__(
-        self,
-        base_url: str,
-        model: str,
-        max_tokens: int,
-        timeout: float = 600.0,
-    ):
-        self._url = base_url.rstrip("/") + "/chat/completions"
-        self._model = model
-        self._max_tokens = max_tokens
-        self._timeout = timeout
-
-    def create_turn(
-        self,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-    ) -> Turn:
-        payload = {
-            "model": self._model,
-            "max_tokens": self._max_tokens,
-            "messages": _to_openai_messages(system, messages),
-            "tools": _to_openai_tools(tools),
-        }
-        req = urllib.request.Request(
-            self._url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        message = body["choices"][0]["message"]
-        text = message.get("content") or ""
-        tool_uses: list[ToolUse] = []
-        for i, call in enumerate(message.get("tool_calls") or []):
-            fn = call.get("function", {})
-            args = fn.get("arguments")
-            if isinstance(args, str):
-                try:
-                    parsed = json.loads(args) if args.strip() else {}
-                except json.JSONDecodeError:
-                    parsed = {"__unparsed_arguments__": args}
-            elif isinstance(args, dict):
-                parsed = args
-            else:
-                parsed = {}
-            tool_uses.append(
-                ToolUse(
-                    id=call.get("id") or f"call_{i}",
-                    name=fn.get("name", ""),
-                    input=parsed,
-                )
-            )
-        # Fallback: recover tool calls emitted as content text (Ollama returns
-        # bare-JSON / <tool_call> tool calls in `content` with `tool_calls`
-        # empty for some models). When recovered, the content WAS the call, so
-        # it is not also surfaced as assistant prose.
-        if not tool_uses:
-            recovered = _extract_tool_calls_from_content(text)
-            for i, (name, args) in enumerate(recovered):
-                tool_uses.append(ToolUse(id=f"call_{i}", name=name, input=args))
-            if recovered:
-                text = ""
-        u = body.get("usage") or {}
-        usage = {
-            "input": int(u.get("prompt_tokens", 0) or 0),
-            "output": int(u.get("completion_tokens", 0) or 0),
-            "cache_read": 0,
-            "cache_creation": 0,
-        }
-        return Turn(
-            text=text if isinstance(text, str) else "",
-            tool_uses=tool_uses,
-            usage=usage,
         )
 
 
@@ -550,12 +329,6 @@ def _new_tokens() -> dict[str, int]:
         "cache_read": 0,
         "cache_creation": 0,
         "turns": 0,
-        # first/last turn input prefix sizes — enable cache modelling (the last
-        # turn's prefix is the fresh floor after within-episode caching; the
-        # first turn's prefix is the ~constant system+tools block shared across
-        # every episode). Additive telemetry; never scored.
-        "first_input": 0,
-        "last_input": 0,
     }
 
 
@@ -649,10 +422,6 @@ def run_fixture(
                 for key in ("input", "output", "cache_read", "cache_creation"):
                     tokens[key] += int(turn.usage.get(key, 0) or 0)
                 tokens["turns"] += 1
-                this_in = int(turn.usage.get("input", 0) or 0)
-                if tokens["first_input"] == 0:
-                    tokens["first_input"] = this_in
-                tokens["last_input"] = this_in
 
             if not turn.tool_uses:
                 # Model stopped without submit_result: bucket-failure (OQ-017c).
