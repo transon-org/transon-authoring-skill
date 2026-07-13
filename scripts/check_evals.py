@@ -31,9 +31,9 @@ Lint checks (every failure names the offending file, all reported on stderr):
 4. Fixtures carrying ``samples``: ``check_samples(samples)`` must report
    ``ok_for_verify: true`` (FR-027; the harness hands the SampleSet straight
    to the skill under test, OQ-017a).
-5. Privacy invariants (NFR-011 / FR-018): ``consent`` present ⇒
-   ``redacted: true``; ``redacted: false`` is allowed only for synthetic
-   fixtures (no ``consent``).
+5. Privacy invariants (NFR-011 / FR-018): ``consent`` present ⇔
+   ``redacted: true`` (both directions); ``redacted: false`` is allowed only
+   for synthetic fixtures (no ``consent``).
 6. Best-effort secret scan over each fixture's raw bytes against
    ``SECRET_PATTERNS`` (AWS access key ids, private-key PEM headers, GitHub
    tokens, ``sk-…`` API keys, JWT-looking payloads); any hit is red.
@@ -191,10 +191,24 @@ def lint_evals(repo_root: Path, verbose: bool = False) -> list[str]:
                     )
 
             # --- Check 5: consent/redaction invariants (NFR-011). ----------
+            # Bidirectional for real-use fixtures (FR-018a / AC-025): consent
+            # requires redaction, AND redaction requires recorded consent.
+            # Synthetic/constructed fixtures are `redacted: false` with no
+            # `consent`, so neither branch fires on them. (A real-use fixture
+            # committed as `redacted: false` with no `consent` is
+            # indistinguishable from synthetic and cannot be caught by lint —
+            # that residual is covered by the SKILL.md §3.5 capture rule, not
+            # here.)
             if "consent" in fixture and fixture["redacted"] is not True:
                 failures.append(
                     f"{path}: consent recorded but redacted is not true — "
                     "real-use fixtures require redaction before commit "
+                    "(NFR-011 / FR-018 / AC-025)"
+                )
+            if fixture["redacted"] is True and "consent" not in fixture:
+                failures.append(
+                    f"{path}: redacted is true but no consent object — a "
+                    "redacted real-use fixture must record consent "
                     "(NFR-011 / FR-018 / AC-025)"
                 )
 

@@ -425,15 +425,15 @@ def test_with_cache_control_marks_system_and_last_block_without_mutating():
 
 
 def test_with_cache_control_wraps_string_last_message():
-    system_param, messages_param = harness.with_cache_control(
+    # NFR-002: a string last-message is wrapped into a cacheable text block
+    # (transparent — only annotates the request, never changes model input).
+    _system_param, messages_param = harness.with_cache_control(
         "SYS", [{"role": "user", "content": "just text"}]
     )
     block = messages_param[-1]["content"][-1]
     assert block == {
         "type": "text", "text": "just text", "cache_control": {"type": "ephemeral"},
     }
-
-
 
 
 def test_run_fixture_accumulates_token_usage_additively():
@@ -449,4 +449,5 @@ def test_run_fixture_accumulates_token_usage_additively():
     assert episode["tokens"]["input"] == 100
     assert episode["tokens"]["output"] == 20
     assert episode["tokens"]["cache_read"] == 40
+    assert episode["tokens"]["cache_creation"] == 10
     assert episode["tokens"]["turns"] == 1

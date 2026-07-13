@@ -104,6 +104,24 @@ def test_nfr_011_ac_025_consent_requires_redaction(tmp_repo: Path):
     assert lint_evals(tmp_repo) == []
 
 
+def test_nfr_011_ac_025_redaction_requires_consent(tmp_repo: Path):
+    # NFR-011 / AC-025 / FR-018a — the invariant is bidirectional: a fixture
+    # marked redacted:true with NO consent object is red (a redacted real-use
+    # fixture must record consent). Closes the one-directional lint gap.
+    path = mutate_fixture(tmp_repo, "seed-refuse-nonexistent-mode", redacted=True)
+    failures = lint_evals(tmp_repo)
+    hits = [f for f in failures if "redacted is true but no consent" in f]
+    assert hits, failures
+    assert any(str(path) in f for f in hits)
+    # adding the consent object yields the compliant real-use shape — green.
+    mutate_fixture(
+        tmp_repo,
+        "seed-refuse-nonexistent-mode",
+        consent={"by": "alice", "at": "2026-07-11T00:00:00Z", "note": "shared"},
+    )
+    assert lint_evals(tmp_repo) == []
+
+
 def test_nfr_011_secret_pattern_is_red(tmp_repo: Path):
     # NFR-011 / AC-025 — an AWS access key id in any fixture string trips the
     # best-effort secret scan.

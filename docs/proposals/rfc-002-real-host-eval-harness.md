@@ -45,7 +45,7 @@ The same fixture, same model (`claude-haiku-4-5`), same scorer
 | harness | tools | loop / budget | submission | `seed-matched-flatten-orders` |
 |---|---|---|---|---|
 | local-haiku (`Agent(model=haiku)`, general-purpose) | full suite (Read/Bash/Edit/…) | Claude Code agent loop, no cap | writes `result.json` | **pass** (and 44/44 in that run) |
-| raw `eval_harness` (the §11.8 gate) | 3 (`write_file`/`transon_authoring`/`submit_result`) | bare loop, 32-call cap | `submit_result` tool call | **fail** — `budget_exceeded` at 33 turns |
+| raw `eval_harness` (the §11.8 gate) | 3 (`write_file`/`transon_authoring`/`submit_result`) | bare loop, 32-**tool-call** cap | `submit_result` tool call | **fail** — `budget_exceeded` on the 33rd tool call (one call per turn in this run) |
 
 The gate harness fails a fixture the real host authors correctly. The earlier
 "100% local" number came from the *Agent* harness and was therefore never a
@@ -70,11 +70,43 @@ Make the NFR-010 gate run the skill in the **real host harness**, version-pinned
    pinning the host + version (e.g. `{ "kind": "agent-sdk", "version": "x.y.z" }`)
    alongside the model pin, so gate identity stays reproducible — the one real
    objection to using the host, solved the same way the model is solved: pin it.
-3. **Scoring unchanged.** Keep `check_evals.score_episode` (schema-valid +
-   independent engine re-verify, AD-004). The host writes/returns an
-   `AuthoringResult`; scoring is provider- and harness-agnostic already.
+3. **Scoring rules unchanged; add a host→EpisodeResult adapter.**
+   `check_evals.score_episode` scores an **EpisodeResult** (`outcome` +
+   `submitted`, §11.8 / OQ-016), *not* a bare `AuthoringResult`. So the driver
+   needs a **deterministic adapter** from the host's returned `AuthoringResult`
+   **and** its execution status to the EpisodeResult shape, covering every
+   §11.8 outcome:
+   - host returned a well-formed `AuthoringResult` → `outcome: "submitted"`,
+     `submitted: <it>` (schema-invalid payloads still map to `submitted` with the
+     raw payload retained → scored `invalid_submission` by OQ-016b, unchanged);
+   - host ended without returning one → `outcome: "no_submit"`;
+   - host exceeded the pinned step/turn/token budget → `outcome: "budget_exceeded"`;
+   - host/transport/credential fault → `outcome: "infra_error"`.
+   The scoring *rules* (schema-valid + independent engine re-verify, AD-004) are
+   untouched — only the *adapter feeding them* is new. This adapter is the real
+   substitute for the deleted raw loop and MUST be specified before adoption.
 4. **Retire or demote the raw loop.** The 3-tool/budget loop is either deleted or
    kept only as an offline smoke fixture — no longer the gate.
+5. **Isolation contract (normative before adoption).** Swapping 3 sandboxed
+   tools for a full Read/Write/Edit/**Bash** host inside the credential-holding
+   dispatch workflow widens the trust boundary: a fixture's `intent_nl`/SampleSet
+   is untrusted input, and the model executes shell commands, so a
+   prompt-injected or adversarial fixture could read the `ANTHROPIC_API_KEY`,
+   reach the network, or modify/exfiltrate repo data. Before adoption the host
+   run MUST be pinned to:
+   - **Ephemeral, per-episode workspace** — a throwaway temp dir, no repo
+     checkout mounted (the fixture + a pinned `transon_authoring` install only),
+     destroyed after scoring.
+   - **No credentials in the sandbox** — the provider key stays in the workflow
+     env used to *call* the model API, never exported into the tool-execution
+     environment the model drives; the model's Bash sees no secrets.
+   - **Network egress denied** by default (offline after the pinned engine
+     install — mirrors NFR-003), so `bash`/tools can't exfiltrate or fetch.
+   - **Artifact controls** — only the `AuthoringResult` (and, opt-in, an
+     FR-032-style transcript) leave the sandbox; nothing is committed; secret
+     scanning (the existing NFR-011 lint) covers any captured text.
+   This is the price of realism (a real host runs real tools) and is the single
+   biggest new risk the proposal introduces; it is a blocker, not a nicety.
 
 ## Tradeoffs
 
@@ -103,6 +135,12 @@ model-pin swap), and delete/demote `eval_harness.py`.
   (eval-policy commit + baseline reset, mirroring the model-pin rule).
 - **OQ-R3 — Cursor parity:** reference host only, or a second gate lane.
 - **OQ-R4 — Keep the raw loop** as a non-gating smoke, or delete outright.
+- **OQ-R5 — Host→EpisodeResult adapter** (Proposal §3): exact status→outcome
+  mapping and where it lives (driver vs `check_evals`), so scoring stays
+  deterministic and OQ-016-conformant.
+- **OQ-R6 — Isolation implementation** (Proposal §5): the concrete sandbox
+  (container? `unshare`/network namespace? the Agent SDK's own sandbox?), how the
+  key is withheld from tool execution, and the egress-deny mechanism.
 
 ## Recommendation
 
