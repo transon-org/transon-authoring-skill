@@ -44,6 +44,59 @@ _BUCKET = {
     "matched_correction": "correction",
 }
 
+#: Anthropic Haiku 4.5 pin rates ($/MTok) — the billed §11.8 gate model. Local
+#: Ollama tokens are free; these rates are applied to the *real measured token
+#: structure* to compare cached vs uncached spend on the normative path.
+_HAIKU = {"input": 1.00, "cache_read": 0.10, "cache_write": 1.25, "output": 5.00}
+
+
+def cache_comparison(episode_tokens: list[dict[str, int]]) -> dict[str, Any]:
+    """Compute uncached vs prompt-cached token spend from real per-episode token
+    structure, at Haiku rates. Model (stated): in this re-send-heavy tool loop
+    every input token is either **written once** or **re-read**, so input splits
+    with no leftover "regular" input (conservation: write + read == total in):
+
+    - ``cache_write`` = each episode establishes its full final prefix once
+      (``Σ last_input``); the ~constant system+tools block ``S`` is shared, so it
+      is written once, not per-episode → subtract ``(N-1)·S``.
+    - ``cache_read``  = everything re-read = ``total_input - cache_write``
+      = within-episode prefix re-reads + the shared system re-read each episode.
+
+    Prompt caching is semantically transparent, so the *token structure* is the
+    same whether or not ``cache_control`` is sent — only the billing differs.
+    """
+    eps = [t for t in episode_tokens if t.get("turns", 0) > 0]
+    N = len(eps)
+    total_in = sum(t["input"] for t in eps)
+    total_out = sum(t["output"] for t in eps)
+    sum_last = sum(t["last_input"] for t in eps)
+    firsts = sorted(t["first_input"] for t in eps)
+    S = firsts[len(firsts) // 2] if firsts else 0  # median shared system prefix
+    cache_write = max(sum_last - (N - 1) * S, 0)
+    cache_read = max(total_in - cache_write, 0)
+
+    def cost(inp: int, cr: int, cw: int, out: int) -> float:
+        return (
+            inp / 1e6 * _HAIKU["input"]
+            + cr / 1e6 * _HAIKU["cache_read"]
+            + cw / 1e6 * _HAIKU["cache_write"]
+            + out / 1e6 * _HAIKU["output"]
+        )
+
+    uncached = {"input": total_in, "cache_read": 0, "cache_write": 0, "output": total_out}
+    cached = {"input": 0, "cache_read": cache_read, "cache_write": cache_write, "output": total_out}
+    uncached["cost"] = cost(total_in, 0, 0, total_out)
+    cached["cost"] = cost(0, cache_read, cache_write, total_out)
+    return {
+        "episodes": N,
+        "shared_system_prefix_S": S,
+        "uncached": uncached,
+        "cached": cached,
+        "savings_pct": (
+            0.0 if not uncached["cost"] else 1 - cached["cost"] / uncached["cost"]
+        ),
+    }
+
 
 def load_fixtures(
     evals_dir: Path, only: list[str] | None, limit: int | None
@@ -111,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[dict[str, Any]] = []
     totals = {"input": 0, "output": 0}
+    episode_tokens: list[dict[str, int]] = []
     t_start = time.monotonic()
     for i, fixture in enumerate(fixtures, 1):
         scores: list[str] = []
@@ -122,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             score = check_evals.score_episode(fixture, episode)
             scores.append(score)
             tok = episode.get("tokens") or {}
+            episode_tokens.append(dict(tok))
             for key in ("input", "output"):
                 fx_tokens[key] += int(tok.get(key, 0) or 0)
                 totals[key] += int(tok.get(key, 0) or 0)
@@ -185,6 +240,41 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
+    # Cache comparison: real measured token structure priced at Haiku gate rates,
+    # uncached vs prompt-cached (the token STRUCTURE is caching-invariant; only
+    # the billing category changes). This is the normative-path cost delta the
+    # caching fix buys — Ollama itself is free and ignores cache_control.
+    cmp = cache_comparison(episode_tokens)
+    u, c = cmp["uncached"], cmp["cached"]
+    print(
+        "\n==== token spend by category — UNCACHED vs PROMPT-CACHED "
+        "(priced at Haiku 4.5 rates; local Ollama tokens are free) ====",
+        file=sys.stderr,
+    )
+    print(
+        f"{'category':<14}{'rate/MTok':>11}{'UNCACHED tok':>16}{'CACHED tok':>16}",
+        file=sys.stderr,
+    )
+    rate_label = {
+        "input": "$1.00", "cache_read": "$0.10", "cache_write": "$1.25", "output": "$5.00",
+    }
+    for cat in ("input", "cache_read", "cache_write", "output"):
+        print(
+            f"{cat:<14}{rate_label[cat]:>11}{u[cat]:>16,}{c[cat]:>16,}",
+            file=sys.stderr,
+        )
+    print("-" * 57, file=sys.stderr)
+    print(
+        f"{'COST':<14}{'':>11}{('$%.4f' % u['cost']):>16}{('$%.4f' % c['cost']):>16}",
+        file=sys.stderr,
+    )
+    print(
+        f"episodes={cmp['episodes']}  shared_system_prefix≈{cmp['shared_system_prefix_S']:,} tok  "
+        f"=> caching saves {cmp['savings_pct']:.0%} on this corpus",
+        file=sys.stderr,
+        flush=True,
+    )
+
     print(
         json.dumps(
             {
@@ -192,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
                 "model": args.model,
                 "buckets": bucket_rates,
                 "tokens": totals,
+                "cache_comparison_haiku_rates": cmp,
                 "wall_seconds": round(wall, 1),
                 "fixtures": results,
             },

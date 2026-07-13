@@ -543,6 +543,12 @@ def _new_tokens() -> dict[str, int]:
         "cache_read": 0,
         "cache_creation": 0,
         "turns": 0,
+        # first/last turn input prefix sizes — enable cache modelling (the last
+        # turn's prefix is the fresh floor after within-episode caching; the
+        # first turn's prefix is the ~constant system+tools block shared across
+        # every episode). Additive telemetry; never scored.
+        "first_input": 0,
+        "last_input": 0,
     }
 
 
@@ -636,6 +642,10 @@ def run_fixture(
                 for key in ("input", "output", "cache_read", "cache_creation"):
                     tokens[key] += int(turn.usage.get(key, 0) or 0)
                 tokens["turns"] += 1
+                this_in = int(turn.usage.get("input", 0) or 0)
+                if tokens["first_input"] == 0:
+                    tokens["first_input"] = this_in
+                tokens["last_input"] = this_in
 
             if not turn.tool_uses:
                 # Model stopped without submit_result: bucket-failure (OQ-017c).
