@@ -457,6 +457,13 @@ def test_fr_032_episode_transcript_is_closed_envelope():
     bad_tool_call = copy.deepcopy(GOLDEN_EPISODE_TRANSCRIPT)
     del bad_tool_call["tool_calls"][0]["result"]  # result is required
     assert schema_violations(bad_tool_call, "episode_transcript.json")
+    # Documented index bases are enforced: run_index is 0-based, seq is 1-based.
+    assert schema_violations(
+        dict(GOLDEN_EPISODE_TRANSCRIPT, run_index=-1), "episode_transcript.json"
+    )
+    zero_seq = copy.deepcopy(GOLDEN_EPISODE_TRANSCRIPT)
+    zero_seq["tool_calls"][0]["seq"] = 0
+    assert schema_violations(zero_seq, "episode_transcript.json")
     # A deliberately schema-invalid submitted payload is retained verbatim: the
     # transcript itself stays valid (OQ-016(b) failures stay diagnosable).
     invalid_submission = dict(

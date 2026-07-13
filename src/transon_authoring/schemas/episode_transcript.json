@@ -23,6 +23,7 @@
     },
     "run_index": {
       "type": "integer",
+      "minimum": 0,
       "description": "0-based index within runs_per_fixture."
     },
     "model_id": {
@@ -64,7 +65,8 @@
       "additionalProperties": false,
       "properties": {
         "seq": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         "name": {
           "type": "string"

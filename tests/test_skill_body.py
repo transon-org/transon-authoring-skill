@@ -767,6 +767,7 @@ def test_uc_001_walkthrough_review_approve():
         "explanation": "User reviewed the matched template and approved emission.",
         "template": template,
         "verdict": verdict,
+        "repair_count": 0,  # §7 mandates repair_count on a matched success
     }
     assert schema_violations(result, "authoring_result.json") == []
     assert result["template"] == template
