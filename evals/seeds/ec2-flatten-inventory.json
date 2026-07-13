@@ -1,0 +1,162 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "attr",
+        "name": "Reservations"
+      },
+      {
+        "$": "map",
+        "items": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "Instances"
+            },
+            {
+              "$": "map",
+              "item": {
+                "$": "object",
+                "fields": {
+                  "id": {
+                    "$": "attr",
+                    "name": "InstanceId"
+                  },
+                  "name": {
+                    "$": "chain",
+                    "funcs": [
+                      {
+                        "$": "attr",
+                        "name": "Tags"
+                      },
+                      {
+                        "$": "map",
+                        "key": {
+                          "$": "attr",
+                          "name": "Key"
+                        },
+                        "value": {
+                          "$": "attr",
+                          "name": "Value"
+                        }
+                      },
+                      {
+                        "$": "attr",
+                        "name": "Name",
+                        "default": null
+                      }
+                    ]
+                  },
+                  "env": {
+                    "$": "chain",
+                    "funcs": [
+                      {
+                        "$": "attr",
+                        "name": "Tags"
+                      },
+                      {
+                        "$": "map",
+                        "key": {
+                          "$": "attr",
+                          "name": "Key"
+                        },
+                        "value": {
+                          "$": "attr",
+                          "name": "Value"
+                        }
+                      },
+                      {
+                        "$": "attr",
+                        "name": "Environment",
+                        "default": null
+                      }
+                    ]
+                  },
+                  "team": {
+                    "$": "chain",
+                    "funcs": [
+                      {
+                        "$": "attr",
+                        "name": "Tags"
+                      },
+                      {
+                        "$": "map",
+                        "key": {
+                          "$": "attr",
+                          "name": "Key"
+                        },
+                        "value": {
+                          "$": "attr",
+                          "name": "Value"
+                        }
+                      },
+                      {
+                        "$": "attr",
+                        "name": "Team",
+                        "default": null
+                      }
+                    ]
+                  },
+                  "type": {
+                    "$": "attr",
+                    "name": "InstanceType"
+                  },
+                  "state": {
+                    "$": "attr",
+                    "names": [
+                      "State",
+                      "Name"
+                    ]
+                  },
+                  "az": {
+                    "$": "attr",
+                    "names": [
+                      "Placement",
+                      "AvailabilityZone"
+                    ]
+                  },
+                  "vpc": {
+                    "$": "attr",
+                    "name": "VpcId"
+                  },
+                  "privateIp": {
+                    "$": "attr",
+                    "name": "PrivateIpAddress"
+                  },
+                  "publicIp": {
+                    "$": "attr",
+                    "name": "PublicIpAddress",
+                    "default": null
+                  },
+                  "volumes": {
+                    "$": "chain",
+                    "funcs": [
+                      {
+                        "$": "attr",
+                        "name": "BlockDeviceMappings"
+                      },
+                      {
+                        "$": "map",
+                        "item": {
+                          "$": "attr",
+                          "names": [
+                            "Ebs",
+                            "VolumeId"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

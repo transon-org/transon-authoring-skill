@@ -37,11 +37,18 @@ Lint checks (every failure names the offending file, all reported on stderr):
 6. Best-effort secret scan over each fixture's raw bytes against
    ``SECRET_PATTERNS`` (AWS access key ids, private-key PEM headers, GitHub
    tokens, ``sk-…`` API keys, JWT-looking payloads); any hit is red.
-7. Every ``evals/seeds/*.json`` parses, is shape-valid
-   (``{source_example, template, generator: {version, notes?}}`` — validated
-   structurally, not by the §11.0 ingress, per OQ-025), and has a matching
+7. Every ``evals/seeds/*.json`` parses, is shape-valid and has a matching
    fixture ``evals/cases/<stem>.json``; a seed without a fixture is red, a
-   fixture without a seed is hand-authored and ignored (FR-029 / AC-030).
+   fixture without a seed is hand-authored and ignored. A seed carrying
+   ``origin`` is a **constructed** real-world-pack seed (FR-033 / AC-035 /
+   AD-023): shape ``{origin: "real-world-pack", source_ref, template,
+   notes?}``, and its fixture must **engine-freeze** — re-executing the seed
+   ``template`` against the fixture's committed ``samples`` verifies
+   ``ok+matched`` (every case's committed ``output`` equals the pinned
+   engine's output for that case's ``input``, §11.4). Every other seed is a
+   **synthetic** FR-029 seed (shape ``{source_example, template, generator:
+   {version, notes?}}`` — validated structurally, not by the §11.0 ingress,
+   per OQ-025) and runs checks 8–9 below (FR-029 / AC-030).
 8. Snapshot provenance (FR-029a): the seed ``source_example`` names an entry
    in the pinned snapshot ``docs.examples``, the seed ``template``
    JSON-equals that entry's ``template``, and fixture case 1 ``input``
@@ -71,7 +78,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from transon_authoring import check_samples, get_metadata
+    from transon_authoring import check_samples, get_metadata, verify
     from transon_authoring._ingress import (
         IngressError,
         load_document,
@@ -80,7 +87,7 @@ try:
     from transon_authoring.samples import content_fingerprint
 except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring import check_samples, get_metadata
+    from transon_authoring import check_samples, get_metadata, verify
     from transon_authoring._ingress import (
         IngressError,
         load_document,
@@ -244,6 +251,111 @@ def _seed_shape_errors(seed: Any) -> list[str]:
     return errors
 
 
+def _constructed_seed_shape_errors(seed: Any) -> list[str]:
+    """Structural validation of a constructed real-world-pack seed (FR-033 /
+    AD-023 shape; validated structurally, never the §11.0 ingress — mirrors
+    :func:`_seed_shape_errors`). Shape:
+    ``{origin: "real-world-pack", source_ref: <non-empty str>, template: <any
+    JsonValue>, notes?: <str>}``; unknown keys are rejected."""
+    if not isinstance(seed, dict):
+        return ["seed document must be a JSON object"]
+    errors: list[str] = []
+    extras = sorted(set(seed) - {"origin", "source_ref", "template", "notes"})
+    if extras:
+        errors.append(f"unknown seed keys: {', '.join(extras)}")
+    if seed.get("origin") != "real-world-pack":
+        errors.append('`origin` must be "real-world-pack"')
+    source_ref = seed.get("source_ref")
+    if not isinstance(source_ref, str) or not source_ref:
+        errors.append("`source_ref` must be a non-empty string")
+    if "template" not in seed:
+        errors.append("`template` is required")
+    if "notes" in seed and not isinstance(seed["notes"], str):
+        errors.append("`notes` must be a string when present")
+    return errors
+
+
+def _lint_constructed_seed(
+    path: Path,
+    seed: dict,
+    cases_dir: Path,
+    fixtures_by_stem: dict[str, dict],
+    note,
+) -> list[str]:
+    """FR-033 / AC-035 — a constructed real-world-pack seed (a seed carrying
+    ``origin``; AD-023). Shape-validate, then **engine-freeze** the seed
+    ``template`` against the fixture's committed ``samples`` via the library
+    ``verify``: a single ``ok+matched`` verdict IS the freeze — it proves every
+    case's committed ``output`` equals the pinned engine's actual output for
+    that case's ``input`` (§11.4 equality; matched ⇒ all dry_run + match stages
+    passed, AD-004). A mismatch, a shape-invalid seed, or a fixture without
+    SampleSet cases is red.
+
+    Leakage and ``ok_for_verify`` need no extra check here: the closed
+    ``eval_fixture.json`` schema (``additionalProperties: false``) already
+    rejects any template/answer field outside the SampleSet ``cases`` (lint
+    check 2), and lint check 4 already enforces ``ok_for_verify`` (FR-027).
+    """
+    failures: list[str] = []
+    shape_errors = _constructed_seed_shape_errors(seed)
+    if shape_errors:
+        failures.extend(
+            f"{path}: {error} (FR-033 / AC-035 constructed seed shape)"
+            for error in shape_errors
+        )
+        return failures
+
+    # (d) provenance link (FR-033d / AC-035): the source_ref's file portion
+    # (before any '#' anchor or trailing whitespace/section label) must resolve
+    # to an existing repo file INSIDE the repo. Fail closed: an empty file part
+    # (anchor-only source_ref) or a path that escapes repo_root (absolute / '..')
+    # is red, never a silent skip.
+    repo_root = cases_dir.parent.parent.resolve()
+    file_part = re.split(r"[#\s]", seed["source_ref"], maxsplit=1)[0]
+    provenance_ok = False
+    if file_part:
+        resolved = (repo_root / file_part).resolve()
+        provenance_ok = resolved.is_relative_to(repo_root) and resolved.is_file()
+    if not provenance_ok:
+        failures.append(
+            f"{path}: source_ref file {file_part!r} does not resolve to a file "
+            "inside the repository (FR-033d provenance link / AC-035)"
+        )
+        return failures
+
+    fixture = fixtures_by_stem.get(path.stem)
+    if fixture is None:
+        failures.append(
+            f"{path}: constructed seed has no matching fixture "
+            f"{cases_dir / (path.stem + '.json')} (FR-033 / AC-035)"
+        )
+        return failures
+
+    fixture_path = cases_dir / f"{path.stem}.json"
+    samples = fixture.get("samples")
+    if not isinstance(samples, dict) or not samples.get("cases"):
+        failures.append(
+            f"{fixture_path}: constructed-seed fixture carries no SampleSet "
+            "cases — case provenance cannot be established (FR-033 / AC-035)"
+        )
+        return failures
+
+    verdict = verify(seed["template"], samples)
+    if not (verdict.get("ok") is True and verdict.get("assurance") == "matched"):
+        stage = verdict.get("failed_stage")
+        detail = f" (failed stage: {stage})" if stage else ""
+        failures.append(
+            f"{fixture_path}: fixture does not engine-freeze (FR-033 / "
+            f"AC-035){detail} — re-executing the constructed seed template "
+            "against the committed samples does not verify ok+matched: some "
+            "case's committed output differs from the pinned engine's output "
+            "(§11.4)"
+        )
+        return failures
+    note(f"constructed seed OK: {path}")
+    return failures
+
+
 def _lint_seeds(
     evals_dir: Path,
     cases_dir: Path,
@@ -266,6 +378,21 @@ def _lint_seeds(
         except (OSError, ValueError) as exc:
             failures.append(f"{path}: seed does not parse: {exc} (FR-029)")
             continue
+
+        # FR-033 / AD-023 dispatch by seed kind: a seed carrying "origin" is a
+        # constructed real-world-pack seed (its own shape + engine-freeze
+        # path); every other seed stays a synthetic FR-029 seed (unchanged).
+        # A seed that is neither shape (no "origin", missing source_example /
+        # generator) falls through to the synthetic _seed_shape_errors below,
+        # whose errors are correct for it.
+        if isinstance(seed, dict) and "origin" in seed:
+            failures.extend(
+                _lint_constructed_seed(
+                    path, seed, cases_dir, fixtures_by_stem, note
+                )
+            )
+            continue
+
         shape_errors = _seed_shape_errors(seed)
         if shape_errors:
             failures.extend(

@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "id": "github-deploy-event",
+  "expect": "matched",
+  "intent_nl": "From a GitHub push payload, build a deploy-trigger event: constant event \"push\", repo, headSha (after), pusher.name, commitCount, the flattened filesChanged list, and deploy = true only when ref equals \"refs/heads/main\".",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "From a GitHub push payload, build a deploy-trigger event: constant event \"push\", repo, headSha (after), pusher.name, commitCount, the flattened filesChanged list, and deploy = true only when ref equals \"refs/heads/main\".",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Deploy event for main = deploy true.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-nondeploy",
+        "kind": "custom",
+        "description": "A non-main ref yields deploy false.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-main",
+        "input": {
+          "ref": "refs/heads/main",
+          "before": "9d8f",
+          "after": "1a2b3c4d5e6f",
+          "repository": {
+            "id": 555000111,
+            "name": "payments-api",
+            "full_name": "acme/payments-api",
+            "default_branch": "main"
+          },
+          "pusher": {
+            "name": "ada",
+            "email": "ada@acme.io"
+          },
+          "sender": {
+            "login": "ada",
+            "type": "User"
+          },
+          "commits": [
+            {
+              "message": "Add idempotency keys to refund endpoint",
+              "added": [
+                "internal/refund/idempotency.go"
+              ],
+              "removed": [],
+              "modified": [
+                "internal/refund/handler.go",
+                "internal/refund/handler_test.go"
+              ]
+            },
+            {
+              "message": "Fix nil deref when card country is missing",
+              "added": [],
+              "removed": [],
+              "modified": [
+                "internal/checkout/validate.go"
+              ]
+            }
+          ]
+        },
+        "output": {
+          "event": "push",
+          "repo": "acme/payments-api",
+          "headSha": "1a2b3c4d5e6f",
+          "pusher": "ada",
+          "commitCount": 2,
+          "filesChanged": [
+            "internal/refund/idempotency.go",
+            "internal/refund/handler.go",
+            "internal/refund/handler_test.go",
+            "internal/checkout/validate.go"
+          ],
+          "deploy": true
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c-dev",
+        "input": {
+          "ref": "refs/heads/dev",
+          "before": "9d8f",
+          "after": "1a2b3c4d5e6f",
+          "repository": {
+            "id": 555000111,
+            "name": "payments-api",
+            "full_name": "acme/payments-api",
+            "default_branch": "main"
+          },
+          "pusher": {
+            "name": "ada",
+            "email": "ada@acme.io"
+          },
+          "sender": {
+            "login": "ada",
+            "type": "User"
+          },
+          "commits": [
+            {
+              "message": "Add idempotency keys to refund endpoint",
+              "added": [
+                "internal/refund/idempotency.go"
+              ],
+              "removed": [],
+              "modified": [
+                "internal/refund/handler.go",
+                "internal/refund/handler_test.go"
+              ]
+            },
+            {
+              "message": "Fix nil deref when card country is missing",
+              "added": [],
+              "removed": [],
+              "modified": [
+                "internal/checkout/validate.go"
+              ]
+            }
+          ]
+        },
+        "output": {
+          "event": "push",
+          "repo": "acme/payments-api",
+          "headSha": "1a2b3c4d5e6f",
+          "pusher": "ada",
+          "commitCount": 2,
+          "filesChanged": [
+            "internal/refund/idempotency.go",
+            "internal/refund/handler.go",
+            "internal/refund/handler_test.go",
+            "internal/checkout/validate.go"
+          ],
+          "deploy": false
+        },
+        "satisfies": [
+          "ob-nondeploy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "de5b9d34db84d14668fae3d55a436afba1f6c39103a12ee2f58e66fd6c1b4d31"
+    }
+  },
+  "redacted": false
+}

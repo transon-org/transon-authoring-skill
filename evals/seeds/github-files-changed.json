@@ -1,0 +1,43 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §3 — GitHub push webhook",
+  "template": {
+    "$": "object",
+    "fields": {
+      "filesChanged": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "name": "commits"
+          },
+          {
+            "$": "expr",
+            "op": "+",
+            "values": {
+              "$": "map",
+              "item": {
+                "$": "expr",
+                "op": "+",
+                "values": [
+                  {
+                    "$": "attr",
+                    "name": "added"
+                  },
+                  {
+                    "$": "attr",
+                    "name": "removed"
+                  },
+                  {
+                    "$": "attr",
+                    "name": "modified"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

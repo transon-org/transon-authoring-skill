@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "id": "stripe-customer-record",
+  "expect": "matched",
+  "intent_nl": "Build an internal customer record from a Stripe session: internalId from metadata.internal_customer_id, stripeId from customer, name and email from customer_details, and a nested address with line1, city, postalCode (from postal_code) and country.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Build an internal customer record from a Stripe session: internalId from metadata.internal_customer_id, stripeId from customer, name and email from customer_details, and a nested address with line1, city, postalCode (from postal_code) and country.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Customer + nested address projection.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "has_more": false,
+                "data": [
+                  {
+                    "quantity": 2,
+                    "amount_total": 5000,
+                    "description": "Mechanical Keyboard",
+                    "price": {
+                      "unit_amount": 2500,
+                      "product": "prod_KEYB01"
+                    }
+                  },
+                  {
+                    "quantity": 1,
+                    "amount_total": 3900,
+                    "description": "USB-C Hub",
+                    "price": {
+                      "unit_amount": 3900,
+                      "product": "prod_HUB07"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "output": {
+          "internalId": "usr_42",
+          "stripeId": "cus_ABC123def456",
+          "name": "Ada Lovelace",
+          "email": "ada.lovelace@example.com",
+          "address": {
+            "line1": "12 Analytical Engine St",
+            "city": "Kyiv",
+            "postalCode": "01001",
+            "country": "UA"
+          }
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "31c55b20628eb47acb14c0347913d10cf1f1d0da5907df71ec7ecb09f6ae9081"
+    }
+  },
+  "redacted": false
+}

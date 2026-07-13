@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "id": "stripe-amounts-to-decimal",
+  "expect": "matched",
+  "intent_nl": "Convert a Stripe session's minor-unit (cent) amounts to decimal dollars: subtotal, shipping, tax, discount and total, each divided by 100.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Convert a Stripe session's minor-unit (cent) amounts to decimal dollars: subtotal, shipping, tax, discount and total, each divided by 100.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Cent amounts become decimal dollars.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "has_more": false,
+                "data": [
+                  {
+                    "quantity": 2,
+                    "amount_total": 5000,
+                    "description": "Mechanical Keyboard",
+                    "price": {
+                      "unit_amount": 2500,
+                      "product": "prod_KEYB01"
+                    }
+                  },
+                  {
+                    "quantity": 1,
+                    "amount_total": 3900,
+                    "description": "USB-C Hub",
+                    "price": {
+                      "unit_amount": 3900,
+                      "product": "prod_HUB07"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "output": {
+          "subtotal": 89.0,
+          "shipping": 5.0,
+          "tax": 7.12,
+          "discount": 0.0,
+          "total": 96.12
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "c751f6a975dda5ce28daa7a7557f971dc1415b71f914475900d7761cf7f0dc32"
+    }
+  },
+  "redacted": false
+}

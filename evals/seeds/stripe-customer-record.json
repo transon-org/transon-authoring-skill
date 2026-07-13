@@ -1,0 +1,89 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §2 — Stripe checkout.session.completed",
+  "template": {
+    "$": "object",
+    "fields": {
+      "internalId": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "metadata",
+          "internal_customer_id"
+        ]
+      },
+      "stripeId": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "customer"
+        ]
+      },
+      "name": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "customer_details",
+          "name"
+        ]
+      },
+      "email": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "customer_details",
+          "email"
+        ]
+      },
+      "address": {
+        "$": "object",
+        "fields": {
+          "line1": {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "customer_details",
+              "address",
+              "line1"
+            ]
+          },
+          "city": {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "customer_details",
+              "address",
+              "city"
+            ]
+          },
+          "postalCode": {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "customer_details",
+              "address",
+              "postal_code"
+            ]
+          },
+          "country": {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "customer_details",
+              "address",
+              "country"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

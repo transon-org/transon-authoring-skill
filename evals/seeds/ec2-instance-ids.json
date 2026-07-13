@@ -1,0 +1,32 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "attr",
+        "name": "Reservations"
+      },
+      {
+        "$": "map",
+        "items": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "Instances"
+            },
+            {
+              "$": "map",
+              "item": {
+                "$": "attr",
+                "name": "InstanceId"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "id": "github-slack-text",
+  "expect": "matched",
+  "intent_nl": "From a GitHub push payload, build a Slack message object: a constant channel \"#deploys\" and a text line \"<pusher> pushed <N> commits to <repo>\" where N is the commit count.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "From a GitHub push payload, build a Slack message object: a constant channel \"#deploys\" and a text line \"<pusher> pushed <N> commits to <repo>\" where N is the commit count.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Slack channel + interpolated text.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-one",
+        "kind": "custom",
+        "description": "Single-commit text.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c2",
+        "input": {
+          "ref": "refs/heads/main",
+          "before": "9d8f",
+          "after": "1a2b3c4d5e6f",
+          "repository": {
+            "id": 555000111,
+            "name": "payments-api",
+            "full_name": "acme/payments-api",
+            "default_branch": "main"
+          },
+          "pusher": {
+            "name": "ada",
+            "email": "ada@acme.io"
+          },
+          "sender": {
+            "login": "ada",
+            "type": "User"
+          },
+          "commits": [
+            {
+              "message": "Add idempotency keys to refund endpoint",
+              "added": [
+                "internal/refund/idempotency.go"
+              ],
+              "removed": [],
+              "modified": [
+                "internal/refund/handler.go",
+                "internal/refund/handler_test.go"
+              ]
+            },
+            {
+              "message": "Fix nil deref when card country is missing",
+              "added": [],
+              "removed": [],
+              "modified": [
+                "internal/checkout/validate.go"
+              ]
+            }
+          ]
+        },
+        "output": {
+          "channel": "#deploys",
+          "text": "ada pushed 2 commits to acme/payments-api"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      },
+      {
+        "id": "c1",
+        "input": {
+          "ref": "refs/heads/main",
+          "before": "9d8f",
+          "after": "1a2b3c4d5e6f",
+          "repository": {
+            "id": 555000111,
+            "name": "payments-api",
+            "full_name": "acme/payments-api",
+            "default_branch": "main"
+          },
+          "pusher": {
+            "name": "ada",
+            "email": "ada@acme.io"
+          },
+          "sender": {
+            "login": "ada",
+            "type": "User"
+          },
+          "commits": [
+            {
+              "message": "Add idempotency keys to refund endpoint",
+              "added": [
+                "internal/refund/idempotency.go"
+              ],
+              "removed": [],
+              "modified": [
+                "internal/refund/handler.go",
+                "internal/refund/handler_test.go"
+              ]
+            }
+          ]
+        },
+        "output": {
+          "channel": "#deploys",
+          "text": "ada pushed 1 commits to acme/payments-api"
+        },
+        "satisfies": [
+          "ob-one"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "6b196cb4b1e7e51b8328f7f599c2e0c7cf3cb222a991f3b6a50350f4a14233b8"
+    }
+  },
+  "redacted": false
+}

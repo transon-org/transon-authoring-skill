@@ -1,0 +1,35 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
+  "template": {
+    "$": "map",
+    "item": {
+      "$": "object",
+      "fields": {
+        "id": {
+          "$": "attr",
+          "name": "InstanceId"
+        },
+        "volumes": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "BlockDeviceMappings"
+            },
+            {
+              "$": "map",
+              "item": {
+                "$": "attr",
+                "names": [
+                  "Ebs",
+                  "VolumeId"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

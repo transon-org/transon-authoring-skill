@@ -1,0 +1,34 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §2 — Stripe checkout.session.completed",
+  "template": {
+    "$": "object",
+    "fields": {
+      "orderId": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "id"
+        ]
+      },
+      "source": "stripe",
+      "eventId": {
+        "$": "attr",
+        "name": "id"
+      },
+      "eventType": {
+        "$": "attr",
+        "name": "type"
+      },
+      "status": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "payment_status"
+        ]
+      }
+    }
+  }
+}

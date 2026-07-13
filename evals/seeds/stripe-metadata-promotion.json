@@ -1,0 +1,36 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §2 — Stripe checkout.session.completed",
+  "template": {
+    "$": "object",
+    "fields": {
+      "cartId": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "metadata",
+          "cart_id"
+        ]
+      },
+      "internalCustomerId": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "metadata",
+          "internal_customer_id"
+        ]
+      },
+      "channel": {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "metadata",
+          "channel"
+        ]
+      }
+    }
+  }
+}

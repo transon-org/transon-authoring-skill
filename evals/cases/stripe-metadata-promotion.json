@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "id": "stripe-metadata-promotion",
+  "expect": "matched",
+  "intent_nl": "Promote a Stripe session's metadata fields to first-class fields: cartId from metadata.cart_id, internalCustomerId from metadata.internal_customer_id, channel from metadata.channel.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Promote a Stripe session's metadata fields to first-class fields: cartId from metadata.cart_id, internalCustomerId from metadata.internal_customer_id, channel from metadata.channel.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Metadata promoted to top-level fields.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "has_more": false,
+                "data": [
+                  {
+                    "quantity": 2,
+                    "amount_total": 5000,
+                    "description": "Mechanical Keyboard",
+                    "price": {
+                      "unit_amount": 2500,
+                      "product": "prod_KEYB01"
+                    }
+                  },
+                  {
+                    "quantity": 1,
+                    "amount_total": 3900,
+                    "description": "USB-C Hub",
+                    "price": {
+                      "unit_amount": 3900,
+                      "product": "prod_HUB07"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "output": {
+          "cartId": "cart_98765",
+          "internalCustomerId": "usr_42",
+          "channel": "web"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "b9ef80d5387955f08a6755883b0cd9d687f5825f4fd9f067f19432f2ca2c2638"
+    }
+  },
+  "redacted": false
+}

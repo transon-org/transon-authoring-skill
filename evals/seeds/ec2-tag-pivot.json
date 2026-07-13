@@ -1,0 +1,87 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
+  "template": {
+    "$": "map",
+    "item": {
+      "$": "object",
+      "fields": {
+        "name": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "Tags"
+            },
+            {
+              "$": "map",
+              "key": {
+                "$": "attr",
+                "name": "Key"
+              },
+              "value": {
+                "$": "attr",
+                "name": "Value"
+              }
+            },
+            {
+              "$": "attr",
+              "name": "Name",
+              "default": null
+            }
+          ]
+        },
+        "environment": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "Tags"
+            },
+            {
+              "$": "map",
+              "key": {
+                "$": "attr",
+                "name": "Key"
+              },
+              "value": {
+                "$": "attr",
+                "name": "Value"
+              }
+            },
+            {
+              "$": "attr",
+              "name": "Environment",
+              "default": null
+            }
+          ]
+        },
+        "team": {
+          "$": "chain",
+          "funcs": [
+            {
+              "$": "attr",
+              "name": "Tags"
+            },
+            {
+              "$": "map",
+              "key": {
+                "$": "attr",
+                "name": "Key"
+              },
+              "value": {
+                "$": "attr",
+                "name": "Value"
+              }
+            },
+            {
+              "$": "attr",
+              "name": "Team",
+              "default": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}
