@@ -690,15 +690,21 @@ def test_fr_030_ac_031_review_loop():
     # be precisely {approve, revise, stop}; a fourth (or a missing one) regresses
     # FR-030's "exactly three exits" contract.
     exits = re.findall(r"(?m)^- \*\*([a-z]+)\*\*", section)
-    assert set(exits) == {"approve", "revise", "stop"}, (
+    assert len(exits) == 3 and set(exits) == {"approve", "revise", "stop"}, (
         f"FR-030 requires exactly the three review exits approve/revise/stop; "
-        f"section 6 lists {sorted(set(exits))}"
+        f"section 6 lists {exits}"
     )
 
-    # approve -> matched success envelope.
-    assert _has(
-        r"approve.{0,300}?status:\s*\"matched\"", section
-    ), "approve exit does not emit status matched"
+    # approve -> matched success envelope — scoped to the approve bullet itself
+    # (same bounded extraction as stop below), so an earlier `auto-approve`
+    # mention plus a later branch's `status: "matched"` cannot satisfy it.
+    approve_match = re.search(
+        r"(?ms)^- \*\*approve\*\*.*?(?=^\s*$|^- \*\*|\Z)", section
+    )
+    assert approve_match, "FR-030 approve exit missing from section 6"
+    assert _has(r"status:\s*\"matched\"", approve_match.group(0)), (
+        "approve exit does not emit status matched"
+    )
 
     # NL-only revise -> fresh repair_attempts budget + re-verify + re-present
     # only when the new candidate verifies matched.
@@ -749,6 +755,14 @@ def test_fr_030_ac_031_review_loop():
     assert _has(
         r"non-interactive.{0,200}?(no\s+review|matched.{0,80}?directly)", section
     ), "non-interactive/CI direct-emit rule missing from review section"
+    # The CI branch is verified independently of the "non-interactive" phrasing:
+    # it MUST state matched is emitted directly, with no review step.
+    assert _has(r"\bCI\b.{0,160}?matched.{0,80}?directly", section), (
+        "CI branch does not state matched is emitted directly"
+    )
+    assert _has(r"\bCI\b.{0,200}?no\s+review", section), (
+        "CI branch does not state there is no review step"
+    )
 
 
 def test_uc_001_walkthrough_review_approve():
