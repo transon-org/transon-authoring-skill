@@ -1,6 +1,6 @@
 {
   "origin": "real-world-pack",
-  "source_ref": "docs/proposals/big-real-world-transform-samples.md#1-aws-ec2",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
   "template": {
     "$": "chain",
     "funcs": [

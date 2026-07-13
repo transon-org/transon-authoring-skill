@@ -146,8 +146,13 @@ be captured into the project's shared eval-fixture corpus: commit only after pri
    with `verify` before trusting it):
    - Count a list's length: map each element to `1`, then reduce with `+` —
      `{"$": "expr", "op": "+", "values": {"$": "map", "item": 1}}`.
-   - Flatten lists: an `expr` `+` over a list of lists concatenates them into one flat list; over
-     a list of strings it concatenates the strings.
+   - Flatten lists: prefer `map` with `items` mode
+     (`{"$": "map", "items": <per-element list>}`), which concatenates each element's list and is
+     safe on an empty input (yields `[]`). An `expr` `+` over a list of strings concatenates them.
+   CAVEAT: an `expr` whose `values` reduce over a runtime list REQUIRES at least one element — an
+   empty list raises a `DefinitionError`. So the reduce-count and `expr`-`+` recipes fail `verify`
+   whenever a sample case has an empty list (e.g. a zero-count case); handle the empty case
+   separately (a `cond`/`switch` on emptiness) or use the empty-safe `map`/`items` form.
    Only refuse (section 2) when the capability is genuinely absent AND cannot be composed this
    way — e.g. formatting an epoch as an ISO date, changing a string's case, or stripping a prefix.
 4. Write the candidate template JSON to a file.

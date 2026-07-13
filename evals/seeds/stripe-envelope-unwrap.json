@@ -1,6 +1,6 @@
 {
   "origin": "real-world-pack",
-  "source_ref": "docs/proposals/big-real-world-transform-samples.md#2-stripe",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md §2 — Stripe checkout.session.completed",
   "template": {
     "$": "object",
     "fields": {
