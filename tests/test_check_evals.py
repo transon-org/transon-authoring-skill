@@ -548,6 +548,21 @@ def test_ac_035_bad_source_ref_file_red(tmp_repo: Path):
     ), failures
 
 
+def test_ac_035_source_ref_fails_closed_red(tmp_repo: Path):
+    # AC-035 / FR-033d — the provenance-link check fails CLOSED: an anchor-only
+    # source_ref (empty file portion) and a path escaping the repo (absolute or
+    # `..`) are both red, never a silent skip.
+    _fixture_path, seed_path = mint_constructed_into(tmp_repo)
+    for bad_ref in ("#anchor-only", "../../etc/passwd", "/etc/passwd"):
+        seed = json.loads(seed_path.read_text(encoding="utf-8"))
+        seed["source_ref"] = bad_ref
+        seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+        failures = lint_evals(tmp_repo)
+        assert any(
+            str(seed_path) in f and "source_ref" in f for f in failures
+        ), f"{bad_ref!r} did not fail closed: {failures}"
+
+
 def test_fr_033_synthetic_and_constructed_seeds_coexist(tmp_repo: Path):
     # FR-033 — the committed synthetic FR-029 corpus plus a minted synthetic
     # seed AND a minted constructed real-world pack all lint green together:

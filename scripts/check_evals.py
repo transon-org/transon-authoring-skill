@@ -307,13 +307,19 @@ def _lint_constructed_seed(
 
     # (d) provenance link (FR-033d / AC-035): the source_ref's file portion
     # (before any '#' anchor or trailing whitespace/section label) must resolve
-    # to an existing repo file, so a stale/typo'd provenance pointer is caught.
-    repo_root = cases_dir.parent.parent
+    # to an existing repo file INSIDE the repo. Fail closed: an empty file part
+    # (anchor-only source_ref) or a path that escapes repo_root (absolute / '..')
+    # is red, never a silent skip.
+    repo_root = cases_dir.parent.parent.resolve()
     file_part = re.split(r"[#\s]", seed["source_ref"], maxsplit=1)[0]
-    if file_part and not (repo_root / file_part).is_file():
+    provenance_ok = False
+    if file_part:
+        resolved = (repo_root / file_part).resolve()
+        provenance_ok = resolved.is_relative_to(repo_root) and resolved.is_file()
+    if not provenance_ok:
         failures.append(
-            f"{path}: source_ref file {file_part!r} does not resolve to a repo "
-            "file (FR-033d provenance link / AC-035)"
+            f"{path}: source_ref file {file_part!r} does not resolve to a file "
+            "inside the repository (FR-033d provenance link / AC-035)"
         )
         return failures
 
