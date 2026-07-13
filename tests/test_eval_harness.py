@@ -437,17 +437,21 @@ def test_with_cache_control_wraps_string_last_message():
 
 
 def test_run_fixture_accumulates_token_usage_additively():
-    # Turn.usage is accumulated into EpisodeResult["tokens"]; additive telemetry
-    # that never affects scoring (AC-034).
+    # AC-034: Turn.usage is *accumulated* across turns into
+    # EpisodeResult["tokens"] (summed, never overwritten); additive telemetry
+    # that never affects scoring. Two usage-bearing turns with distinct values
+    # so a "last-turn-wins" bug would fail the sum assertions.
+    first = tool_turn("write_file", {"path": "t.txt", "content": "x"})
+    first.usage = {"input": 100, "output": 20, "cache_read": 40, "cache_creation": 10}
     submit = tool_turn("submit_result", {"result": AUTHORING_RESULT})
-    submit.usage = {"input": 100, "output": 20, "cache_read": 40, "cache_creation": 10}
-    provider = FakeProvider([submit])
+    submit.usage = {"input": 200, "output": 5, "cache_read": 60, "cache_creation": 2}
+    provider = FakeProvider([first, submit])
     episode = harness.run_fixture(
         {"id": "fx", "intent_nl": "x"}, {"tool_budget": 8}, provider, REPO_ROOT
     )
     assert episode["outcome"] == "submitted"
-    assert episode["tokens"]["input"] == 100
-    assert episode["tokens"]["output"] == 20
-    assert episode["tokens"]["cache_read"] == 40
-    assert episode["tokens"]["cache_creation"] == 10
-    assert episode["tokens"]["turns"] == 1
+    assert episode["tokens"]["input"] == 300
+    assert episode["tokens"]["output"] == 25
+    assert episode["tokens"]["cache_read"] == 100
+    assert episode["tokens"]["cache_creation"] == 12
+    assert episode["tokens"]["turns"] == 2
