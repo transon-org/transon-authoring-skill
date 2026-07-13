@@ -10,7 +10,7 @@ fields real APIs include). IDs and values are representative, but the
 > each real API (AWS EC2, Stripe, GitHub). The **Where to get the raw payloads**
 > section at the bottom links the authoritative sources and shows how to capture
 > your own live samples.
-
+>
 > **Reconciliation with AD-023 (added 2026-07-13).** This doc is the original
 > brainstorm; the **normative** policy is AD-023 / FR-033 / §11.8 in
 > `docs/SPEC.md`. Two consequences for anything committed from it:
