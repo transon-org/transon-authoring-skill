@@ -220,6 +220,27 @@ No console-script product; no MCP.
   FR-032). Effectiveness questions — *which step failed, how often, at what cost* — are
   answered from layer 2; layer 1 adds narrative color in interactive sessions. Gates and
   determinism (NFR-002) are untouched: traces and transcripts are artifacts, never gate inputs.
+- **AD-023 — Real-world structural fixture pack (constructed, engine-frozen; added 2026-07-13).**
+  The eval corpus (§11.8) MAY grow beyond the AD-021 synthetic-from-`docs.examples` set with a
+  **third fixture class**: hand-authored EvalFixtures built from large, realistic-shape API
+  payloads (AWS EC2, Stripe, GitHub webhooks, JOLT/JMESPath suites — see
+  `docs/proposals/big-real-world-transform-samples.md`). These are **constructed** to match the
+  documented API schemas (fake ids/values), never captured from a live account, so they carry no
+  real-use data: `redacted: false`, **no** `consent` — the FR-018 / NFR-011 real-use capture path
+  is untouched. **Honesty rule** (mirrors the AD-021 corpus pair): a fixture's case `output` is the
+  **pinned engine's actual output** for an author-verified template, never a hand-written expected;
+  the reference template is **provenance-only** (committed under `evals/seeds/`, FR-033 shape) and
+  is **never** placed in the fixture object, the harness prompt, or the tools path (leakage rule,
+  AD-021). Because `transon==0.1.7` is a **structural** transformer — its only functions are
+  `str`/`int`/`float`/`type`; it has no date/time, string-case, string split/replace/slice, or
+  length/count function (count, one-level flatten, and string concat are reachable only via the
+  `expr` `reduce(op, values)` recipe — engine `SPECIFICATION.md` `expr`) — an intent that needs a
+  genuinely absent capability (epoch→ISO date, `upper`, `refs/heads/`-strip, separator-aware join)
+  is authored as an `expect: "refuse"` fixture (AC-003), turning each engine gap into realistic
+  adversarial coverage rather than an unsatisfiable matched fixture. Structural transforms (nested
+  flatten, tag/array pivot, null-defaulting projection, minor-unit division, reduce-count/flatten)
+  are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
+  pack is ongoing improvement-loop work (FR-017) and gates no milestone.
 
 ---
 
@@ -354,6 +375,23 @@ No console-script product; no MCP.
   *(rev 2026-07-12, OQ-026)* Wave-2 coverage extensions — list length-variation customs, root key
   addition/deletion customs, the frozen `NO_CONTENT` probe count, and the extended drop order —
   are fixed in OQ-026.
+- **FR-033** — *(added 2026-07-13, AD-023)* **Real-world structural fixture pack + engine-freeze
+  gate.** Large constructed EvalFixtures (AD-023) are committed under `evals/cases/` as ordinary
+  EvalFixtures (§11.8 schema; `redacted: false`; no `consent`; **no seed-template field in the
+  fixture**). Their provenance is a **constructed seed** at `evals/seeds/<fixture-id>.json` with the
+  shape `{ "origin": "real-world-pack", "source_ref": string, "template": <Transon JSON>,
+  "notes"?: string }` — distinct from the FR-029 synthetic seed shape (no `source_example` /
+  `generator`). `check_evals --lint` verifies, for every fixture with a constructed seed:
+  (a) **engine-freeze** — re-executing the seed `template` through the pinned engine's AD-017
+  sandbox on each fixture case's `input` yields output that JSON-equals (§11.4) that case's
+  committed `output` (and the captured `writes` for a `writes`-declaring case); (b) **no leakage** —
+  the fixture object carries no template/answer field outside its SampleSet `cases`; (c) the
+  SampleSet is `ok_for_verify` (FR-027) with coverage obligations over the transform's edges (empty
+  arrays, missing→`null`). A transform the pin cannot express has **no** seed template that
+  engine-freezes, so it cannot land as a matched fixture — it is authored `expect: "refuse"` with no
+  seed (AD-023). The pack counts in the §11.8 authoring/adversarial denominators and is expected to
+  lower the measured authoring rate, corrected by improving `SKILL.md`, never by lowering the §11.8
+  targets.
 
 ### Observability
 - **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
@@ -513,6 +551,15 @@ No console-script product; no MCP.
   `failure_modes` equals a hand-computed histogram over the same **scored** episode results
   under the §11.8 key precedence; the same run without `--transcripts-dir` produces identical
   scoring and gate outcomes.
+- **AC-035** — *(FR-033 / AD-023, added 2026-07-13)* `check_evals --lint` is **red** when a
+  committed fixture with a constructed seed (`evals/seeds/<id>.json`, `origin: "real-world-pack"`)
+  does not engine-freeze — some case's committed `output` differs from re-executing the seed
+  `template` through the pinned engine on that case's `input` (§11.4 equality) — or when the fixture
+  object carries a template/answer field outside its SampleSet `cases` (leakage), or when a
+  constructed-seed fixture's SampleSet is not `ok_for_verify`. A real-world pack whose fixtures,
+  seeds, and pinned engine agree lints **green**. (A transform the pin cannot express has no seed
+  template that engine-freezes, so it cannot land matched — it is authored `expect: "refuse"` per
+  AD-023.)
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -1184,6 +1231,15 @@ EvalFixture = {
   (shape in FR-029) and is **never** part of the fixture object, the harness prompt, or the
   episode workspace. `check_evals --lint` enforces seed↔fixture bit-identical regeneration
   (AC-030). Synthetic `intent_nl` is LLM-drafted, human-accepted before commit (AD-021).
+- **Real-world structural fixtures (AD-023 / FR-033, added 2026-07-13):** a third fixture class —
+  large **constructed** EvalFixtures matched to real API schemas (AWS/Stripe/GitHub/JOLT/JMESPath),
+  carrying no real-use data (`redacted: false`, no `consent`; the FR-018 / NFR-011 real-use path is
+  unaffected). Same schema, buckets, and scoring as every other fixture. Their case `output`s are
+  **engine-frozen** — the pinned engine's actual output for an author-verified template — and their
+  provenance is a **constructed seed** (`evals/seeds/`, FR-033 shape) that is never in the fixture
+  object or the harness prompt (leakage rule, AD-021); `check_evals --lint` enforces the freeze plus
+  no-leakage (AC-035). Intents needing an engine-absent capability are `expect: "refuse"` fixtures
+  (AD-023), not unsatisfiable matched ones.
 
 ### 11.9 Project config & installation
 
@@ -1247,7 +1303,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025) and the FR-029 seed-regen check (AC-030); full runs emit FR-032 transcripts + `failure_modes` (non-gating report artifacts, AC-034) |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` (non-gating report artifacts, AC-034) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
@@ -1665,6 +1721,9 @@ work and do not gate any milestone.
 - Weak synthetic `intent_nl` → mandatory human acceptance before commit (AD-021).
 - Gate cliff on small-model swap → explicit baseline reset, targets never lowered (§11.8).
 - Seed/pin drift in synthetic fixtures → AC-030 regen lint, same discipline as `check_snapshot`.
+- Unsatisfiable or hand-faked big fixtures (a matched fixture no engine template can produce) →
+  AD-023 engine-freeze gate (AC-035): case outputs come only from re-executing the author's
+  provenance seed template through the pin; engine-absent asks become refuse fixtures.
 - Privacy leaks in fixtures → NFR-011.
 - Adapter drift → parity gate.
 - Dangling references in shipped skill/adapters → NFR-012 + parity lint (AC-032).
@@ -1715,6 +1774,7 @@ excluded from active coverage.
 | FR-030 | AC-031, AC-012 | A3 | skill-body unit + UC-001 walkthrough |
 | FR-031 | AC-033 | A3 | schema unit + skill-body unit |
 | FR-032 | AC-034 | A3 | check_evals unit |
+| FR-033 | AC-035 | A3+ (improvement) | check_evals lint |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
