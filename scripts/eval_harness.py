@@ -206,7 +206,7 @@ class AnthropicProvider:
     importing this module works without the SDK installed.
     """
 
-    def __init__(self, runner_cfg: dict[str, Any]):
+    def __init__(self, runner_cfg: dict[str, Any], *, use_cache: bool = True):
         import anthropic  # lazy: optional [evals] extra only (OQ-017d)
 
         self._client = anthropic.Anthropic()
@@ -216,6 +216,10 @@ class AnthropicProvider:
         # the Anthropic Messages API has no seed parameter, so a non-null seed
         # is recorded but not sent (runner.json pins seed: null).
         self._seed = runner_cfg.get("seed")
+        # Prompt caching is on by default (the shipped behaviour). The toggle
+        # exists only to A/B the cache effect against real `usage` — caching is
+        # semantically transparent, so it never changes output or scoring.
+        self._use_cache = use_cache
 
     def create_turn(
         self,
@@ -223,9 +227,12 @@ class AnthropicProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Turn:
-        # Prompt-cache the stable system+tools prefix and the growing transcript
-        # (semantically transparent — no effect on output or scoring, NFR-002).
-        system_param, messages_param = with_cache_control(system, messages)
+        if self._use_cache:
+            # Prompt-cache the stable system+tools prefix and growing transcript
+            # (semantically transparent — no effect on output/scoring, NFR-002).
+            system_param, messages_param = with_cache_control(system, messages)
+        else:
+            system_param, messages_param = system, messages
         # No sampling parameters (SPEC §11.8 rev 2026-07-12): the pinned
         # model rejects non-default temperature/top_p/top_k with a 400.
         response = self._client.messages.create(
