@@ -48,6 +48,19 @@ def _has(pattern: str, text: str) -> bool:
     return re.search(pattern, text, re.IGNORECASE | re.DOTALL) is not None
 
 
+def _bounded_bullet(section: str, name: str) -> str:
+    """Return the Markdown bullet ``- **<name>**`` in *section*, bounded to just
+    that bullet — from ``- **name**`` up to the next blank line, the next
+    top-level ``- **`` exit bullet, or the section end. Scoping every per-exit
+    assertion this way keeps a phrase from a sibling bullet or trailing prose
+    from satisfying a check meant for one exit (FR-030 / AC-031)."""
+    match = re.search(
+        rf"(?ms)^- \*\*{re.escape(name)}\*\*.*?(?=^\s*$|^- \*\*|\Z)", section
+    )
+    assert match, f"FR-030 {name!r} exit missing from section 6"
+    return match.group(0)
+
+
 def test_fr_001_skill_body_documents_grounded_flow():
     """FR-001 / AC-003 / AD-018 / AD-004: grounding commands cited, authority
     order stated, ungroundable capability => aborted refusal, success only on
@@ -690,19 +703,17 @@ def test_fr_030_ac_031_review_loop():
     # be precisely {approve, revise, stop}; a fourth (or a missing one) regresses
     # FR-030's "exactly three exits" contract.
     exits = re.findall(r"(?m)^- \*\*([a-z]+)\*\*", section)
-    assert len(exits) == 3 and set(exits) == {"approve", "revise", "stop"}, (
-        f"FR-030 requires exactly the three review exits approve/revise/stop; "
-        f"section 6 lists {exits}"
+    assert len(exits) == 3, (
+        f"FR-030 requires exactly three review exit bullets; section 6 lists {exits}"
+    )
+    assert set(exits) == {"approve", "revise", "stop"}, (
+        f"FR-030 review exits must be approve/revise/stop; got {sorted(set(exits))}"
     )
 
-    # approve -> matched success envelope — scoped to the approve bullet itself
-    # (same bounded extraction as stop below), so an earlier `auto-approve`
-    # mention plus a later branch's `status: "matched"` cannot satisfy it.
-    approve_match = re.search(
-        r"(?ms)^- \*\*approve\*\*.*?(?=^\s*$|^- \*\*|\Z)", section
-    )
-    assert approve_match, "FR-030 approve exit missing from section 6"
-    assert _has(r"status:\s*\"matched\"", approve_match.group(0)), (
+    # approve -> matched success envelope — scoped to the approve bullet itself,
+    # so an earlier `auto-approve` mention plus a later branch's
+    # `status: "matched"` cannot satisfy it.
+    assert _has(r"status:\s*\"matched\"", _bounded_bullet(section, "approve")), (
         "approve exit does not emit status matched"
     )
 
@@ -729,9 +740,7 @@ def test_fr_030_ac_031_review_loop():
     # next blank line, next top-level exit bullet, or section end), so a
     # deferred/aborted/no-template phrase in the trailing non-interactive or
     # "unbounded" paragraphs can never satisfy these checks.
-    stop_match = re.search(r"(?ms)^- \*\*stop\*\*.*?(?=^\s*$|^- \*\*|\Z)", section)
-    assert stop_match, "FR-030 stop exit missing from section 6"
-    stop_branch = stop_match.group(0)
+    stop_branch = _bounded_bullet(section, "stop")
     assert _has(r"status:\s*\"deferred\"", stop_branch), (
         "stop exit does not emit status deferred"
     )
@@ -760,7 +769,7 @@ def test_fr_030_ac_031_review_loop():
     assert _has(r"\bCI\b.{0,160}?matched.{0,80}?directly", section), (
         "CI branch does not state matched is emitted directly"
     )
-    assert _has(r"\bCI\b.{0,200}?no\s+review", section), (
+    assert _has(r"\bCI\b.{0,200}?no\s+review\b", section), (
         "CI branch does not state there is no review step"
     )
 
