@@ -13,14 +13,21 @@ export const meta = {
 
 // args = { repo: "<repo root abs path>", dir: "<fresh empty workspace root>",
 //          only?: [id-prefix, ...], limit?: N }
-const REPO = args && args.repo
-const DIR = args && args.dir
+// `args` may arrive as an object or as a JSON string depending on the caller —
+// normalize both.
+let A = args
+if (typeof A === 'string') {
+  try { A = JSON.parse(A) } catch (e) { A = {} }
+}
+if (!A || typeof A !== 'object') A = {}
+const REPO = A.repo
+const DIR = A.dir
 if (!REPO || !DIR) {
   throw new Error('args must include {repo: <repo root>, dir: <fresh workspace root>}')
 }
 const PY = `${REPO}/.venv/bin/python`
-const onlyFlag = args.only && args.only.length ? ` --only ${args.only.join(' ')}` : ''
-const limitFlag = args.limit ? ` --limit ${args.limit}` : ''
+const onlyFlag = A.only && A.only.length ? ` --only ${A.only.join(' ')}` : ''
+const limitFlag = A.limit ? ` --limit ${A.limit}` : ''
 
 // --- Setup: an agent runs local_eval.py setup and hands back the manifest -----
 // (the workflow script itself has no shell/fs; the setup agent does the I/O.)
