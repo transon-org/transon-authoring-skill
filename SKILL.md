@@ -138,7 +138,19 @@ be captured into the project's shared eval-fixture corpus: commit only after pri
 2. Copy the structure of the nearest example's `template` and adapt names and paths to the
    confirmed samples. Never improvise operators, rules, modes, or syntax that are not in the
    pinned snapshot.
-3. Write the candidate template JSON to a file.
+3. The pinned engine is a STRUCTURAL transformer: its only functions are `str`, `int`, `float`,
+   `type` — there is NO length/count, date, string-case, or string split/replace function. When
+   the intent seems to need one, do NOT assume it is missing and do NOT refuse yet: first check
+   whether it COMPOSES from the primitives you grounded. An `expr` with a `values` list reduces
+   its operator across the whole runtime list, which covers most "aggregate" needs (confirm each
+   with `verify` before trusting it):
+   - Count a list's length: map each element to `1`, then reduce with `+` —
+     `{"$": "expr", "op": "+", "values": {"$": "map", "item": 1}}`.
+   - Flatten lists: an `expr` `+` over a list of lists concatenates them into one flat list; over
+     a list of strings it concatenates the strings.
+   Only refuse (section 2) when the capability is genuinely absent AND cannot be composed this
+   way — e.g. formatting an epoch as an ISO date, changing a string's case, or stripping a prefix.
+4. Write the candidate template JSON to a file.
 
 ## 5. Verify & repair
 
