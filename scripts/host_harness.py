@@ -227,6 +227,68 @@ def run_fixture(
 _AGENT_SDK_ALLOWED_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Skill"]
 
 
+def _extract_authoring_result(text: Any) -> Optional[dict[str, Any]]:
+    """Best-effort recovery of the AuthoringResult the skill emitted as its final
+    message text (the skill ships emitting the §11.5 envelope; the SDK exposes it
+    as ``ResultMessage.result``). Prefers a whole-text JSON parse, then a fenced
+    ```json``` block, then a balanced-brace scan for the last object that parses
+    and looks like an envelope (`status`/`ok`). Returns None if nothing parses —
+    the adapter then scores it ``no_submit`` (OQ-027e). Pure/deterministic."""
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+    try:
+        whole = json.loads(stripped)
+        if isinstance(whole, dict):
+            return whole
+    except ValueError:
+        pass
+    import re
+
+    for block in reversed(re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)):
+        try:
+            obj = json.loads(block)
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    # Balanced-brace scan: last top-level {...} that parses to an envelope-shaped
+    # dict wins (the skill's final answer, if wrapped in prose).
+    found: Optional[dict[str, Any]] = None
+    for start in (i for i, ch in enumerate(text) if ch == "{"):
+        depth = 0
+        for end in range(start, len(text)):
+            if text[end] == "{":
+                depth += 1
+            elif text[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        obj = json.loads(text[start : end + 1])
+                    except ValueError:
+                        pass
+                    else:
+                        if isinstance(obj, dict) and ("status" in obj or "ok" in obj):
+                            found = obj
+                    break
+    return found
+
+
+def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
+    """Normalize a ResultMessage usage object/dict into the Turn.usage shape, or
+    None. Additive cost telemetry only — never scored (AC-034)."""
+    if usage is None:
+        return None
+    get = usage.get if isinstance(usage, dict) else lambda k, d=0: getattr(usage, k, d)
+    tokens = _new_tokens()
+    tokens["input"] = int(get("input_tokens", 0) or 0)
+    tokens["output"] = int(get("output_tokens", 0) or 0)
+    tokens["cache_read"] = int(get("cache_read_input_tokens", 0) or 0)
+    tokens["cache_creation"] = int(get("cache_creation_input_tokens", 0) or 0)
+    tokens["turns"] = 1
+    return tokens
+
+
 class AgentSDKHost:
     """Claude Agent SDK reference host (OQ-027a). **Live-unverified**: exercised
     only in the credential-holding dispatch workflow under the OQ-027f isolation
@@ -271,7 +333,7 @@ class AgentSDKHost:
     async def _run_episode_async(
         self, *, prompt: str, workspace: Path
     ) -> HostOutcome:  # pragma: no cover - live SDK path, dispatch-only
-        from claude_agent_sdk import ClaudeAgentOptions, query
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
         cfg = self._runner_cfg
         options = ClaudeAgentOptions(
@@ -286,22 +348,39 @@ class AgentSDKHost:
             # STATUS_BUDGET below.
             max_turns=cfg["tool_budget"],
         )
-        result_obj: Optional[dict[str, Any]] = None
-        status = STATUS_NO_RESULT
-        error: Optional[str] = None
+        # Only the TERMINAL ResultMessage classifies the episode — intermediate
+        # System/Assistant/User/Stream messages (which may also carry a
+        # ``subtype``, e.g. init/thinking) must be ignored, else a mid-episode
+        # message is mistaken for the outcome.
+        terminal = None
         async for message in query(prompt=prompt, options=options):
-            subtype = getattr(message, "subtype", None)
-            structured = getattr(message, "structured_output", None)
-            if getattr(message, "result", None) is None and subtype is None:
-                continue  # not a ResultMessage
-            if subtype == "success":
-                if isinstance(structured, dict):
-                    result_obj, status = structured, STATUS_RESULT
-                else:
-                    # Ended cleanly but produced no structured AuthoringResult.
-                    status = STATUS_NO_RESULT
-            elif subtype and "max_turns" in subtype:
-                status = STATUS_BUDGET
-            elif subtype:
-                status, error = STATUS_NO_RESULT, f"host ended: {subtype}"
-        return HostOutcome(status=status, result=result_obj, error=error)
+            if isinstance(message, ResultMessage):
+                terminal = message
+        if terminal is None:
+            return HostOutcome(
+                status=STATUS_NO_RESULT, error="host produced no ResultMessage"
+            )
+        subtype = getattr(terminal, "subtype", None) or ""
+        tokens = _sdk_usage(getattr(terminal, "usage", None))
+        if "max_turns" in subtype:
+            return HostOutcome(
+                status=STATUS_BUDGET, error=f"host ended: {subtype}", tokens=tokens
+            )
+        # The skill emits the §11.5 AuthoringResult as its final answer; the SDK
+        # exposes it as structured_output (when a schema is set) or as result
+        # text (the shipped skill's natural output). Recover it either way; the
+        # scorer re-validates it (AD-004), so a schema-invalid payload still
+        # counts as a submission (OQ-016b / OQ-027e).
+        structured = getattr(terminal, "structured_output", None)
+        payload = (
+            structured
+            if isinstance(structured, dict)
+            else _extract_authoring_result(getattr(terminal, "result", None))
+        )
+        if isinstance(payload, dict):
+            return HostOutcome(status=STATUS_RESULT, result=payload, tokens=tokens)
+        return HostOutcome(
+            status=STATUS_NO_RESULT,
+            error=f"host ended: {subtype or 'no result'}; no parseable AuthoringResult",
+            tokens=tokens,
+        )

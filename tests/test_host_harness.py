@@ -252,3 +252,22 @@ def test_oq_027_unimplemented_harness_kind_is_config_error():
     cfg = dict(RUNNER_CFG, harness={"kind": "claude-code", "version": "1.0"})
     with pytest.raises(ValueError, match="claude-code"):
         check_evals._build_host(cfg)
+
+
+def test_oq_027_extract_authoring_result_recovers_envelope():
+    # OQ-027e — the AgentSDKHost recovers the AuthoringResult the skill emits as
+    # its final text (whole JSON, fenced block, or wrapped in prose); unparseable
+    # text yields None (→ the adapter scores it no_submit). Pure/offline — this
+    # is the one piece of the live host path the deterministic gates can cover.
+    env = {"schema_version": "1.0", "ok": True, "status": "matched"}
+    # whole-text JSON
+    assert host_harness._extract_authoring_result(json.dumps(env)) == env
+    # fenced ```json block amid prose
+    fenced = f"Here is the result:\n```json\n{json.dumps(env)}\n```\nDone."
+    assert host_harness._extract_authoring_result(fenced) == env
+    # prose-wrapped bare object (balanced-brace scan, envelope-shaped)
+    prose = f"I finished. {json.dumps(env)} That's my answer."
+    assert host_harness._extract_authoring_result(prose) == env
+    # nothing parseable → None
+    assert host_harness._extract_authoring_result("no json here at all") is None
+    assert host_harness._extract_authoring_result(None) is None
