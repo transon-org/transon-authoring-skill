@@ -686,11 +686,14 @@ def test_fr_030_ac_031_review_loop():
         r"present.{0,200}?template.{0,120}?verdict", section
     ), "review does not present the matched template together with its Verdict"
 
-    # Exactly three bold exits.
-    for exit_name in ("approve", "revise", "stop"):
-        assert _has(rf"\*\*{exit_name}\*\*", section), (
-            f"FR-030 review exit {exit_name!r} not defined in section 6"
-        )
+    # EXACTLY three bold exits — the set of top-level `- **exit**` bullets must
+    # be precisely {approve, revise, stop}; a fourth (or a missing one) regresses
+    # FR-030's "exactly three exits" contract.
+    exits = re.findall(r"(?m)^- \*\*([a-z]+)\*\*", section)
+    assert set(exits) == {"approve", "revise", "stop"}, (
+        f"FR-030 requires exactly the three review exits approve/revise/stop; "
+        f"section 6 lists {sorted(set(exits))}"
+    )
 
     # approve -> matched success envelope.
     assert _has(
@@ -715,10 +718,20 @@ def test_fr_030_ac_031_review_loop():
         r"re-?enter.{0,80}?sample\s+loop", section
     ), "sample-feedback revise does not re-enter the sample loop"
 
-    # stop -> deferred / aborted, with no template.
-    assert _has(r"stop.{0,300}?status:\s*\"deferred\"", section)
-    assert _has(r"status:\s*\"aborted\"", section)
-    assert _has(r"no\s+template", section), "stop exit does not withhold the template"
+    # stop branch binds BOTH outcomes (deferred/aborted) AND withholds the
+    # template — asserted on the stop bullet itself, not just anywhere in §6.
+    stop_branch = section.split("**stop**", 1)
+    assert len(stop_branch) == 2, "FR-030 stop exit missing from section 6"
+    stop_branch = stop_branch[1]
+    assert _has(r"status:\s*\"deferred\"", stop_branch), (
+        "stop exit does not emit status deferred"
+    )
+    assert _has(r"status:\s*\"aborted\"", stop_branch), (
+        "stop exit does not emit status aborted"
+    )
+    assert _has(r"no\s+template", stop_branch), (
+        "stop exit does not withhold the template"
+    )
 
     # Unbounded discipline; never auto-approve; silence is not approval.
     assert _has(r"unbounded", section), "review loop is not stated unbounded"
