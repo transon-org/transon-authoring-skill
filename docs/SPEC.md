@@ -241,6 +241,27 @@ No console-script product; no MCP.
   flatten, tag/array pivot, null-defaulting projection, minor-unit division, reduce-count/flatten)
   are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
   pack is ongoing improvement-loop work (FR-017) and gates no milestone.
+- **AD-024 — Real-host eval harness (Agent SDK reference; resolves OQ-027, absorbs RFC-002; added
+  2026-07-14).** The NFR-010 gate measures `SKILL.md` **where it ships** — inside a real host
+  agent harness with a rich tool suite (Read/Write/Edit/Bash/Glob/Grep, plus the host's `Skill`
+  tool to load the skill body) and a mature loop — not
+  the OQ-017 bespoke 3-tool `messages.create` loop, which measured a configuration that never
+  ships and is strictly *harder* than production (false negatives; the gate did not predict
+  production). The reference host is the **Claude Agent SDK**, **version-pinned** in
+  `evals/runner.json` (`harness = { kind, version }`) exactly as the model is pinned, so the gate
+  stays reproducible. Scope of the change: **only the harness that produces an EpisodeResult**.
+  OQ-016 scoring (schema-valid + independent engine re-verify, AD-004), the SampleSet schema,
+  `verify`, `check_samples`, the §11.8 buckets/ratchet/baseline, and every rate rule are
+  **untouched** — a **deterministic host→EpisodeResult adapter** (OQ-027e) feeds the unchanged
+  scorer. The retired raw loop (`scripts/eval_harness.py`) is **demoted to a non-gating offline
+  smoke fixture** (OQ-027d), not deleted, so its fake-provider unit tests keep exercising loop
+  logic offline. Because a real host runs **Bash** over untrusted fixture input inside the
+  credential-holding dispatch workflow, adoption of the live run is **gated on the OQ-027f
+  isolation contract** (ephemeral per-episode workspace, no credentials in the tool-execution
+  sandbox, network egress denied, artifact controls) — the single biggest new risk. Changing the
+  pinned `harness.kind`/`harness.version` is an eval-policy commit that resets `evals/baseline.json`
+  (OQ-027b), mirroring the gate-model swap (§11.8 / OQ-024g). Determinism (NFR-002) is untouched:
+  the harness is a measurement instrument, never a gate input beyond the EpisodeResult it produces.
 
 ---
 
@@ -327,7 +348,11 @@ No console-script product; no MCP.
   (manifest recorded at install time).
 
 ### Improvement
-- **FR-017** — Eval-driven loop (AD-010/020).
+- **FR-017** — Eval-driven loop (AD-010/020). *(rev 2026-07-14, AD-024 / OQ-027: the loop's
+  measurement harness is the **real host** — the Claude Agent SDK reference host pinned in
+  `evals/runner.json` — feeding the unchanged OQ-016 scorer through the OQ-027e adapter; the raw
+  OQ-017 loop is demoted to non-gating offline smoke. Scoring, targets, baseline, and lint
+  semantics are unchanged; see §11.8.)*
 - **FR-018** — Capture failing cases into evals only after **privacy redaction** and **explicit
   consent** (§11.8). No raw secrets/PII committed. *(rev 2026-07-13 — two separable halves.)*
   **(a) Capture mechanism (gating; A2–A3):** the SKILL.md §3.5 redaction+consent rule plus the
@@ -466,7 +491,9 @@ No console-script product; no MCP.
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
   smoke**, not host “discoverability,” except where OQ-010 enables a Claude listing check.
 - **NFR-010 — Eval regression gate.** Targets (OQ-006): authoring ≥80%→95% ratchet; adversarial
-  refuse-class =100%. Exact formula and runner: §11.8 / AD-020.
+  refuse-class =100%. Exact formula and runner: §11.8 / AD-020. *(rev 2026-07-14, AD-024 / OQ-027:
+  the pinned `runner.json.harness` — the real host + version — is part of gate identity alongside
+  the model pin; a harness change is an eval-policy commit that resets the baseline, §11.8.)*
 - **NFR-011 — Privacy.** Real-use fixtures require redaction + consent before commit (FR-018).
 - **NFR-012 — Shipped-skill self-sufficiency.** *(added 2026-07-12)* The shipped skill body
   (`SKILL.md`) and adapter files must be fully operable standalone: every behavior, schema
@@ -582,6 +609,19 @@ No console-script product; no MCP.
   fixture committed without one is treated as hand-authored (trusted via §12 review, not
   engine-frozen), and a genuinely inexpressible transform is authored `expect: "refuse"` with no seed
   (AD-023) — see FR-033's enforcement boundary.
+- **AC-036** — *(OQ-027 / AD-024, added 2026-07-14)* **Real-host harness pin + adapter.**
+  (a) `evals/runner.json` carries a `harness` block `{ kind, version }` that validates against the
+  `eval_runner.json` schema (`kind ∈ {agent-sdk, claude-code}`), and `check_evals` selects the
+  driver by `harness.kind`, raising a config error (exit 2) on an unimplemented kind — exactly as
+  an unsupported `provider` does.
+  (b) The host→EpisodeResult adapter is deterministic and total over host outcomes: a well-formed
+  returned `AuthoringResult` → `outcome: "submitted"` with that object as `submitted` (a
+  schema-invalid payload still maps to `submitted`, retained verbatim); host end-without-result →
+  `no_submit`; pinned step/turn/token budget exceeded → `budget_exceeded`; host/transport/
+  credential fault → `infra_error`. Feeding each adapter output through the unchanged
+  `score_episode` (OQ-016) yields the same score the equivalent raw-loop EpisodeResult would — the
+  scorer, targets, baseline, and lint semantics are byte-for-byte unchanged (AD-024). The adapter
+  is unit-tested with a fake host (no live credentials), mirroring the OQ-017e fake-provider tests.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -1132,11 +1172,22 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
   "tool_budget": integer,
   "runs_per_fixture": 3,
   "pass_rule": "majority",
-  "seed": number | null
+  "seed": number | null,
+  "harness": {                        # AD-024 / OQ-027 (added 2026-07-14) — the
+                                      # real host that runs the skill; a
+                                      # gate-identity field beside the model pin
+    "kind": "agent-sdk" | "claude-code",
+    "version": string                 # pinned host version (e.g. the
+                                      # claude-agent-sdk package version)
+  }
 }
 ```
 Initial committed values are chosen at A2 standup and become part of the gate identity; changing
-them is an explicit eval-policy commit. *(rev 2026-07-12: `temperature` removed from the shape —
+them is an explicit eval-policy commit. *(rev 2026-07-14, AD-024 / OQ-027: the `harness` block is
+part of gate identity — a change to `harness.kind` or `harness.version` is an eval-policy commit
+that resets `evals/baseline.json` in the same commit, mirroring the gate-model swap below. v1
+implements `kind: "agent-sdk"` as the reference host; `"claude-code"` is admitted by the shape but
+unimplemented.)* *(rev 2026-07-12: `temperature` removed from the shape —
 the pinned `claude-sonnet-5` rejects non-default sampling parameters with a 400; the harness
 never sends sampling parameters, and determinism steering lives in the prompt.)*
 
@@ -1197,12 +1248,23 @@ EvalFixture = {
   passing" is the committed `evals/baseline.json` (OQ-016f):
   `{ "schema_version": "1.0", "passing": [fixture ids…] }`; ids are added only by explicit
   `check_evals --update-baseline` commits.
-- **Harness (OQ-017):** raw provider-API tool loop in `scripts/eval_harness.py`, driven by
-  `scripts/check_evals.py`; system prompt = repo-root `SKILL.md` verbatim + fixed preamble; tools
-  `write_file` / `transon_authoring` / `submit_result` only; per-episode temp workspace;
-  provider client behind the optional extra `transon-authoring[evals]`; full runs live in a
-  credential-holding dispatch workflow, per-PR CI runs `check_evals --lint` + fake-provider unit
-  tests.
+- **Harness (OQ-017, rev 2026-07-14 by AD-024 / OQ-027):** the gate runs the skill in the **real
+  host agent harness** it ships into — the reference host is the **Claude Agent SDK**, pinned by
+  `runner.json.harness = { kind: "agent-sdk", version }`. The driver (`scripts/host_harness.py`,
+  behind the optional extra `transon-authoring[evals]`) installs `SKILL.md` as a skill, runs one
+  episode per `runs_per_fixture` with the host's rich tool suite over a per-episode ephemeral
+  workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied), and
+  maps the host's returned `AuthoringResult` + execution status to the §11.8 EpisodeResult via the
+  **deterministic host→EpisodeResult adapter** (OQ-027e status→outcome mapping). `check_evals`
+  selects the driver by `harness.kind` (config error, exit 2, on an unimplemented kind). The
+  isolation contract (OQ-027f) — ephemeral workspace, no credentials in the tool sandbox, egress
+  denied, artifact controls — is a **blocker before the live run** and is enforced by the
+  dispatch-workflow environment plus the driver. The retired **raw 3-tool `messages.create` loop**
+  (`scripts/eval_harness.py`: `SKILL.md` verbatim + fixed preamble; tools `write_file` /
+  `transon_authoring` / `submit_result`; per-episode temp workspace; injected provider) is
+  **demoted to a non-gating offline smoke fixture** (OQ-027d) — retained and unit-tested with a
+  fake provider, never the gate. Full runs live in a credential-holding dispatch workflow; per-PR
+  CI runs `check_evals --lint` + the fake-host / fake-provider unit tests.
 - **Transcripts & attribution (FR-032 / AD-022, added 2026-07-12):** full runs write one
   `EpisodeTranscript` JSON per episode to `--transcripts-dir`; **never committed** to the repo
   (repo hygiene + NFR-011) — the dispatch workflow retains the directory as a build artifact:
@@ -1223,6 +1285,10 @@ EvalFixture = {
     error: string | null
   }
   ```
+  *(rev 2026-07-14, AD-024 / OQ-027: under the real-host harness the four `outcome` values are
+  produced by the OQ-027e host→EpisodeResult adapter rather than the raw loop; `tool_calls` carries
+  the host's reported step record when it exposes one and is otherwise `[]`. This is additive
+  telemetry — the transcript changes no scoring, exactly as before.)*
   The gate report gains `failure_modes`: per bucket, a histogram over the runs that **failed
   that bucket's OQ-016 success rule**, plus reported-only `infra_error` runs. Each failed run
   is keyed by its final **scored** outcome, first match in this precedence wins:
@@ -1372,6 +1438,13 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it;
   AC-025 is the FR-018a lint invariant, satisfied vacuously — real-use corpus growth (FR-018b)
   is ongoing and gates nothing, per the 2026-07-13 split).
+  *(rev 2026-07-14, AD-024 / OQ-027: the authoring-target run is measured under the **real-host
+  harness** pinned in `runner.json.harness` — the raw loop is retired as the gate. The
+  harness pin is set by the same eval-policy commit discipline as the model pin; because no gate
+  run has been accepted yet, its baseline reset is vacuous. AC-036 (harness pin + adapter, offline
+  deterministic) joins the A3 green list; the live authoring-target run remains the sole
+  behavioral-closure item and depends on the OQ-027f isolation contract being in force in the
+  dispatch workflow.)*
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
   OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint; the `SKILL.md`-side
@@ -1385,7 +1458,11 @@ within A3: SPEC (this edit) → generator + seeds + regen lint (FR-029) → v1 f
 human-accepted intents → the eval-policy commit that swaps `evals/runner.json` to the small
 model and resets `evals/baseline.json` (§11.8) → iterate `SKILL.md` until the authoring target
 is met under that pin. Later fixture waves beyond the v1 subset remain ongoing improvement-loop
-work and do not gate any milestone.
+work and do not gate any milestone. *(rev 2026-07-14, AD-024 / OQ-027: the eval-policy commit that
+pins `runner.json.harness` to the real host (Claude Agent SDK) is folded into this ordering
+alongside the model pin — the deterministic parts (schema, adapter, driver seam, raw-loop
+demotion) land offline; the live authoring-target run then executes under that pinned host once
+the OQ-027f isolation contract is in force.)*
 
 ---
 
@@ -1515,7 +1592,16 @@ work and do not gate any milestone.
   id fails its majority, regardless of aggregate rates; ids are added only via explicit
   `check_evals --update-baseline` commits (append-only in practice; removals require deleting the
   fixture).
-- **OQ-017** — **Resolved (2026-07-11, A2 standup):** The runner is a **raw API tool loop** owned
+- **OQ-017** — **Resolved (2026-07-11, A2 standup); harness shape *revised* 2026-07-14 by OQ-027 /
+  AD-024 (absorbs RFC-002).** The gate harness is no longer the raw loop below — it is the **real
+  host** (Claude Agent SDK reference host, pinned in `runner.json.harness`), feeding the unchanged
+  OQ-016 scorer through the OQ-027e adapter. The raw loop described here is **demoted to a
+  non-gating offline smoke fixture** (OQ-027d), retained and fake-provider-tested but never the
+  gate. The rest of this resolution (prompting bytes, workspace confinement, budget/infra
+  distinctions, the `[evals]` extra, the dispatch-vs-PR CI split) stands as the description of that
+  smoke fixture and the shared conventions the real host inherits. Original A2-standup resolution
+  follows.
+  The runner *was* a **raw API tool loop** owned
   by this repo (no headless coding-agent dependency, no MCP): `scripts/eval_harness.py`, driven
   by `scripts/check_evals.py`.
   (a) **Prompting:** the system prompt is the verbatim bytes of the repo-root `SKILL.md` plus a
@@ -1550,7 +1636,10 @@ work and do not gate any milestone.
   `model_id` above is the A2-standup **initial** value and is superseded by the §11.8 gate-model
   policy — `claude-haiku-4-5-20251001` becomes the pin effective from the ordered eval-policy
   commit that swaps `runner.json` and resets the baseline; until that commit lands, these
-  committed values remain the in-force gate identity.)*
+  committed values remain the in-force gate identity.)* *(rev 2026-07-14, OQ-027/AD-024: the shape
+  gains a `harness` block, added to the committed `runner.json` as `{ kind: "agent-sdk", version:
+  <pinned claude-agent-sdk version> }`; it is gate identity and a change to it is an eval-policy
+  commit that resets the baseline, §11.8.)*
 - **OQ-018** — **Resolved (2026-07-11, A2 standup):** all edges resolved to the A1-implemented
   behavior, now normative in §11.1 ("Edge semantics"):
   (a) **Placeholder:** `Confirmation.content_fingerprint` is required; the normative
@@ -1728,6 +1817,70 @@ work and do not gate any milestone.
   `NO_CONTENT`/`writes` customs, before value-variation padding: length variations in
   array-discovery order (document root first, then OQ-025b pre-order), then key deletions in
   root-key document order, then key additions in template pre-order discovery order.
+- **OQ-027** — **Resolved (2026-07-14; absorbs RFC-002,
+  `docs/proposals/rfc-002-real-host-eval-harness.md`):** the NFR-010 gate runs the skill in the
+  **real host agent harness** it ships into — not the bespoke raw tool loop. This reopens the
+  OQ-017 *harness shape* decision only (OQ-016 scoring, the SampleSet schema, `verify`,
+  `check_samples`, and every §11.8 rate/ratchet/baseline rule are untouched). Author decisions,
+  normative in AD-024 / §11.8 and revising OQ-017:
+  (a) **Driver / reference host (R1)** — the gate harness is a **real host** pinned in
+  `evals/runner.json`. `runner.json.harness = { "kind": "agent-sdk" | "claude-code", "version":
+  string }` is a gate-identity field. v1 **implements `agent-sdk`** (the Claude Agent SDK) as the
+  **reference host**, mirroring how `provider` is a string yet only `"anthropic"` is built; a
+  `"claude-code"` (headless `claude -p`) lane is admitted by the shape but unimplemented in v1.
+  The Agent SDK is favoured for the same reason the model is pinnable: a real tool suite behind a
+  version-pinned package.
+  (b) **Harness pin shape + upgrade (R2)** — the `harness` block sits beside the model pin in
+  `runner.json`. A change to `harness.kind` **or** `harness.version` is an **eval-policy commit**
+  that MUST reset `evals/baseline.json` to `{ "schema_version": "1.0", "passing": [] }` in the
+  same commit — identical discipline to the gate-model swap (§11.8 / OQ-024g): majority results
+  under one harness are not transferable to another. `evals/targets.json` is **not** reset (the
+  ratchet never lowers); an expected sub-target rate under a new harness is a red gate fixed by
+  improving `SKILL.md`, never by lowering targets.
+  (c) **Cursor parity (R3)** — v1 names the reference host **only** (no second per-host gate lane).
+  Cursor/Claude adapter equivalence remains the AD-005 / NFR-007 parity concern, measured by
+  `check_parity`, not by a second eval gate.
+  (d) **Retired raw loop (R4)** — `scripts/eval_harness.py` (the OQ-017 3-tool `messages.create`
+  loop) is **demoted to a non-gating offline smoke fixture**: retained and importable, exercised
+  by its fake-provider unit tests, but **never selected by the gate**. It is no longer the NFR-010
+  harness; the real host is.
+  (e) **Host→EpisodeResult adapter (R5)** — the driver includes a **deterministic adapter** from
+  the host's returned `AuthoringResult` **and** its execution status to the §11.8 EpisodeResult
+  shape (`{submitted, outcome, tool_calls, error, tool_call_log, tokens}`), so the unchanged
+  `check_evals.score_episode` (OQ-016) scores it exactly as before. Status→outcome mapping,
+  covering every §11.8 outcome:
+  - host returned a well-formed `AuthoringResult` → `outcome: "submitted"`, `submitted` = that
+    object verbatim (a schema-invalid payload still maps to `submitted` with the raw payload
+    retained, scored `invalid_submission` by OQ-016b — unchanged);
+  - host ended without returning one → `outcome: "no_submit"`;
+  - host exceeded the pinned step/turn/token budget → `outcome: "budget_exceeded"`;
+  - host / transport / credential fault → `outcome: "infra_error"` (OQ-016d).
+  The adapter lives in the driver module (`scripts/host_harness.py`), feeding the untouched
+  scorer; `tool_calls`/`tool_call_log` are populated from the host's reported step record when it
+  exposes one and are otherwise empty (additive telemetry — never scored, AC-034). This adapter is
+  the real substitute for the deleted raw loop.
+  (f) **Isolation contract (R6; blocker before adoption)** — swapping three sandboxed tools for a
+  full Read/Write/Edit/**Bash** host inside the credential-holding dispatch workflow widens the
+  trust boundary: a fixture's `intent_nl`/SampleSet is untrusted input and the model executes
+  shell, so a prompt-injected or adversarial fixture could otherwise read the provider key, reach
+  the network, or modify/exfiltrate repo data. The reference-host run MUST therefore be pinned to:
+  (i) an **ephemeral, per-episode workspace** — a throwaway temp dir with no repo checkout
+  mounted: only the installed skill (`SKILL.md`) and the fixture's `samples.json` live inside it.
+  The pinned `transon_authoring` engine is reached through the **ambient package install** (e.g.
+  site-packages, exactly as the raw loop's `python -m transon_authoring` already did), never copied
+  into or resolved from a repo checkout. The workspace is destroyed after scoring and the host's
+  working directory (`cwd`) is confined to it;
+  (ii) **no credentials in the tool-execution sandbox** — the provider key stays in the workflow
+  environment that *calls* the model API and is never exported into the environment the model's
+  Bash sees;
+  (iii) **network egress denied** by default after the pinned engine install (mirrors NFR-003), so
+  host tools cannot exfiltrate or fetch;
+  (iv) **artifact controls** — only the `AuthoringResult` (and, opt-in, the FR-032 transcript)
+  leave the sandbox; nothing is committed; the NFR-011 secret scan covers captured text.
+  Mechanisms (ii)–(iii) are enforced by the **dispatch-workflow environment** (the harness cannot
+  self-attest an egress deny it runs inside); the driver enforces (i) and (iv) and MUST NOT export
+  the provider key into the host tool environment. This is the single biggest new risk the change
+  introduces and gates adoption of the live real-host run.
 
 ---
 
@@ -1757,6 +1910,14 @@ work and do not gate any milestone.
   no auto-approve, honest `deferred`/`aborted` statuses (FR-030).
 - Repair blowup → FR-007 cap.
 - False discoverability claims → FR-019 wording.
+- Real-host gate harness widens the trust boundary (a full Read/Write/Edit/**Bash** host runs over
+  untrusted fixture input inside the credential-holding dispatch workflow: a prompt-injected or
+  adversarial fixture could read the provider key, reach the network, or touch repo data) →
+  OQ-027f isolation contract (AD-024): ephemeral per-episode workspace, no credentials in the tool
+  sandbox, network egress denied post-install, artifact controls — a blocker before the live run.
+- Gate cliff / non-transferable scores on a harness swap → harness pin is gate identity; a
+  `harness.kind`/`version` change is an eval-policy commit that resets the baseline, targets never
+  lowered (§11.8 / OQ-027b).
 
 ---
 
@@ -1782,7 +1943,7 @@ excluded from active coverage.
 | FR-014 | AC-021 | A1 | CLI unit |
 | FR-015 | AC-007, AC-009 | A4 | check_install |
 | FR-016 | AC-007 | A4 | check_install |
-| FR-017 | AC-008 | A2 | check_evals |
+| FR-017 | AC-008, AC-036 | A2–A3 | check_evals + real-host harness (AD-024) |
 | FR-018 | AC-008, AC-025 | A2–A3 | evals + privacy review |
 | FR-019 | AC-009 | A4 | check_install |
 | FR-020 | AC-010, AC-017, AC-018 | A2 | check_samples unit |
@@ -1808,7 +1969,7 @@ excluded from active coverage.
 | NFR-007 | AC-005 | A4 | check_parity |
 | NFR-008 | AC-006, AC-007 | A4–A5 | release checklist |
 | NFR-009 | AC-007, AC-009 | A4 | check_install |
-| NFR-010 | AC-008 | A2 | check_evals |
+| NFR-010 | AC-008, AC-036 | A2–A3 | check_evals |
 | NFR-011 | AC-025 | A2 | fixture lint |
 | NFR-012 | AC-032 | A4 | check_parity |
 

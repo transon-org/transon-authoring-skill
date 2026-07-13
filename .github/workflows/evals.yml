@@ -1,9 +1,26 @@
 name: Evals
 
-# FR-017 / NFR-010 / AC-008 — full eval gate (SPEC §11.8). Per OQ-017e the
-# credential-holding full run lives in this manually-dispatched workflow only;
-# per-PR CI runs the credential-free `check_evals --lint` and the
-# fake-provider unit tests (see ci.yml).
+# FR-017 / NFR-010 / AC-008 / AC-036 — full eval gate (SPEC §11.8). Per OQ-017e
+# the credential-holding full run lives in this manually-dispatched workflow
+# only; per-PR CI runs the credential-free `check_evals --lint` and the
+# fake-host / fake-provider unit tests (see ci.yml).
+#
+# AD-024 / OQ-027 (2026-07-14): the gate runs the skill in the REAL HOST (the
+# Claude Agent SDK reference host, pinned in evals/runner.json.harness), not the
+# retired raw loop. Because that host runs Bash over untrusted fixture input,
+# the live run is gated on the OQ-027f isolation contract, which THIS workflow
+# environment must enforce before the run is trusted:
+#   (i)   ephemeral per-episode workspace, no repo checkout mounted to the host
+#         tool cwd (the driver creates + tears it down);
+#   (ii)  the provider key is available to the model-API call only, NEVER
+#         exported into the environment the model's Bash sees;
+#   (iii) network egress denied by default after the pinned engine install
+#         (mirrors NFR-003) — enforce at the runner/container/network layer;
+#   (iv)  only the AuthoringResult (+ opt-in transcript) leaves the sandbox;
+#         nothing is committed; the NFR-011 secret scan covers captured text.
+# (ii)/(iii) are environment controls the harness cannot self-attest; wire them
+# here (e.g. a container with egress-deny + a key-scoped API proxy) before
+# accepting a baseline from this run.
 on:
   workflow_dispatch:
 

@@ -1,4 +1,13 @@
-"""FR-017 / NFR-010 / OQ-017 — eval harness: raw provider-API tool loop.
+"""FR-017 / OQ-017 — raw provider-API tool loop (non-gating offline smoke).
+
+*(rev 2026-07-14, AD-024 / OQ-027d)* This raw 3-tool ``messages.create`` loop is
+**no longer the NFR-010 gate harness** — the gate now runs the skill in the real
+host (Claude Agent SDK reference; :mod:`host_harness`). This module is **demoted
+to a non-gating offline smoke fixture**: retained and importable, exercised by
+its fake-provider unit tests to smoke the tool-call plumbing without credentials,
+but never selected by :mod:`check_evals`. It also documents the shared harness
+conventions (verbatim ``SKILL.md`` prompt, workspace confinement, budget/infra
+distinctions) that the real host inherits.
 
 Runs a single eval fixture as one episode against a provider (SPEC §11.8
 "Harness (OQ-017)"):

@@ -57,7 +57,9 @@ def test_fr_017_runner_values_are_oq_017f_pin():
     # OQ-017f: the committed runner.json values are gate identity (AD-020);
     # changing any is an explicit eval-policy commit. Current pin: the
     # AD-021/OQ-024a small-model gate (superseding the initial sonnet pin
-    # via the 2026-07-12 eval-policy commit).
+    # via the 2026-07-12 eval-policy commit) plus the AD-024/OQ-027 real-host
+    # `harness` block (2026-07-14 eval-policy commit) pinning the Claude Agent
+    # SDK reference host beside the model.
     document = load_document(EVALS / "runner.json", "eval_runner.json")
     assert document == {
         "schema_version": "1.0",
@@ -68,6 +70,7 @@ def test_fr_017_runner_values_are_oq_017f_pin():
         "runs_per_fixture": 3,
         "pass_rule": "majority",
         "seed": None,
+        "harness": {"kind": "agent-sdk", "version": "0.2.116"},
     }
 
 

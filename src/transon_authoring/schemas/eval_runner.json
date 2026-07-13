@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EvalRunner",
-  "description": "SPEC 11.8 evals/runner.json (AD-020, FR-017). Committed values are gate identity; changing any is an explicit eval-policy commit (OQ-017f pins the initial values). rev 2026-07-12: temperature removed — the harness sends no sampling parameters (the pinned model rejects non-default ones with a 400).",
+  "description": "SPEC 11.8 evals/runner.json (AD-020, FR-017). Committed values are gate identity; changing any is an explicit eval-policy commit (OQ-017f pins the initial values). rev 2026-07-12: temperature removed — the harness sends no sampling parameters (the pinned model rejects non-default ones with a 400). rev 2026-07-14 (AD-024/OQ-027): a `harness` block pins the real host (Claude Agent SDK reference) beside the model — gate identity; a change to it is an eval-policy commit that resets the baseline (SPEC §11.8).",
   "type": "object",
   "required": [
     "schema_version",
@@ -11,7 +11,8 @@
     "tool_budget",
     "runs_per_fixture",
     "pass_rule",
-    "seed"
+    "seed",
+    "harness"
   ],
   "additionalProperties": false,
   "properties": {
@@ -40,6 +41,20 @@
     "seed": {
       "description": "passed through when the provider supports it (OQ-017c)",
       "type": ["number", "null"]
+    },
+    "harness": {
+      "description": "AD-024/OQ-027 — the real host that runs the skill; gate identity beside the model pin. v1 implements kind 'agent-sdk' (the Claude Agent SDK reference host); 'claude-code' (headless claude -p) is admitted by the shape but unimplemented. version pins the host (e.g. the claude-agent-sdk package version). A change to kind or version is an eval-policy commit that resets evals/baseline.json (SPEC §11.8 / OQ-027b).",
+      "type": "object",
+      "required": ["kind", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": ["agent-sdk", "claude-code"]
+        },
+        "version": {
+          "type": "string"
+        }
+      }
     }
   }
 }
