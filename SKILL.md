@@ -209,6 +209,44 @@ Emit exactly ONE `AuthoringResult` object per answer. `ok: true` if and only if
 `status: "matched"`. Include `template` only on success. Failures always set `ok: false`, use a
 status from the table below, and never present a template as success.
 
+Every `AuthoringResult` MUST carry these four fields, always:
+
+- `schema_version`: the string `"1.0"`.
+- `ok`: boolean — `true` only when `status` is `matched`.
+- `status`: exactly one value from the table below.
+- `explanation`: a one-line string stating what happened.
+
+On a matched success you MUST ALSO include: `template` (the verified template JSON), `verdict`
+(the exact Verdict object the verify step returned — it carries `ok: true` and
+`assurance: "matched"`), and `repair_count` (repairs consumed; `0` if the first candidate
+matched). On a failure set `ok: false`, omit `template`, and attach whatever diagnostics apply
+(`verdict`, `repair_count`, `last_candidate`, `gaps`, `sample_check`).
+
+Success envelope shape:
+
+```json
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "status": "matched",
+  "explanation": "Template verified at assurance matched.",
+  "template": { "the": "verified template JSON" },
+  "verdict": { "schema_version": "1.0", "ok": true, "assurance": "matched", "errors": [] },
+  "repair_count": 0
+}
+```
+
+Refusal / failure envelope shape:
+
+```json
+{
+  "schema_version": "1.0",
+  "ok": false,
+  "status": "aborted",
+  "explanation": "The requested capability does not exist in the pinned snapshot."
+}
+```
+
 | status | when |
 |---|---|
 | `matched` | verify returned `ok: true` with `assurance: "matched"` — the only success; in interactive sessions, only after the section 6 review **approve** |

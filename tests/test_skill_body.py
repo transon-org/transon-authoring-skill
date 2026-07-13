@@ -771,3 +771,36 @@ def test_uc_001_walkthrough_review_approve():
     assert schema_violations(result, "authoring_result.json") == []
     assert result["template"] == template
     assert result["status"] == "matched"
+
+
+def test_fr_008_result_section_specifies_full_authoring_result_envelope():
+    """FR-008 / §11.5 — the Result section spells out the COMPLETE required
+    AuthoringResult envelope so a small gate model (AD-021) emits every
+    mandatory field: `schema_version` `"1.0"`, `ok`, `status`, `explanation`
+    always; and on a matched success also `template`, the verify `verdict`
+    (carrying `ok` + `assurance: "matched"`), and `repair_count`.
+
+    Locked after the A3 improvement loop: driving the skill body under the
+    gate model surfaced envelopes that authored/refused correctly but dropped
+    `schema_version`/`explanation`/`verdict`, failing the §11.8 scoring even
+    though the template itself verified matched."""
+    result_section = _body().split("## 7. Result", 1)[1]
+
+    # The four always-required envelope fields are named, and schema_version's
+    # literal value is shown (not just described).
+    for field in ("schema_version", "ok", "status", "explanation"):
+        assert f"`{field}`" in result_section, (
+            f"Result section does not name the required envelope field {field!r}"
+        )
+    assert _has(r"schema_version.{0,24}?\"1\.0\"", result_section), (
+        "Result section does not show the required schema_version \"1.0\""
+    )
+
+    # On a matched success the verify Verdict MUST be included — the §11.8
+    # OQ-016a scoring rule reads verdict.ok + assurance from the submission.
+    assert _has(
+        r"success.{0,240}?include.{0,240}?verdict", result_section
+    ), "Result section does not mandate including the verify Verdict on success"
+    assert _has(
+        r"verdict.{0,160}?assurance.{0,24}?\"matched\"", result_section
+    ), "Result section does not show the success Verdict carries assurance matched"
