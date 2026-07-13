@@ -322,10 +322,12 @@ class AgentSDKHost:
     ) -> HostOutcome:  # pragma: no cover - live SDK path, dispatch-only
         import asyncio
 
-        # ``skill_md`` is part of the Host protocol (a claude-code host might
-        # inject it as a system prompt); the Agent SDK instead discovers the
-        # already-installed workspace/.claude/skills/…/SKILL.md via
-        # ``setting_sources``, so it is intentionally unused here.
+        # ``skill_md`` is part of the Host protocol but intentionally unused
+        # here: OQ-027a faithful engagement means the host discovers and
+        # auto-activates the skill exactly as a real session would — the driver
+        # already installed it into workspace/.claude/skills/…/SKILL.md
+        # (run_fixture), and the Claude Code system prompt (preset below) drives
+        # activation. We do NOT inject SKILL.md as the system prompt.
         return asyncio.run(
             self._run_episode_async(prompt=prompt, workspace=workspace)
         )
@@ -338,6 +340,13 @@ class AgentSDKHost:
         cfg = self._runner_cfg
         options = ClaudeAgentOptions(
             cwd=str(workspace),  # OQ-027f(i): confine the host to the workspace
+            # OQ-027a faithful engagement: use Claude Code's OWN system prompt
+            # (preset) so the installed skill auto-activates by its frontmatter
+            # description exactly as in a real session — no injected SKILL.md,
+            # no engagement preamble. (Whether a given intent triggers the skill
+            # is then a real signal about the shipped description, not a harness
+            # knob.)
+            system_prompt={"type": "preset", "preset": "claude_code"},
             setting_sources=["project"],  # discover workspace/.claude/skills/…
             skills="all",
             allowed_tools=_AGENT_SDK_ALLOWED_TOOLS,

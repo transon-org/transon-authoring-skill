@@ -1251,7 +1251,9 @@ EvalFixture = {
 - **Harness (OQ-017, rev 2026-07-14 by AD-024 / OQ-027):** the gate runs the skill in the **real
   host agent harness** it ships into — the reference host is the **Claude Agent SDK**, pinned by
   `runner.json.harness = { kind: "agent-sdk", version }`. The driver (`scripts/host_harness.py`,
-  behind the optional extra `transon-authoring[evals]`) installs `SKILL.md` as a skill, runs one
+  behind the optional extra `transon-authoring[evals]`) installs `SKILL.md` as shipped into the
+  host's skill path and lets the host **auto-activate** it under its own system prompt (OQ-027a
+  faithful engagement — no injection, no preamble), runs one
   episode per `runs_per_fixture` with the host's rich tool suite over a per-episode ephemeral
   workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied), and
   maps the host's returned `AuthoringResult` + execution status to the §11.8 EpisodeResult via the
@@ -1829,7 +1831,19 @@ the OQ-027f isolation contract is in force.)*
   **reference host**, mirroring how `provider` is a string yet only `"anthropic"` is built; a
   `"claude-code"` (headless `claude -p`) lane is admitted by the shape but unimplemented in v1.
   The Agent SDK is favoured for the same reason the model is pinnable: a real tool suite behind a
-  version-pinned package.
+  version-pinned package. **Skill engagement (faithful — no injection):** the driver installs
+  `SKILL.md` **exactly as the product ships it** into the host's skill path
+  (`<workspace>/.claude/skills/transon-authoring/SKILL.md`) and lets the host **auto-activate** it —
+  the host runs under **its own (Claude Code) system prompt**, and the skill fires by its frontmatter
+  `description` exactly as in a real session. The driver **does not** inject `SKILL.md` as the system
+  prompt and adds **no** engagement preamble — those would test a configuration that never ships. A
+  consequence, made normative here: the **shipped `SKILL.md` MUST carry a discoverable frontmatter
+  `description`** (an install-integrity / discoverability property, NFR-009 / OQ-010) — without it the
+  host cannot recognise it as a skill. If a given fixture `intent_nl` does not trigger the skill, that
+  is a **true signal** about the shipped `description` (or the fixture's realism), fixed in the skill
+  or the corpus — never by a harness knob. *(rev 2026-07-14: supersedes the initial absorption's
+  system-prompt-injection + engagement-preamble mechanism, which an indicative run exposed as
+  measuring a non-shipped configuration — see the risks note.)*
   (b) **Harness pin shape + upgrade (R2)** — the `harness` block sits beside the model pin in
   `runner.json`. A change to `harness.kind` **or** `harness.version` is an **eval-policy commit**
   that MUST reset `evals/baseline.json` to `{ "schema_version": "1.0", "passing": [] }` in the
@@ -1918,6 +1932,14 @@ the OQ-027f isolation contract is in force.)*
 - Gate cliff / non-transferable scores on a harness swap → harness pin is gate identity; a
   `harness.kind`/`version` change is an eval-policy commit that resets the baseline, targets never
   lowered (§11.8 / OQ-027b).
+- Harness measures a **non-shipped configuration** (the gate looks green/red for reasons that don't
+  reflect real use) → OQ-027a faithful engagement: install `SKILL.md` **as shipped** and let the
+  host **auto-activate** it under its own system prompt — no injected system prompt, no engagement
+  preamble, no tool coercion. An indicative run (2026-07-14) caught this: a hand-injected engagement
+  made a fixture pass that, under genuine auto-activation, the model would not even route to the
+  skill. Corollary risk — the **shipped skill isn't discoverable** (missing frontmatter
+  `description`) so the host never activates it → treated as an install-integrity/discoverability
+  defect (NFR-009 / OQ-010), fixed in the skill, not masked in the harness.
 
 ---
 

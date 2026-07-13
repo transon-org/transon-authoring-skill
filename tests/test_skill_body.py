@@ -61,6 +61,25 @@ def _bounded_bullet(section: str, name: str) -> str:
     return match.group(0)
 
 
+def test_oq_027_skill_md_ships_discoverable_frontmatter():
+    """OQ-027a / NFR-009: the shipped SKILL.md carries a YAML frontmatter block
+    with `name` and a non-empty `description`, so the host can discover and
+    auto-activate it as a skill (faithful engagement — the eval harness relies on
+    genuine activation, never on injecting SKILL.md as the system prompt)."""
+    body = _body()
+    fm = re.match(r"(?s)^---\n(.*?)\n---\n", body)
+    assert fm, "SKILL.md must open with a YAML frontmatter block (--- … ---)"
+    block = fm.group(1)
+    assert re.search(r"(?m)^name:\s*transon-authoring\s*$", block), (
+        "frontmatter must set name: transon-authoring"
+    )
+    desc = re.search(r"(?m)^description:\s*(\S.*)$", block)
+    assert desc and len(desc.group(1).strip()) >= 30, (
+        "frontmatter must carry a non-empty, descriptive `description` "
+        "(what triggers auto-activation)"
+    )
+
+
 def test_fr_001_skill_body_documents_grounded_flow():
     """FR-001 / AC-003 / AD-018 / AD-004: grounding commands cited, authority
     order stated, ungroundable capability => aborted refusal, success only on
