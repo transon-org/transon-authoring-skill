@@ -329,7 +329,14 @@ No console-script product; no MCP.
 ### Improvement
 - **FR-017** — Eval-driven loop (AD-010/020).
 - **FR-018** — Capture failing cases into evals only after **privacy redaction** and **explicit
-  consent** (§11.8). No raw secrets/PII committed.
+  consent** (§11.8). No raw secrets/PII committed. *(rev 2026-07-13 — two separable halves.)*
+  **(a) Capture mechanism (gating; A2–A3):** the SKILL.md §3.5 redaction+consent rule plus the
+  `check_evals --lint` enforcement that rejects any real-use fixture lacking `redacted: true` +
+  a `consent` object (NFR-011, AC-025). This half is the A3-gating deliverable and is complete.
+  **(b) Real-use corpus growth (ongoing; non-gating):** committing actual captured fixtures is
+  driven by real usage (typically only after distribution, A4+); it grows the corpus over time
+  and **gates no milestone** — its absence never holds A3 open. AC-025 is a conditional
+  invariant enforced by half (a), satisfied vacuously while no real-use fixture is committed.
 - **FR-029** — **Synthetic fixture generator + seed provenance + regen gate (AD-021).** A
   maintainer script (`scripts/` — not shipped in the package) mints EvalFixtures from snapshot
   `docs.examples` seeds: deterministic (no wall-clock/randomness), **3–6 cases per fixture**
@@ -515,6 +522,11 @@ No console-script product; no MCP.
 - **AC-024** — Captured `writes` matched when case declares `writes`; undeclared non-empty writes
   fail match.
 - **AC-025** — Eval fixtures from real use lack secrets/PII; consent recorded (NFR-011).
+  *(rev 2026-07-13, FR-018 split)* This is a **conditional invariant** enforced by the
+  `check_evals --lint` capture mechanism (FR-018a): any committed fixture sourced from real use
+  MUST carry `redacted: true` + a `consent` object, else the lint is red. It is **satisfied
+  vacuously** while the corpus holds no real-use fixture — AC-025 does **not** require that a
+  real-use fixture exist, so it never blocks A3.
 - **AC-026** — Failure envelopes always include `ok: false` and a §11.5 `status`.
 - **AC-027** — `verify` always executes under the AD-017 default profile (base `Transformer`,
   marker `"$"`, built-in registries). Explicit profile-violating requests (reserved CLI flags /
@@ -1357,7 +1369,9 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   *DoD:* FR-029 landed (AC-030 green); **authoring target met under the small-model pin**
   (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave;
   AC-003/004/010–014/017/019/025/026/031/033/034 green (AC-031's conversational half by
-  skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it).
+  skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it;
+  AC-025 is the FR-018a lint invariant, satisfied vacuously — real-use corpus growth (FR-018b)
+  is ongoing and gates nothing, per the 2026-07-13 split).
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
   OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint; the `SKILL.md`-side
