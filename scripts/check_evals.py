@@ -889,11 +889,37 @@ def run_evals(
 
     runs_per_fixture = runner_cfg["runs_per_fixture"]
     per_fixture_episodes: dict[str, list[dict[str, Any]]] = {}
-    for fixture in fixtures:
-        per_fixture_episodes[fixture["id"]] = [
-            harness.run_fixture(fixture, runner_cfg, provider, repo_root)
-            for _ in range(runs_per_fixture)
-        ]
+    # Live progress + running token totals to stderr (informational — the stdout
+    # JSON report is unchanged). Makes a long run observable instead of a black
+    # box, and surfaces prompt-cache effectiveness (cache_read climbing).
+    total = len(fixtures)
+    run_tokens = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
+    for i, fixture in enumerate(fixtures, 1):
+        episodes: list[dict[str, Any]] = []
+        for j in range(runs_per_fixture):
+            episode = harness.run_fixture(fixture, runner_cfg, provider, repo_root)
+            episodes.append(episode)
+            tok = episode.get("tokens") or {}
+            for key in run_tokens:
+                run_tokens[key] += int(tok.get(key, 0) or 0)
+            print(
+                f"check-evals: [{i}/{total}] {fixture['id']} "
+                f"run {j + 1}/{runs_per_fixture} -> {episode['outcome']}  "
+                f"| tokens in={run_tokens['input']:,} out={run_tokens['output']:,} "
+                f"cache_read={run_tokens['cache_read']:,} "
+                f"cache_write={run_tokens['cache_creation']:,}",
+                file=sys.stderr,
+                flush=True,
+            )
+        per_fixture_episodes[fixture["id"]] = episodes
+    print(
+        f"check-evals: episodes complete — total tokens "
+        f"in={run_tokens['input']:,} out={run_tokens['output']:,} "
+        f"cache_read={run_tokens['cache_read']:,} "
+        f"cache_write={run_tokens['cache_creation']:,}",
+        file=sys.stderr,
+        flush=True,
+    )
 
     # FR-032 — persist episode transcripts when a directory is given, before
     # scoring and regardless of red/green (a build artifact, never committed).

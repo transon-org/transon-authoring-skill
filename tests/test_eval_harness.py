@@ -393,3 +393,95 @@ def test_fr_017_oq_017_module_imports_without_anthropic_sdk(monkeypatch):
         module.AnthropicProvider(
             {"model_id": "m", "max_output_tokens": 1, "seed": None}
         )
+
+
+# --- Prompt caching + local OpenAI-compatible provider (non-normative) --------
+
+
+def test_with_cache_control_marks_system_and_last_block_without_mutating():
+    # Caching is semantically transparent: it only annotates the request with
+    # ephemeral breakpoints (system + last message block), never mutating the
+    # caller's messages, so scoring/determinism (NFR-002) are untouched.
+    messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "r1"},
+            {"type": "tool_result", "tool_use_id": "t2", "content": "r2"},
+        ]},
+    ]
+    before = copy.deepcopy(messages)
+    system_param, messages_param = harness.with_cache_control("SYS", messages)
+
+    assert system_param == [
+        {"type": "text", "text": "SYS", "cache_control": {"type": "ephemeral"}}
+    ]
+    # Only the LAST block of the LAST message carries a breakpoint.
+    last_blocks = messages_param[-1]["content"]
+    assert last_blocks[-1]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in last_blocks[0]
+    # Earlier message untouched; input object never mutated.
+    assert "cache_control" not in str(messages_param[0])
+    assert messages == before
+
+
+def test_with_cache_control_wraps_string_last_message():
+    system_param, messages_param = harness.with_cache_control(
+        "SYS", [{"role": "user", "content": "just text"}]
+    )
+    block = messages_param[-1]["content"][-1]
+    assert block == {
+        "type": "text", "text": "just text", "cache_control": {"type": "ephemeral"},
+    }
+
+
+def test_extract_tool_calls_from_content_recovers_ollama_shapes():
+    # Ollama returns some models' tool calls as content text; the local provider
+    # recovers bare JSON, <tool_call> tags, and fenced blocks (order preserved).
+    assert harness._extract_tool_calls_from_content(
+        '{"name": "write_file", "arguments": {"path": "a", "content": "b"}}'
+    ) == [("write_file", {"path": "a", "content": "b"})]
+    assert harness._extract_tool_calls_from_content(
+        '<tool_call>{"name": "submit_result", "arguments": {"result": {"ok": true}}}</tool_call>'
+    ) == [("submit_result", {"result": {"ok": True}})]
+    assert harness._extract_tool_calls_from_content("no call here") == []
+
+
+def test_to_openai_messages_maps_tool_results_and_tool_uses():
+    system = "SYS"
+    messages = [
+        {"role": "user", "content": "author X"},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "ok"},
+            {"type": "tool_use", "id": "tc1", "name": "write_file",
+             "input": {"path": "t.json", "content": "{}"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tc1", "content": "{\"ok\": true}"},
+        ]},
+    ]
+    out = harness._to_openai_messages(system, messages)
+    assert out[0] == {"role": "system", "content": "SYS"}
+    assert out[1] == {"role": "user", "content": "author X"}
+    assistant = out[2]
+    assert assistant["role"] == "assistant"
+    assert assistant["tool_calls"][0]["function"]["name"] == "write_file"
+    assert json.loads(assistant["tool_calls"][0]["function"]["arguments"]) == {
+        "path": "t.json", "content": "{}",
+    }
+    assert out[3] == {"role": "tool", "tool_call_id": "tc1", "content": "{\"ok\": true}"}
+
+
+def test_run_fixture_accumulates_token_usage_additively():
+    # Turn.usage is accumulated into EpisodeResult["tokens"]; additive telemetry
+    # that never affects scoring (AC-034).
+    submit = tool_turn("submit_result", {"result": AUTHORING_RESULT})
+    submit.usage = {"input": 100, "output": 20, "cache_read": 40, "cache_creation": 10}
+    provider = FakeProvider([submit])
+    episode = harness.run_fixture(
+        {"id": "fx", "intent_nl": "x"}, {"tool_budget": 8}, provider, REPO_ROOT
+    )
+    assert episode["outcome"] == "submitted"
+    assert episode["tokens"]["input"] == 100
+    assert episode["tokens"]["output"] == 20
+    assert episode["tokens"]["cache_read"] == 40
+    assert episode["tokens"]["turns"] == 1
