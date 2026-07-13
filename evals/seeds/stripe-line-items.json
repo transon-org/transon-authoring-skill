@@ -1,0 +1,72 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md#2-stripe",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "attr",
+        "names": [
+          "data",
+          "object",
+          "line_items",
+          "data"
+        ]
+      },
+      {
+        "$": "map",
+        "item": {
+          "$": "object",
+          "fields": {
+            "product": {
+              "$": "attr",
+              "names": [
+                "price",
+                "product"
+              ]
+            },
+            "description": {
+              "$": "attr",
+              "name": "description"
+            },
+            "quantity": {
+              "$": "attr",
+              "name": "quantity"
+            },
+            "unitPrice": {
+              "$": "chain",
+              "funcs": [
+                {
+                  "$": "attr",
+                  "names": [
+                    "price",
+                    "unit_amount"
+                  ]
+                },
+                {
+                  "$": "expr",
+                  "op": "/",
+                  "value": 100
+                }
+              ]
+            },
+            "lineTotal": {
+              "$": "chain",
+              "funcs": [
+                {
+                  "$": "attr",
+                  "name": "amount_total"
+                },
+                {
+                  "$": "expr",
+                  "op": "/",
+                  "value": 100
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

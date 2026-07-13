@@ -1,0 +1,102 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md#2-stripe",
+  "template": {
+    "$": "object",
+    "fields": {
+      "subtotal": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "amount_subtotal"
+            ]
+          },
+          {
+            "$": "expr",
+            "op": "/",
+            "value": 100
+          }
+        ]
+      },
+      "shipping": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "total_details",
+              "amount_shipping"
+            ]
+          },
+          {
+            "$": "expr",
+            "op": "/",
+            "value": 100
+          }
+        ]
+      },
+      "tax": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "total_details",
+              "amount_tax"
+            ]
+          },
+          {
+            "$": "expr",
+            "op": "/",
+            "value": 100
+          }
+        ]
+      },
+      "discount": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "total_details",
+              "amount_discount"
+            ]
+          },
+          {
+            "$": "expr",
+            "op": "/",
+            "value": 100
+          }
+        ]
+      },
+      "total": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "names": [
+              "data",
+              "object",
+              "amount_total"
+            ]
+          },
+          {
+            "$": "expr",
+            "op": "/",
+            "value": 100
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md#3-github",
+  "template": {
+    "$": "object",
+    "fields": {
+      "event": "push",
+      "repo": {
+        "$": "attr",
+        "names": [
+          "repository",
+          "full_name"
+        ]
+      },
+      "headSha": {
+        "$": "attr",
+        "name": "after"
+      },
+      "pusher": {
+        "$": "attr",
+        "names": [
+          "pusher",
+          "name"
+        ]
+      }
+    }
+  }
+}

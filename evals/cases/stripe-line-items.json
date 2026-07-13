@@ -1,0 +1,250 @@
+{
+  "schema_version": "1.0",
+  "id": "stripe-line-items",
+  "expect": "matched",
+  "intent_nl": "Reshape a Stripe session's line_items.data list: for each item emit product from price.product, description, quantity, unitPrice from price.unit_amount/100, and lineTotal from amount_total/100.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Reshape a Stripe session's line_items.data list: for each item emit product from price.product, description, quantity, unitPrice from price.unit_amount/100, and lineTotal from amount_total/100.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Line items reshaped with decimal prices.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-many",
+        "kind": "list_many",
+        "description": "Two or more line items.",
+        "target": "/data/object/line_items/data",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-single",
+        "kind": "custom",
+        "description": "A single line item.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-empty",
+        "kind": "custom",
+        "description": "An empty line-items list yields an empty list.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-many",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "has_more": false,
+                "data": [
+                  {
+                    "quantity": 2,
+                    "amount_total": 5000,
+                    "description": "Mechanical Keyboard",
+                    "price": {
+                      "unit_amount": 2500,
+                      "product": "prod_KEYB01"
+                    }
+                  },
+                  {
+                    "quantity": 1,
+                    "amount_total": 3900,
+                    "description": "USB-C Hub",
+                    "price": {
+                      "unit_amount": 3900,
+                      "product": "prod_HUB07"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "output": [
+          {
+            "product": "prod_KEYB01",
+            "description": "Mechanical Keyboard",
+            "quantity": 2,
+            "unitPrice": 25.0,
+            "lineTotal": 50.0
+          },
+          {
+            "product": "prod_HUB07",
+            "description": "USB-C Hub",
+            "quantity": 1,
+            "unitPrice": 39.0,
+            "lineTotal": 39.0
+          }
+        ],
+        "satisfies": [
+          "ob-happy",
+          "ob-many"
+        ]
+      },
+      {
+        "id": "c-one",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "data": [
+                  {
+                    "quantity": 2,
+                    "amount_total": 5000,
+                    "description": "Mechanical Keyboard",
+                    "price": {
+                      "unit_amount": 2500,
+                      "product": "prod_KEYB01"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "output": [
+          {
+            "product": "prod_KEYB01",
+            "description": "Mechanical Keyboard",
+            "quantity": 2,
+            "unitPrice": 25.0,
+            "lineTotal": 50.0
+          }
+        ],
+        "satisfies": [
+          "ob-single"
+        ]
+      },
+      {
+        "id": "c-empty",
+        "input": {
+          "id": "evt_1PabcXYZ",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "data": {
+            "object": {
+              "id": "cs_test_a1B2c3",
+              "object": "checkout.session",
+              "amount_subtotal": 8900,
+              "amount_total": 9612,
+              "currency": "usd",
+              "customer": "cus_ABC123def456",
+              "payment_status": "paid",
+              "customer_details": {
+                "email": "ada.lovelace@example.com",
+                "name": "Ada Lovelace",
+                "phone": null,
+                "address": {
+                  "city": "Kyiv",
+                  "country": "UA",
+                  "line1": "12 Analytical Engine St",
+                  "line2": null,
+                  "postal_code": "01001",
+                  "state": null
+                }
+              },
+              "metadata": {
+                "cart_id": "cart_98765",
+                "internal_customer_id": "usr_42",
+                "channel": "web"
+              },
+              "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 500,
+                "amount_tax": 712
+              },
+              "line_items": {
+                "object": "list",
+                "data": []
+              }
+            }
+          }
+        },
+        "output": [],
+        "satisfies": [
+          "ob-empty"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "2e11ea98f36c1c36ab6529c14cbab9d552b56bf36ec95c6bd9e4f74f626f3521"
+    }
+  },
+  "redacted": false
+}

@@ -1,0 +1,55 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md#3-github",
+  "template": {
+    "$": "object",
+    "fields": {
+      "channel": "#deploys",
+      "text": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "object",
+            "fields": {
+              "pusher": {
+                "$": "attr",
+                "names": [
+                  "pusher",
+                  "name"
+                ]
+              },
+              "n": {
+                "$": "chain",
+                "funcs": [
+                  {
+                    "$": "attr",
+                    "name": "commits"
+                  },
+                  {
+                    "$": "expr",
+                    "op": "+",
+                    "values": {
+                      "$": "map",
+                      "item": 1
+                    }
+                  }
+                ]
+              },
+              "repo": {
+                "$": "attr",
+                "names": [
+                  "repository",
+                  "full_name"
+                ]
+              }
+            }
+          },
+          {
+            "$": "format",
+            "pattern": "{pusher} pushed {n} commits to {repo}"
+          }
+        ]
+      }
+    }
+  }
+}
