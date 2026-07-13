@@ -9,7 +9,21 @@ fields real APIs include). IDs and values are representative, but the
 > **Provenance.** Payloads are constructed to match the documented schemas of
 > each real API (AWS EC2, Stripe, GitHub). The **Where to get the raw payloads**
 > section at the bottom links the authoritative sources and shows how to capture
-> your own live samples (which is the best way to get truly large fixtures).
+> your own live samples.
+
+> **Reconciliation with AD-023 (added 2026-07-13).** This doc is the original
+> brainstorm; the **normative** policy is AD-023 / FR-033 / §11.8 in
+> `docs/SPEC.md`. Two consequences for anything committed from it:
+> (1) The pinned `transon==0.1.7` is a **structural** transformer — four
+> operations sketched below are **not engine-expressible** and ship as
+> `expect: "refuse"` fixtures, never matched: epoch → ISO date, currency
+> uppercasing, `refs/heads/` prefix stripping, and separator-aware (bulleted)
+> joining. The matched fixtures simply drop those fields.
+> (2) Expected outputs are **engine-frozen** — produced by re-executing an
+> author-written seed template through the pinned engine (seed in `evals/seeds/`,
+> re-checked by `check_evals --lint`), **never hand-written**. Live-captured API
+> payloads are **out of scope for v1 and must not be committed** (the FR-018 /
+> NFR-011 real-use path needs redaction + recorded consent first).
 
 Contents:
 1. AWS EC2 `describe-instances` → flat instance inventory
@@ -347,6 +361,11 @@ promote `metadata` fields to first-class; keep the event id for idempotency.
 
 ### Output (internal order record)
 
+> The `placedAt` line below is illustrative only: `created` (`1752364700`) →
+> ISO-8601 needs a date function the pinned engine does not have, so this field
+> is **not** produced by any matched fixture (it is `refuse`-only per AD-023);
+> the shipped `stripe-*` fixtures omit `placedAt`.
+
 ```json
 {
   "orderId": "cs_test_a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuVwXyZ",
@@ -384,9 +403,11 @@ promote `metadata` fields to first-class; keep the event id for idempotency.
 }
 ```
 
-**Engine features exercised:** envelope unwrap (deep path `data.object`),
-minor-unit → decimal derivation (`amount / 100`), epoch → ISO date, metadata
-promotion, per-element array reshape, uppercase coercion of `currency`.
+**Engine features exercised (structural → matched):** envelope unwrap (deep path
+`data.object`), minor-unit → decimal derivation (`amount / 100`), metadata
+promotion, per-element array reshape. **Not engine-expressible (→ `refuse`
+fixtures per AD-023):** `epoch → ISO date` (the `placedAt` field) and `uppercase`
+coercion of `currency` — the shipped `stripe-*` matched fixtures drop those two.
 
 ---
 
@@ -522,10 +543,13 @@ joining commit subjects into a bulleted string.
 }
 ```
 
-**Engine features exercised:** derive field from string prefix strip
-(`ref → branch`), aggregate/flatten `added|removed|modified` across an array of
-commits, count, conditional boolean, two different output envelopes from one
-input, array-of-strings join into a bullet block.
+**Engine features exercised (structural → matched):** aggregate/flatten
+`added|removed|modified` across an array of commits, count (map→`1` then `expr`
+`+` reduce), conditional boolean (`deploy` via `ref == "refs/heads/main"` — a
+full-string compare, no strip), two output envelopes from one input, `format`
+interpolation for the Slack text. **Not engine-expressible (→ `refuse` fixtures
+per AD-023):** deriving `branch` by stripping the `refs/heads/` prefix, and the
+separator-aware bulleted join of commit subjects.
 
 ---
 
@@ -556,8 +580,13 @@ The realest fixtures come from capturing live traffic. Sources and how to pull t
 
 ### Practical tip for your library
 
-Capturing → freezing is the workflow: hit the real API / trigger the real
-webhook once, save the raw JSON as `fixtures/<case>/input.json`, hand-write the
-`expected.json`, and drive your engine's tests off those pairs. That's exactly
-how the JOLT and JMESPath suites are structured, and it scales to arbitrarily
-large payloads without you having to hand-craft the input.
+Under the AD-023 constructed-fixture rule the workflow is **author → engine-freeze**,
+never hand-write: construct a realistic input, author a Transon template, and take
+each case `output` from **re-executing that template through the pinned engine**
+(the seed template lives in `evals/seeds/` as provenance only; `check_evals --lint`
+re-freezes it against every case — FR-033 / AC-035). Never hand-write an
+`expected.json`. **Live-captured API / webhook payloads are out of scope for v1 and
+must not be committed** — the only real-use capture path is FR-018 / NFR-011, which
+requires privacy redaction and recorded consent first. The JOLT / JMESPath suites
+are cited as structural inspiration for the input *shapes* only, not as an
+expected-output workflow.
