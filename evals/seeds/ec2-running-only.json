@@ -1,0 +1,33 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "docs/proposals/big-real-world-transform-samples.md#1-aws-ec2",
+  "template": {
+    "$": "chain",
+    "funcs": [
+      {
+        "$": "filter",
+        "cond": {
+          "$": "expr",
+          "op": "==",
+          "values": [
+            {
+              "$": "attr",
+              "names": [
+                "State",
+                "Name"
+              ]
+            },
+            "running"
+          ]
+        }
+      },
+      {
+        "$": "map",
+        "item": {
+          "$": "attr",
+          "name": "InstanceId"
+        }
+      }
+    ]
+  }
+}

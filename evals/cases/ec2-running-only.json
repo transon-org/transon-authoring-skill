@@ -1,0 +1,162 @@
+{
+  "schema_version": "1.0",
+  "id": "ec2-running-only",
+  "expect": "matched",
+  "intent_nl": "Given a list of AWS EC2 instances, keep only the ones whose State.Name is 'running' and return the list of their InstanceIds, preserving order.",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Given a list of AWS EC2 instances, keep only the ones whose State.Name is 'running' and return the list of their InstanceIds, preserving order.",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Only running instances' ids are kept, in order.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-custom",
+        "kind": "custom",
+        "description": "A stopped instance is dropped.",
+        "acceptance": "accepted"
+      },
+      {
+        "id": "ob-empty",
+        "kind": "custom",
+        "description": "An empty instance list yields an empty list.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c-mix",
+        "input": [
+          {
+            "InstanceId": "i-0abcd1234efgh5678",
+            "InstanceType": "t3.large",
+            "State": {
+              "Name": "running"
+            },
+            "PrivateIpAddress": "10.0.3.14",
+            "PublicIpAddress": "54.221.10.99",
+            "VpcId": "vpc-0123456789abcdef0",
+            "Placement": {
+              "AvailabilityZone": "us-east-1a"
+            },
+            "BlockDeviceMappings": [
+              {
+                "Ebs": {
+                  "VolumeId": "vol-0a1b2c3d4e5f60718"
+                }
+              },
+              {
+                "Ebs": {
+                  "VolumeId": "vol-08192a3b4c5d6e7f8"
+                }
+              }
+            ],
+            "Tags": [
+              {
+                "Key": "Name",
+                "Value": "web-prod-01"
+              },
+              {
+                "Key": "Environment",
+                "Value": "production"
+              },
+              {
+                "Key": "Team",
+                "Value": "platform"
+              }
+            ]
+          },
+          {
+            "InstanceId": "i-0ffff1111eeee2222",
+            "InstanceType": "t3.micro",
+            "State": {
+              "Name": "stopped"
+            },
+            "PrivateIpAddress": "10.0.3.51",
+            "VpcId": "vpc-0123456789abcdef0",
+            "Placement": {
+              "AvailabilityZone": "us-east-1a"
+            },
+            "BlockDeviceMappings": [
+              {
+                "Ebs": {
+                  "VolumeId": "vol-0aaa1bbb2ccc3ddd4"
+                }
+              }
+            ],
+            "Tags": [
+              {
+                "Key": "Name",
+                "Value": "batch-worker-07"
+              },
+              {
+                "Key": "Environment",
+                "Value": "staging"
+              }
+            ]
+          },
+          {
+            "InstanceId": "i-0c0c0c0c0c0c0c0c0",
+            "InstanceType": "m5.xlarge",
+            "State": {
+              "Name": "running"
+            },
+            "PrivateIpAddress": "10.0.9.7",
+            "PublicIpAddress": "3.88.200.14",
+            "VpcId": "vpc-0123456789abcdef0",
+            "Placement": {
+              "AvailabilityZone": "us-east-1b"
+            },
+            "BlockDeviceMappings": [
+              {
+                "Ebs": {
+                  "VolumeId": "vol-0eeee1111ffff2222"
+                }
+              }
+            ],
+            "Tags": [
+              {
+                "Key": "Name",
+                "Value": "postgres-primary"
+              },
+              {
+                "Key": "Environment",
+                "Value": "production"
+              },
+              {
+                "Key": "Team",
+                "Value": "data"
+              }
+            ]
+          }
+        ],
+        "output": [
+          "i-0abcd1234efgh5678",
+          "i-0c0c0c0c0c0c0c0c0"
+        ],
+        "satisfies": [
+          "ob-happy",
+          "ob-custom"
+        ]
+      },
+      {
+        "id": "c-empty",
+        "input": [],
+        "output": [],
+        "satisfies": [
+          "ob-empty"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "ab6b0e9d3e3b2e6d514dda782d114943f7d382172107223ad093a6012c9cd143"
+    }
+  },
+  "redacted": false
+}

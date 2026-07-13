@@ -321,6 +321,199 @@ def test_ac_030_hand_authored_fixture_without_seed_ignored():
 
 
 # ---------------------------------------------------------------------------
+# FR-033 / AC-035 — constructed real-world-pack seed engine-freeze + shape.
+# ---------------------------------------------------------------------------
+
+from transon_authoring import verify as _verify  # noqa: E402
+from transon_authoring.verify import dry_run as _dry_run  # noqa: E402
+
+#: A tiny but real structural transform (AD-023 class): read ``/items`` and
+#: project each element to ``{id, name}``, defaulting a missing name to null
+#: (the missing->null edge). Its case ``output``s are engine-frozen — computed
+#: by the pinned engine below, never hand-written (AD-023 honesty rule).
+CONSTRUCTED_ID = "rwp-project-items"
+CONSTRUCTED_TEMPLATE = {
+    "$": "chain",
+    "funcs": [
+        {"$": "attr", "name": "items"},
+        {
+            "$": "map",
+            "item": {
+                "id": {"$": "attr", "name": "id"},
+                "name": {"$": "attr", "name": "name", "default": None},
+            },
+        },
+    ],
+}
+CONSTRUCTED_INPUTS = {
+    "c-1": {"items": [{"id": 1, "name": "Ada"}, {"id": 2}]},
+    "c-2": {"items": []},
+    "c-3": {"items": [{"id": 9, "name": "Zed"}]},
+}
+CONSTRUCTED_SATISFIES = {
+    "c-1": ["ob-happy", "ob-list-many", "ob-optional-present", "ob-optional-absent"],
+    "c-2": ["ob-list-empty"],
+    "c-3": ["ob-list-singleton"],
+}
+CONSTRUCTED_COVERAGE = [
+    {"id": "ob-happy", "kind": "happy_path",
+     "description": "Project each item to {id, name}.", "acceptance": "accepted"},
+    {"id": "ob-list-many", "kind": "list_many", "target": "/items",
+     "description": "Two or more items.", "acceptance": "accepted"},
+    {"id": "ob-list-empty", "kind": "list_empty", "target": "/items",
+     "description": "Empty items list yields an empty list.", "acceptance": "accepted"},
+    {"id": "ob-list-singleton", "kind": "list_singleton", "target": "/items",
+     "description": "Exactly one item.", "acceptance": "accepted"},
+    {"id": "ob-optional-present", "kind": "optional_present", "target": "/items/0/name",
+     "description": "A present name is carried through.", "acceptance": "accepted"},
+    {"id": "ob-optional-absent", "kind": "optional_absent", "target": "/items/1/name",
+     "description": "A missing name defaults to null.", "acceptance": "accepted"},
+]
+
+
+def _build_constructed_samples() -> dict:
+    """Build an ok_for_verify SampleSet whose case outputs are engine-frozen
+    (computed by the pinned engine) with the confirmation fingerprint acquired
+    via the library's OQ-015 path (check_samples) — the same acquisition the
+    FR-029 generator uses (AC-035 / FR-033)."""
+    cases = []
+    for cid, inp in CONSTRUCTED_INPUTS.items():
+        env = _dry_run(CONSTRUCTED_TEMPLATE, inp)
+        assert env["ok"], env
+        cases.append(
+            {
+                "id": cid,
+                "input": inp,
+                "output": env["result"],
+                "satisfies": CONSTRUCTED_SATISFIES[cid],
+            }
+        )
+    samples = {
+        "schema_version": "1.0",
+        "intent_nl": "Project each item to {id, name}, defaulting a missing name to null.",
+        "coverage": [dict(ob) for ob in CONSTRUCTED_COVERAGE],
+        "cases": cases,
+        "waivers": [],
+    }
+    samples["confirmation"] = {"confirmed": False, "content_fingerprint": ""}
+    fingerprint = _check_samples(samples)["content_fingerprint"]
+    samples["confirmation"] = {
+        "confirmed": True,
+        "confirmed_by": "ci",
+        "content_fingerprint": fingerprint,
+    }
+    return samples
+
+
+def mint_constructed_into(root: Path) -> tuple[Path, Path]:
+    """Mint a constructed real-world-pack fixture + seed (FR-033 / AD-023) into
+    *root*: an EvalFixture (expect matched, redacted false, no consent,
+    engine-frozen samples) and its constructed seed
+    ``{origin, source_ref, template, notes}``."""
+    samples = _build_constructed_samples()
+    # AD-004 / AD-023 sanity: the pack engine-freezes by construction.
+    verdict = _verify(CONSTRUCTED_TEMPLATE, samples)
+    assert verdict["ok"] and verdict.get("assurance") == "matched", verdict
+    fixture = {
+        "schema_version": "1.0",
+        "id": CONSTRUCTED_ID,
+        "expect": "matched",
+        "intent_nl": samples["intent_nl"],
+        "samples": samples,
+        "notes": (
+            "Constructed real-world-pack fixture (AD-023 / FR-033); seed "
+            "provenance at evals/seeds/."
+        ),
+        "redacted": False,
+    }
+    seed = {
+        "origin": "real-world-pack",
+        "source_ref": "docs/proposals/big-real-world-transform-samples.md#project-items",
+        "template": copy.deepcopy(CONSTRUCTED_TEMPLATE),
+        "notes": "Missing name defaults to null; empty items list yields an empty list.",
+    }
+    seeds_dir = root / "evals" / "seeds"
+    seeds_dir.mkdir(parents=True, exist_ok=True)
+    fixture_path = root / "evals" / "cases" / f"{CONSTRUCTED_ID}.json"
+    seed_path = seeds_dir / f"{CONSTRUCTED_ID}.json"
+    fixture_path.write_text(
+        json.dumps(fixture, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    seed_path.write_text(
+        json.dumps(seed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return fixture_path, seed_path
+
+
+def test_ac_035_constructed_seed_engine_freeze_green(tmp_repo: Path):
+    # AC-035 / FR-033 — a minted constructed real-world pack whose fixture,
+    # seed, and pinned engine agree lints green, importable-function and CLI
+    # alike (the CLI path is exactly how per-PR CI runs it).
+    mint_constructed_into(tmp_repo)
+    assert lint_evals(tmp_repo) == []
+    result = run_check("--lint", "--root", str(tmp_repo))
+    assert result.returncode == 0, result.stderr
+
+
+def test_ac_035_engine_freeze_mismatch_red(tmp_repo: Path):
+    # AC-035 / FR-033 — a committed case output that no longer matches the
+    # pinned engine's output for the seed template is red, naming the file and
+    # mentioning engine-freeze. The confirmation fingerprint is refreshed via
+    # the library (like rewrite_samples) so ok_for_verify stays true and ONLY
+    # the engine-freeze check can catch the drift.
+    fixture_path, _seed_path = mint_constructed_into(tmp_repo)
+
+    def tamper(samples):
+        samples["cases"][0]["output"] = [
+            {"id": 1, "name": "TAMPERED"},
+            {"id": 2, "name": None},
+        ]
+
+    rewrite_samples(fixture_path, tamper)
+    failures = lint_evals(tmp_repo)
+    freeze = [f for f in failures if "engine-freeze" in f and "AC-035" in f]
+    assert freeze, failures
+    assert any(str(fixture_path) in f for f in freeze)
+
+
+def test_ac_035_constructed_seed_bad_shape_red(tmp_repo: Path):
+    # AC-035 / FR-033 — a constructed seed (has "origin") missing a required
+    # field is red on shape, before any engine-freeze.
+    _fixture_path, seed_path = mint_constructed_into(tmp_repo)
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    del seed["source_ref"]  # required non-empty string
+    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    failures = lint_evals(tmp_repo)
+    bad = [f for f in failures if str(seed_path) in f and "FR-033" in f]
+    assert bad, failures
+    assert any("source_ref" in f for f in bad)
+
+
+def test_ac_035_constructed_seed_without_fixture_red(tmp_repo: Path):
+    # AC-035 / FR-033 — a constructed seed with no matching fixture is red
+    # (same rule as the synthetic branch).
+    fixture_path, seed_path = mint_constructed_into(tmp_repo)
+    fixture_path.unlink()
+    failures = lint_evals(tmp_repo)
+    assert any(
+        str(seed_path) in f and "no matching fixture" in f for f in failures
+    ), failures
+
+
+def test_fr_033_synthetic_and_constructed_seeds_coexist(tmp_repo: Path):
+    # FR-033 — the committed synthetic FR-029 corpus plus a minted synthetic
+    # seed AND a minted constructed real-world pack all lint green together:
+    # the origin-key dispatch keeps the two seed classes from cross-
+    # contaminating (no FR-029 regen on the constructed seed; no FR-033
+    # engine-freeze on the synthetic ones).
+    mint_into(tmp_repo)  # a synthetic FR-029 seed + fixture
+    mint_constructed_into(tmp_repo)  # a constructed FR-033 seed + fixture
+    assert lint_evals(tmp_repo) == []
+    result = run_check("--lint", "--root", str(tmp_repo))
+    assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
 # FR-017 / NFR-010 / AC-008 — full gate: scoring, aggregation, orchestration.
 # ---------------------------------------------------------------------------
 
@@ -533,7 +726,11 @@ def test_nfr_010_refuse_below_100_exit_1(monkeypatch, tmp_repo, capsys):
     assert orchestrate(monkeypatch, tmp_repo, scores) == 1
     report, _ = report_from(capsys)
     assert report["rates"]["authoring"] == 1.0
-    assert report["rates"]["adversarial"] == 0.5
+    # One refuse fixture failing drops the adversarial rate below the 1.0
+    # invariant; the exact value tracks the corpus size (corpus-agnostic).
+    n_refuse = sum(1 for e in ALL_FIXTURES.values() if e == "refuse")
+    assert report["rates"]["adversarial"] == pytest.approx((n_refuse - 1) / n_refuse)
+    assert report["rates"]["adversarial"] < DEFAULT_TARGETS["adversarial_target"]
     assert any("adversarial rate" in reason for reason in report["red"]), report
     assert not any("authoring" in reason for reason in report["red"])
 

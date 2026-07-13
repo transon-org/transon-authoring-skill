@@ -43,6 +43,10 @@ def test_fr_029_v1_wave_covers_all_tag_families():
     assert seed_paths, "no committed evals/seeds/ provenance docs (FR-029)"
     for seed_path in seed_paths:
         seed = json.loads(seed_path.read_text(encoding="utf-8"))
+        if "origin" in seed:
+            # AD-023 / FR-033 constructed real-world-pack seed — not part of the
+            # FR-029 synthetic v1 wave (no docs.examples source_example).
+            continue
         # Provenance chain: seed -> snapshot entry (FR-029a) and seed ->
         # committed fixture (AC-030 pairing).
         source = seed["source_example"]

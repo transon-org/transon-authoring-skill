@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "id": "refuse-uppercase-currency",
+  "expect": "refuse",
+  "intent_nl": "Uppercase the three-letter `currency` field of the order — turn \"usd\" into \"USD\".",
+  "redacted": false
+}
