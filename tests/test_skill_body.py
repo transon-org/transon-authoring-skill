@@ -719,10 +719,13 @@ def test_fr_030_ac_031_review_loop():
     ), "sample-feedback revise does not re-enter the sample loop"
 
     # stop branch binds BOTH outcomes (deferred/aborted) AND withholds the
-    # template — asserted on the stop bullet itself, not just anywhere in §6.
-    stop_branch = section.split("**stop**", 1)
-    assert len(stop_branch) == 2, "FR-030 stop exit missing from section 6"
-    stop_branch = stop_branch[1]
+    # template — scoped to the stop bullet ITSELF (from `- **stop**` up to the
+    # next blank line, next top-level exit bullet, or section end), so a
+    # deferred/aborted/no-template phrase in the trailing non-interactive or
+    # "unbounded" paragraphs can never satisfy these checks.
+    stop_match = re.search(r"(?ms)^- \*\*stop\*\*.*?(?=^\s*$|^- \*\*|\Z)", section)
+    assert stop_match, "FR-030 stop exit missing from section 6"
+    stop_branch = stop_match.group(0)
     assert _has(r"status:\s*\"deferred\"", stop_branch), (
         "stop exit does not emit status deferred"
     )
