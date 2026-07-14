@@ -12,13 +12,13 @@ name: Evals
 # ── OQ-027f isolation contract — status of each control in this workflow ──────
 #   (i)   ephemeral per-episode workspace ............ ACTIVE  (driver: host_harness.run_fixture)
 #   (ii)  provider key withheld from tool sandbox .... ACTIVE  (key proxy, below)
-#   (iii) egress denied except the API ............... STAGED  (harden-runner block — see NOTE)
+#   (iii) egress denied except the API ............... ACTIVE  (harden-runner block, below)
 #   (iv)  artifact controls (secret scan; only the
-#         transcript may leave; nothing committed) ... PARTIAL (scan ACTIVE; upload STAGED)
-# The live real-host path (Agent SDK activation at corpus scale) AND this
-# isolation wiring are UNVALIDATED until the first dispatch. Do NOT accept a
-# baseline (`check_evals --update-baseline`) from a run whose isolation you have
-# not verified in force (OQ-027f is a blocker before a trusted baseline).
+#         transcript may leave; nothing committed) ... ACTIVE  (scan + SHA-pinned upload)
+# The full contract is validated cheaply on evals-smoke.yml (1 fixture) BEFORE a
+# full dispatch here. Do NOT accept a baseline (`check_evals --update-baseline`)
+# from a run whose OQ-027f isolation you have not verified in force — it is a
+# blocker before a trusted baseline.
 
 on:
   workflow_dispatch:
@@ -38,35 +38,17 @@ jobs:
     name: Eval gate (check_evals, real host)
     runs-on: ubuntu-latest
     steps:
-      # ── OQ-027f(iii): deny egress except the Anthropic API ─────────────────
-      # STAGED. Network egress must be denied by default after the installs
-      # below, leaving only api.anthropic.com reachable (the key proxy forwards
-      # there). A raw `iptables -P OUTPUT DROP` on a GitHub-hosted runner also
-      # severs the runner's own control channel to GitHub, so use an egress-aware
-      # guard. Recommended: step-security/harden-runner in `block` mode allowing
-      # only api.anthropic.com — and split the installs into a separate build
-      # job so the registries are allow-listed only there. PIN A VERIFIED SHA
-      # (this repo pins actions by SHA) and validate on first dispatch before
-      # uncommenting:
-      #
-      #   - name: Deny egress except the Anthropic API (OQ-027f(iii))
-      #     uses: step-security/harden-runner@<PINNED_SHA>   # PIN before enabling
-      #     with:
-      #       egress-policy: block
-      #       allowed-endpoints: >
-      #         api.anthropic.com:443
-      #
-      # Until (iii) is in force, (i) ephemeral workspace and (ii) key withholding
-      # already remove key-in-env and repo-data exposure; egress-deny closes the
-      # residual (a determined model reading the key via /proc and exfiltrating,
-      # or fetching arbitrary payloads). A baseline from a run without (iii)
-      # active is NOT trusted.
+      # OQ-027f(iii) egress-deny is enforced by harden-runner AFTER the installs
+      # (see the "Deny egress" step below) rather than as the first step: the
+      # pip/npm registries must be reachable for the installs, and everything
+      # from the eval run onward — the only phase the adversarial model
+      # executes in — runs under the block. Rationale in that step.
 
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -96,6 +78,37 @@ jobs:
           npm install -g @anthropic-ai/claude-code@2.1.207
           echo "TRANSON_EVAL_CLI_PATH=$(command -v claude)" >> "${GITHUB_ENV}"
 
+      # ── OQ-027f(iii): deny egress except the Anthropic API ─────────────────
+      # ACTIVE. Placed AFTER the installs (deliberately not the first step): the
+      # pip/npm registries are reachable only by the steps above, and from here
+      # on egress is blocked to everything except the allow-list below.
+      # harden-runner monitors and blocks EVERY step that follows it — which is
+      # exactly the model-execution phase (the eval run) plus the transcript
+      # upload. This is simpler than, and no weaker than, a separate build job
+      # for this threat model: the pinned installs above are trusted (never
+      # model-controlled), and the adversarial model runs only in the eval step
+      # below, under the block — so a determined model reading the key from
+      # /proc still cannot exfiltrate it or fetch arbitrary payloads.
+      #
+      # The allow-list is intentionally tiny because the eval step pins the
+      # Claude Code CLI to essential traffic only (CLAUDE_CODE_DISABLE_
+      # NONESSENTIAL_TRAFFIC=1): the CLI's sole upstream is the model call,
+      # routed through the loopback key proxy (127.0.0.1, not filtered), so the
+      # only real egress is the proxy → api.anthropic.com, plus the GitHub
+      # endpoints the transcript upload needs. Block mode + allow-list is free
+      # on public repos. Wildcards/added endpoints are validated on the cheap
+      # evals-smoke.yml run first; harden-runner annotates any blocked host.
+      - name: Deny egress except the Anthropic API (OQ-027f(iii))
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.anthropic.com:443
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
       - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
         # Bind the secret via env: (not `${{ }}` interpolation in the script body,
         # which would place the literal secret in the on-disk step script and
@@ -105,6 +118,11 @@ jobs:
         # inherit, defeating OQ-027f(ii).
         env:
           PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OQ-027f(iii): keep the Claude Code CLI's egress to the essential
+          # model call only (no telemetry / statsig / autoupdate), so under the
+          # egress block its sole upstream is the loopback key proxy. Also makes
+          # the run more deterministic (no remote feature flags — NFR-002).
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: |
           set -euo pipefail
           TRANSCRIPTS="${RUNNER_TEMP}/transcripts"
@@ -145,14 +163,14 @@ jobs:
         run: python3 scripts/scan_transcripts.py "${RUNNER_TEMP}/transcripts"
 
       # (iv) Only the transcripts (AuthoringResult + tool log) may leave, as a
-      # build artifact — NEVER committed to the repo. STAGED: pin a verified
-      # actions/upload-artifact SHA and enable once (iii) is in force.
-      #
-      #   - name: Upload episode transcripts (build artifact, never committed)
-      #     if: always()
-      #     uses: actions/upload-artifact@<PINNED_SHA>   # PIN before enabling
-      #     with:
-      #       name: eval-transcripts
-      #       path: ${{ runner.temp }}/transcripts
-      #       retention-days: 7
-      #       if-no-files-found: ignore
+      # build artifact — NEVER committed to the repo. Runs under the egress
+      # block; its GitHub upload endpoints are allow-listed above. The scan
+      # above has already gated the bytes for secrets (NFR-011).
+      - name: Upload episode transcripts (build artifact, never committed)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval-transcripts
+          path: ${{ runner.temp }}/transcripts
+          retention-days: 7
+          if-no-files-found: ignore

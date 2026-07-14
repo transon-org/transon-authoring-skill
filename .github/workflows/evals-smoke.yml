@@ -4,17 +4,19 @@ name: Evals smoke (1 fixture)
 # dispatch (evals.yml). It validates the whole driver + partial isolation stack
 # end-to-end against ONE seedless matched fixture, at ~1/50th the cost.
 #
-# What this proves (all in CI, live against Anthropic):
+# What this proves (all in CI, live against Anthropic) — the FULL OQ-027f
+# isolation contract, cheaply, BEFORE the full gate:
 #   - the Agent SDK real-host driver (host_harness.AgentSDKHost) round-trips to
 #     the API and returns an AuthoringResult (AD-024 / OQ-027a)
 #   - OQ-027f(ii): the provider key is withheld from the tool sandbox (key proxy)
-#   - OQ-027f(iv): the transcript secret-scan runs
+#   - OQ-027f(iii): egress denied except the API (harden-runner block, below)
+#   - OQ-027f(iv): the transcript secret-scan runs + SHA-pinned upload
 #   - the installed SKILL.md auto-activates from its frontmatter (no injection)
 #   - the OQ-016 scorer runs end-to-end (schema-valid + independent re-verify)
 #   - the ×3 majority path (runs_per_fixture=3) executes
-# What this does NOT prove: OQ-027f(iii) egress-deny (STAGED in evals.yml) — so
-# this smoke is a driver/scoring/withholding check, NOT a trusted-baseline run.
-# A baseline is only ever minted from evals.yml with (iii) in force (OQ-027f).
+# This is the cheap validation of the isolation wiring shared with evals.yml; it
+# is NOT itself a baseline run (the corpus is 1 throwaway fixture, and there is
+# no --update-baseline).
 #
 # It builds a THROWAWAY 1-fixture eval root in-step (ONE seedless matched
 # fixture, empty seeds/, an empty throwaway baseline) and runs
@@ -28,7 +30,7 @@ name: Evals smoke (1 fixture)
 # asserted in the "Assert the fixture passed" step, with the only tolerated red
 # being that expected empty-bucket one.
 #
-# Cost (Haiku pin, 1 matched episode ≈ $0.19 observed): 1 fixture ×3 ≈ $0.6.
+# Cost (Haiku pin, 1 matched episode ≈ $0.16 measured): 1 fixture ×3 ≈ $0.5.
 
 on:
   workflow_dispatch:
@@ -51,15 +53,15 @@ jobs:
     # few minutes; anything approaching this is a hang, not a real run.
     timeout-minutes: 30
     steps:
-      # NOTE: OQ-027f(iii) egress-deny (harden-runner) is intentionally absent
-      # here — it is STAGED in evals.yml and validated on the real gate, not on
-      # this smoke. See the workflow header.
+      # OQ-027f(iii) egress-deny is enforced by harden-runner AFTER the installs
+      # (see the "Deny egress" step below), mirroring evals.yml so this cheap
+      # 1-fixture run validates the SAME isolation wiring the full gate uses.
 
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -106,6 +108,26 @@ jobs:
           echo "root=${ROOT}" >> "${GITHUB_OUTPUT}"
           echo "fixture=${FIXTURE}" >> "${GITHUB_OUTPUT}"
 
+      # ── OQ-027f(iii): deny egress except the Anthropic API ─────────────────
+      # Same wiring as evals.yml (kept in sync). Placed AFTER the installs so the
+      # pip/npm registries are reachable only above; from here on egress is
+      # blocked to everything except the allow-list. harden-runner blocks every
+      # step that follows — the eval run (where the model executes) and the
+      # upload. The eval step pins the CLI to essential traffic only, so its sole
+      # egress is the proxy → api.anthropic.com; the rest is GitHub artifact
+      # upload. Block mode + allow-list is free on public repos. This 1-fixture
+      # run is exactly where a missing endpoint / misconfig surfaces cheaply.
+      - name: Deny egress except the Anthropic API (OQ-027f(iii))
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.anthropic.com:443
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
       - name: Run smoke gate (key withheld from tool sandbox — OQ-027f(ii))
         # Bind the secret via env: (not `${{ }}` interpolation in the script
         # body, which would place the literal secret in the on-disk step script)
@@ -113,6 +135,10 @@ jobs:
         # model's Bash never inherit it. Same pattern as evals.yml.
         env:
           PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OQ-027f(iii): keep the Claude Code CLI's egress to the essential
+          # model call only (no telemetry / statsig / autoupdate) so its sole
+          # upstream under the block is the loopback key proxy.
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: |
           set -euo pipefail
           ROOT="${{ steps.root.outputs.root }}"
@@ -251,3 +277,15 @@ jobs:
       - name: Secret-scan transcripts (OQ-027f(iv) / NFR-011)
         if: always()
         run: python3 scripts/scan_transcripts.py "${RUNNER_TEMP}/transcripts"
+
+      # (iv) Upload the transcripts as a build artifact (never committed) — same
+      # as evals.yml, so the smoke also validates that the upload works UNDER the
+      # egress block (its GitHub endpoints are allow-listed above).
+      - name: Upload episode transcripts (build artifact, never committed)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval-smoke-transcripts
+          path: ${{ runner.temp }}/transcripts
+          retention-days: 7
+          if-no-files-found: ignore
