@@ -36,6 +36,12 @@ Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (s
 
 <!-- config: FR-022 / AC-014 -->
 
+**If a samples path was given to you** — a `--samples` value or a provided samples file, as in CI or
+a headless/single-turn run — that path IS your SampleSet: **skip this entire section.** Do NOT stat
+or read `.transon-authoring.json`, and do NOT run `init-config` — go straight to section 2. The
+config-discovery steps below apply ONLY when no samples path was given and you must find where
+SampleSet files live.
+
 1. Look for `.transon-authoring.json` at the repo root and read it if present. It gives the
    samples `layout` (where SampleSet files live) and the `repair_attempts` budget.
 2. If it is absent and this is an interactive session, run
@@ -54,9 +60,13 @@ Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (s
 <!-- ground & refuse: FR-001 / AD-018 / NFR-001 / AC-003 -->
 
 1. Before using ANY Transon operator, rule, or mode name, resolve it against the pinned
-   snapshot first:
-   - `python -m transon_authoring metadata` — the full pinned catalog;
-   - `python -m transon_authoring examples search <query>` — snapshot `docs.examples` hits.
+   snapshot first — prefer TARGETED lookups over dumping the whole catalog:
+   - `python -m transon_authoring examples search "<query>"` — snapshot `docs.examples` hits, and
+     your PRIMARY grounding tool. ALWAYS quote the query as ONE argument
+     (`examples search "flatten map"`, never `examples search flatten map`).
+   - `python -m transon_authoring metadata` — the full pinned catalog. It is LARGE: do NOT dump it
+     wholesale or pipe it to `head` (truncation loses the part you need). Reach for it only to
+     confirm a specific operator/rule/mode name exists.
 2. Authority order, highest first: (1) behavior of the pinned running engine;
    (2) the engine `docs/SPECIFICATION.md` for that version; (3) the pinned snapshot;
    (4) the NL sidecar — hints only. Never use model memory, web docs, or Context7 for Transon
@@ -139,7 +149,8 @@ be captured into the project's shared eval-fixture corpus: commit only after pri
 
 <!-- draft: FR-001 / NFR-001 -->
 
-1. Run `python -m transon_authoring examples search <query>` with words from the intent.
+1. Run `python -m transon_authoring examples search "<query>"` with words from the intent (quote
+   the query as one argument).
 2. Copy the structure of the nearest example's `template` and adapt names and paths to the
    confirmed samples. Never improvise operators, rules, modes, or syntax that are not in the
    pinned snapshot.
@@ -227,13 +238,22 @@ review step.
 
 <!-- result envelope: FR-008 / AC-012 / AC-026 / AC-027 -->
 
-Your FINAL message MUST be exactly ONE `AuthoringResult` JSON object — the envelope defined here —
-and nothing else. NEVER answer with the bare template: the template you drafted and verified is
-only ever a value nested under the envelope's `template` field. A reply that is itself a raw
-transon template (its top-level keys are template keys like `$` / `funcs` / `items` rather than the
-envelope fields below) is WRONG even when that template verifies matched — it scores as a failure.
-So after the verify and review steps, do not hand back the template you were holding; put it inside
-`template` and emit the whole envelope around it.
+Emit your `AuthoringResult` by running the module — NEVER by hand-writing the envelope. On a matched
+success (you hold a template that verified at `assurance: "matched"`), run:
+
+```
+python -m transon_authoring result --template <template-path> --samples <samples-path>
+```
+
+and return its stdout **verbatim** as your final message. That command re-verifies and
+machine-builds the complete matched envelope (`ok: true`, `status: "matched"`, the `template`, the
+`verdict`, `repair_count`), so it is always well-formed. Do NOT reconstruct it yourself, do NOT wrap
+it in prose or a code fence, and NEVER answer with the bare template — a reply whose top-level keys
+are template keys like `$` / `funcs` / `items` scores as a failure even when the template verifies.
+
+For a refusal or a failure that has NO matched template — you refused in section 2, the sample loop
+or review ended in defer/abort, or repairs exhausted — there is no `result` call to make: emit the
+failure `AuthoringResult` directly, with `ok: false` and the matching status from the table below.
 
 `ok: true` if and only if `status: "matched"`. Include `template` only on success. Failures always
 set `ok: false`, use a status from the table below, and never present a template as success.

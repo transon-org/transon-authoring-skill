@@ -225,6 +225,53 @@ def test_fr_014_verify_matched_exit_0(tmp_path):
     assert schema_violations(document, "verdict.json") == []
 
 
+def test_fr_034_ac_037_result_command_builds_authoring_result_envelope(tmp_path):
+    """FR-034 / AC-037(a) — `result` machine-builds the COMPLETE §11.5
+    AuthoringResult envelope from one verify: matched → success (exit 0),
+    non-matched → the verify-derived failure envelope (exit 1) with samples-
+    rejected vs verify-failed by the failed stage, malformed ingress → §11.6
+    schema-error CliError (exit 2). Every success/failure emission is a
+    schema-valid AuthoringResult."""
+    ss = matched_samples()
+    samples_path = write_json(tmp_path, "s.json", ss)
+
+    # matched → complete success envelope; deep-equals the hand-spec'd shape.
+    r = run_cli("result", "--template", write_json(tmp_path, "t.json", ATTR_X),
+                "--samples", samples_path)
+    assert r.returncode == 0
+    env = one_json_document(r)
+    assert schema_violations(env, "authoring_result.json") == []
+    assert env["ok"] is True and env["status"] == "matched"
+    assert env["template"] == ATTR_X
+    assert env["verdict"] == verify(ATTR_X, ss)   # the exact library Verdict
+    assert env["repair_count"] == 0
+
+    # valid template that does not match → verify-failed, NO template (AC-004).
+    r = run_cli("result", "--template", write_json(tmp_path, "b.json", BAD_TEMPLATE),
+                "--samples", samples_path)
+    assert r.returncode == 1
+    env = one_json_document(r)
+    assert schema_violations(env, "authoring_result.json") == []
+    assert env["ok"] is False and env["status"] == "verify-failed"
+    assert "template" not in env
+    assert env["verdict"]["ok"] is False
+
+    # unconfirmed SampleSet → samples stage fails → samples-rejected.
+    r = run_cli("result", "--template", write_json(tmp_path, "t2.json", ATTR_X),
+                "--samples", write_json(tmp_path, "u.json", unconfirmed_samples()))
+    assert r.returncode == 1
+    env = one_json_document(r)
+    assert env["ok"] is False and env["status"] == "samples-rejected"
+    assert env["verdict"]["failed_stage"] == "samples"
+
+    # malformed template ingress → §11.6 schema-error CliError, exit 2.
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    r = run_cli("result", "--template", str(bad), "--samples", samples_path)
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
+
+
 def test_fr_014_verify_failed_stage_exit_1(tmp_path):
     ss = match_failure_samples()
     result = run_cli(

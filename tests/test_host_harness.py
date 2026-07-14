@@ -326,3 +326,41 @@ def test_oq_027_needs_review_followup_only_on_clean_no_envelope():
     assert needs(HO(status=BUDGET)) is False
     # A non-dict result payload is not envelope-shaped → follow up.
     assert needs(HO(status=RES, result="oops")) is True
+
+
+def test_fr_032_tool_calls_from_messages_records_tool_use_and_result():
+    """OQ-027 / FR-032 — the driver builds the transcript tool-call log from the
+    SDK message stream: one closed {seq,name,input,result} per tool_use, its
+    result matched from the tool_result by id; plain text messages and orphan
+    results are ignored."""
+    from types import SimpleNamespace as NS
+    tcm = host_harness._tool_calls_from_messages
+    msgs = [
+        NS(content=[NS(name="Bash", input={"command": "ls"}, id="tu1"),
+                    NS(name="Read", input={"file_path": "x"}, id="tu2")]),
+        NS(content="a plain assistant text turn (str, not a list) — ignored"),
+        NS(content=[NS(tool_use_id="tu2", content="file body"),
+                    NS(tool_use_id="tu1", content="a\nb\nc")]),
+        NS(content=[NS(tool_use_id="no-such-id", content="orphan")]),
+    ]
+    calls = tcm(msgs)
+    assert [c["seq"] for c in calls] == [1, 2]
+    assert calls[0] == {"seq": 1, "name": "Bash",
+                        "input": {"command": "ls"}, "result": "a\nb\nc"}
+    assert calls[1] == {"seq": 2, "name": "Read",
+                        "input": {"file_path": "x"}, "result": "file body"}
+    for call in calls:  # the closed toolCall shape (schema §11.8)
+        assert set(call) == {"seq", "name", "input", "result"}
+
+
+def test_fr_032_tool_result_value_bounds_large_payloads():
+    """OQ-027 / FR-032 — recorded tool results are bounded so transcripts stay
+    diagnosable without blow-up; non-strings are JSON-encoded."""
+    val = host_harness._tool_result_value
+    assert val(None) is None
+    assert val("short") == "short"
+    big = "x" * (host_harness._TOOL_RESULT_MAX + 100)
+    out = val(big)
+    assert out.startswith("x" * host_harness._TOOL_RESULT_MAX) and "chars)" in out
+    assert len(out) < len(big)
+    assert val({"a": 1}) == '{"a": 1}'

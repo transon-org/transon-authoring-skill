@@ -863,3 +863,26 @@ def test_fr_008_result_section_specifies_full_authoring_result_envelope():
     assert _has(
         r"verdict.{0,160}?assurance.{0,24}?\"matched\"", result_section
     ), "Result section does not show the success Verdict carries assurance matched"
+
+
+def test_fr_034_ac_037_result_section_mandates_the_result_command():
+    """FR-034 / AC-037(b) — §7 emits a matched AuthoringResult by running
+    `python -m transon_authoring result --template … --samples …` and returning
+    its output verbatim, and forbids hand-writing/reconstructing the envelope
+    (the AD-021 small gate model does that unreliably — the real-host eval
+    surfaced dropped fields / bare templates)."""
+    result_section = _body().split("## 7. Result", 1)[1]
+    # names the result command with both required flags
+    assert _has(
+        r"python -m transon_authoring result\b.{0,90}?--template.{0,50}?--samples",
+        result_section,
+    ), "§7 does not tell the model to run `... result --template … --samples …`"
+    # the output is returned verbatim (not reconstructed)
+    assert _has(r"result\b.{0,240}?verbatim", result_section), (
+        "§7 does not require returning the result command's output verbatim"
+    )
+    # hand-writing / reconstructing the envelope is forbidden
+    assert _has(
+        r"(never|do not|don't).{0,140}?(hand-writ|reconstruct|bare template)",
+        result_section,
+    ), "§7 does not forbid hand-writing / reconstructing the envelope"

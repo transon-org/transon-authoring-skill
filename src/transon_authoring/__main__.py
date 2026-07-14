@@ -149,6 +149,55 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 0 if verdict["ok"] else 1
 
 
+def _cmd_result(args: argparse.Namespace) -> int:
+    """FR-034 / AC-037 — machine-build the COMPLETE §11.5 AuthoringResult
+    envelope from a single verify of the template against the SampleSet, so the
+    skill's §7 result step emits it verbatim instead of hand-writing it (which
+    the AD-021 small model does unreliably). Matched verdict → success envelope
+    (exit 0); any other verdict → the verify-derived failure envelope (exit 1);
+    malformed ingress → the §11.6 schema-error CliError as elsewhere (exit 2)."""
+    _reject_reserved_knobs(args)
+    template = load_json_file(args.template)
+    sample_set = load_document(args.samples, "sample_set.json")
+    verdict = verify(template, sample_set)
+    if verdict["ok"] and verdict.get("assurance") == "matched":
+        _emit(
+            {
+                "schema_version": "1.0",
+                "ok": True,
+                "status": "matched",
+                "explanation": "Template verified at assurance matched.",
+                "template": template,
+                "verdict": verdict,
+                "repair_count": 0,
+            }
+        )
+        return 0
+    # Non-matched: the SampleSet stage failing on a schema-valid SampleSet is
+    # samples-rejected (§11.5); every other stage (validate / dry_run / match)
+    # is verify-failed. No `template` on a failure envelope (AC-004 / AC-026).
+    status = (
+        "samples-rejected"
+        if verdict.get("failed_stage") == "samples"
+        else "verify-failed"
+    )
+    stage = verdict.get("failed_stage")
+    _emit(
+        {
+            "schema_version": "1.0",
+            "ok": False,
+            "status": status,
+            "explanation": (
+                f"Template did not verify: failed the {stage} stage."
+                if stage
+                else "Template did not verify."
+            ),
+            "verdict": verdict,
+        }
+    )
+    return 1
+
+
 def _cmd_validate(args: argparse.Namespace) -> int:
     _reject_reserved_knobs(args)
     template = load_json_file(args.template)
@@ -396,6 +445,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_reserved_knobs(verify_parser)
     verify_parser.set_defaults(handler=_cmd_verify)
+
+    result_parser = subcommands.add_parser(
+        "result",
+        help=(
+            "machine-build the complete AuthoringResult envelope from a single"
+            " verify of the template against the SampleSet (FR-034); the skill's"
+            " section 7 emits its output verbatim, never hand-writing the envelope"
+        ),
+    )
+    result_parser.add_argument(
+        "--template", required=True, metavar="PATH", help="template JSON file"
+    )
+    result_parser.add_argument(
+        "--samples", required=True, metavar="PATH", help="SampleSet JSON file"
+    )
+    _add_reserved_knobs(result_parser)
+    result_parser.set_defaults(handler=_cmd_result)
 
     validate_parser = subcommands.add_parser(
         "validate", help="engine validate() debug check of a template (exit 0/1)"

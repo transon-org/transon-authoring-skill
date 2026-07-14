@@ -385,6 +385,66 @@ def _add_tokens(
     return {key: int(a.get(key, 0)) + int(b.get(key, 0)) for key in set(a) | set(b)}
 
 
+#: Cap a recorded tool-result payload so transcripts stay diagnosable without
+#: unbounded blow-up (a `Read`/`Bash` result can be huge). Diagnostic only.
+_TOOL_RESULT_MAX = 4000
+
+
+def _tool_result_value(content: Any) -> Any:
+    """Normalize + bound a tool_result payload for the FR-032 transcript record:
+    strings are truncated to :data:`_TOOL_RESULT_MAX`; other JSON is encoded
+    then truncated. Never scored (AC-034)."""
+    if content is None:
+        return None
+    text = (
+        content
+        if isinstance(content, str)
+        else json.dumps(content, ensure_ascii=False, default=str)
+    )
+    if len(text) > _TOOL_RESULT_MAX:
+        return text[:_TOOL_RESULT_MAX] + f"… (+{len(text) - _TOOL_RESULT_MAX} chars)"
+    return text
+
+
+def _tool_calls_from_messages(messages: list[Any]) -> list[dict[str, Any]]:
+    """OQ-027 / FR-032 — build the §11.8 transcript tool-call log from a host
+    turn's SDK message stream: one ``{seq, name, input, result}`` (the closed
+    `toolCall` shape) per tool_use block, its ``result`` filled from the matching
+    tool_result by ``tool_use_id``. Blocks are matched by duck-typing (tool_use →
+    ``name`` + ``input`` + ``id``; tool_result → ``tool_use_id``) so this pure
+    builder is unit-testable without live SDK objects. Additive telemetry only,
+    never scored (AC-034); makes a real-host episode diagnosable without a local
+    reproduction (the driver previously left this log empty)."""
+    calls: list[dict[str, Any]] = []
+    by_id: dict[Any, dict[str, Any]] = {}
+    for message in messages:
+        content = getattr(message, "content", None)
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            tool_use_id = getattr(block, "tool_use_id", None)
+            if tool_use_id is not None:  # a tool_result block
+                entry = by_id.get(tool_use_id)
+                if entry is not None:
+                    entry["result"] = _tool_result_value(
+                        getattr(block, "content", None)
+                    )
+                continue
+            name = getattr(block, "name", None)
+            if name is not None and hasattr(block, "input"):  # a tool_use block
+                entry = {
+                    "seq": len(calls) + 1,
+                    "name": name,
+                    "input": getattr(block, "input", None),
+                    "result": None,
+                }
+                calls.append(entry)
+                block_id = getattr(block, "id", None)
+                if block_id is not None:
+                    by_id[block_id] = entry
+    return calls
+
+
 class AgentSDKHost:
     """Claude Agent SDK reference host (OQ-027a). **Live-unverified**: exercised
     only in the credential-holding dispatch workflow under the OQ-027f isolation
@@ -476,15 +536,20 @@ class AgentSDKHost:
         # (OQ-016b / OQ-027e).
         async def _turn_outcome() -> HostOutcome:
             terminal = None
+            messages: list[Any] = []
             async for message in client.receive_response():
+                messages.append(message)
                 if isinstance(message, ResultMessage):
                     terminal = message
-            return _classify_terminal(
+            outcome = _classify_terminal(
                 getattr(terminal, "subtype", None),
                 getattr(terminal, "structured_output", None),
                 getattr(terminal, "result", None),
                 _sdk_usage(getattr(terminal, "usage", None)),
             )
+            # FR-032 — record this turn's tool calls into the transcript log.
+            outcome.step_log = _tool_calls_from_messages(messages)
+            return outcome
 
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
@@ -502,5 +567,11 @@ class AgentSDKHost:
                 await client.query(_REVIEW_APPROVAL)
                 followup = await _turn_outcome()
                 followup.tokens = _add_tokens(outcome.tokens, followup.tokens)
+                # Keep the full tool-call trail across both turns, re-sequenced
+                # (FR-032 — the transcript reflects everything the model did).
+                combined = outcome.step_log + followup.step_log
+                for seq, call in enumerate(combined, 1):
+                    call["seq"] = seq
+                followup.step_log = combined
                 outcome = followup
             return outcome
