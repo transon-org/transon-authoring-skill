@@ -1,15 +1,29 @@
 name: Evals smoke (1 fixture)
 
 # Smallest CI probe of the real-host eval gate, run BEFORE the full 50-fixture
-# dispatch (evals.yml). It validates the whole driver + partial isolation stack
-# end-to-end against ONE seedless matched fixture, at ~1/50th the cost.
+# dispatch (evals.yml). Validates the whole driver + the FULL OQ-027f isolation
+# contract end-to-end against ONE seedless matched fixture, at ~1/50th the cost.
+#
+# TWO-JOB SPLIT (OQ-027f(iii), the author's build-job design). harden-runner
+# installs its egress block via a `Pre` hook that runs at JOB START, so within a
+# single job the block is active before the pip/npm installs — installs and the
+# eval cannot sit on opposite sides of it. So:
+#   - `build`: no block. Installs the pinned engine + Agent SDK into a
+#     relocatable target and the Claude Code CLI into a prefix, bundles them
+#     with the repo files the eval needs (scripts/ + evals/ + SKILL.md), and
+#     uploads one artifact. Registries are reachable ONLY here.
+#   - `smoke`: egress BLOCKED (harden-runner, from job start). It checks out
+#     nothing and installs nothing — it only downloads the bundle and runs. Its
+#     entire egress surface is api.anthropic.com (the model call, via the
+#     loopback key proxy) plus the GitHub endpoints setup-python + the artifact
+#     up/download need. No registries, no general egress.
 #
 # What this proves (all in CI, live against Anthropic) — the FULL OQ-027f
 # isolation contract, cheaply, BEFORE the full gate:
 #   - the Agent SDK real-host driver (host_harness.AgentSDKHost) round-trips to
 #     the API and returns an AuthoringResult (AD-024 / OQ-027a)
 #   - OQ-027f(ii): the provider key is withheld from the tool sandbox (key proxy)
-#   - OQ-027f(iii): egress denied except the API (harden-runner block, below)
+#   - OQ-027f(iii): egress denied except the API (harden-runner block, eval job)
 #   - OQ-027f(iv): the transcript secret-scan runs + SHA-pinned upload
 #   - the installed SKILL.md auto-activates from its frontmatter (no injection)
 #   - the OQ-016 scorer runs end-to-end (schema-valid + independent re-verify)
@@ -17,11 +31,6 @@ name: Evals smoke (1 fixture)
 # This is the cheap validation of the isolation wiring shared with evals.yml; it
 # is NOT itself a baseline run (the corpus is 1 throwaway fixture, and there is
 # no --update-baseline).
-#
-# It builds a THROWAWAY 1-fixture eval root in-step (ONE seedless matched
-# fixture, empty seeds/, an empty throwaway baseline) and runs
-# `check_evals.py --root <tmp>`. NO --update-baseline; the committed corpus,
-# baseline, real gate population, and check_evals itself are untouched.
 #
 # The aggregate gate is RED BY CONSTRUCTION: with only a matched fixture, the
 # adversarial (refuse) bucket has zero fixtures, which check_evals reports as a
@@ -46,17 +55,11 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
-    name: Eval smoke (1 matched fixture, real host)
+  # ── Job 1: build the relocatable eval bundle (registries reachable here) ────
+  build:
+    name: Build eval bundle (deps + CLI + repo files)
     runs-on: ubuntu-latest
-    # Bound wall-clock (and therefore provider spend) — 3 Haiku episodes take a
-    # few minutes; anything approaching this is a hang, not a real run.
-    timeout-minutes: 30
     steps:
-      # OQ-027f(iii) egress-deny is enforced by harden-runner AFTER the installs
-      # (see the "Deny egress" step below), mirroring evals.yml so this cheap
-      # 1-fixture run validates the SAME isolation wiring the full gate uses.
-
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -65,82 +68,134 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Installs the pinned engine (transon==0.1.7, AD-007) plus the optional
-      # eval SDKs ([evals] extra, OQ-017d/AD-024 — never a runtime dependency).
-      - run: python3 -m pip install -e ".[evals]"
-
-      # Pin the Agent SDK to the exact runner.json harness.version so the driver
-      # matches gate identity (AD-024 / OQ-027b).
-      - name: Pin Agent SDK to runner.json harness.version
-        run: |
-          V=$(python3 -c "import json;print(json.load(open('evals/runner.json'))['harness']['version'])")
-          echo "pinning claude-agent-sdk==${V}"
-          python3 -m pip install "claude-agent-sdk==${V}"
-
-      # The Agent SDK drives the Claude Code CLI as a subprocess — the actual
-      # host that executes every tool call, so its version is part of gate
-      # identity (AD-024 / NFR-002). Same pin as evals.yml so the smoke exercises
-      # the identical host. TRANSON_EVAL_CLI_PATH binds this exact binary into
-      # the driver (OQ-027a) rather than PATH resolution order.
-      - name: Install Claude Code CLI (real host, OQ-027a)
-        run: |
-          npm install -g @anthropic-ai/claude-code@2.1.207
-          echo "TRANSON_EVAL_CLI_PATH=$(command -v claude)" >> "${GITHUB_ENV}"
-
-      # Build the throwaway 1-fixture eval root. host_harness.run_fixture reads
-      # SKILL.md from repo_root (= --root), so the root carries SKILL.md too.
-      # ONE seedless matched fixture + empty seeds/ => the seed lint treats it as
-      # hand-authored (no provenance/regen check); the empty throwaway baseline
-      # means nothing normative is ever touched.
-      - name: Build throwaway 1-fixture eval root
-        id: root
+      - name: Install engine + Agent SDK (relocatable) and the Claude Code CLI
         run: |
           set -euo pipefail
-          ROOT="${RUNNER_TEMP}/smoke-root"
-          FIXTURE="seed-matched-flatten-orders"
-          mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds"
-          cp SKILL.md "${ROOT}/SKILL.md"
-          cp evals/runner.json evals/targets.json "${ROOT}/evals/"
-          printf '%s\n' '{ "schema_version": "1.0", "passing": [] }' > "${ROOT}/evals/baseline.json"
-          cp "evals/cases/${FIXTURE}.json" "${ROOT}/evals/cases/"
-          echo "Throwaway eval root:"
-          find "${ROOT}" -type f | sort
-          echo "root=${ROOT}" >> "${GITHUB_OUTPUT}"
-          echo "fixture=${FIXTURE}" >> "${GITHUB_OUTPUT}"
+          BUNDLE="${RUNNER_TEMP}/evalbundle"
+          mkdir -p "${BUNDLE}/repo"
 
-      # ── OQ-027f(iii): deny egress except the Anthropic API ─────────────────
-      # Same wiring as evals.yml (kept in sync). Placed AFTER the installs so the
-      # pip/npm registries are reachable only above; from here on egress is
-      # blocked to everything except the allow-list. harden-runner blocks every
-      # step that follows — the eval run (where the model executes) and the
-      # upload. The eval step pins the CLI to essential traffic only, so its sole
-      # egress is the proxy → api.anthropic.com; the rest is GitHub artifact
-      # upload. Block mode + allow-list is free on public repos. This 1-fixture
-      # run is exactly where a missing endpoint / misconfig surfaces cheaply.
+          # Python deps into a RELOCATABLE target dir (importable via PYTHONPATH
+          # in the eval job — no venv base-python coupling). The [evals] extra
+          # carries claude-agent-sdk (OQ-017d/AD-024); pin it to the exact
+          # runner.json harness.version so the driver matches gate identity
+          # (AD-024 / OQ-027b). Non-editable: the eval job imports the installed
+          # package, not the repo src.
+          python3 -m pip install --upgrade pip
+          V=$(python3 -c "import json;print(json.load(open('evals/runner.json'))['harness']['version'])")
+          echo "pinning claude-agent-sdk==${V}"
+          python3 -m pip install --target "${BUNDLE}/pydeps" ".[evals]" "claude-agent-sdk==${V}"
+
+          # Claude Code CLI (the real host the SDK drives — gate identity,
+          # AD-024 / NFR-002) into a relocatable prefix. Pinned to the CLI the
+          # driver was validated against.
+          npm install -g --prefix "${BUNDLE}/npmglobal" @anthropic-ai/claude-code@2.1.207
+
+          # Repo files the eval job runs — it checks out NOTHING, so ship the
+          # gate/harness scripts, the corpus and SKILL.md in the bundle.
+          cp -R scripts evals SKILL.md "${BUNDLE}/repo/"
+
+          tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/evalbundle.tgz" evalbundle
+          ls -la "${RUNNER_TEMP}/evalbundle.tgz"
+
+      - name: Upload eval bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval-smoke-bundle
+          path: ${{ runner.temp }}/evalbundle.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Job 2: run the eval under egress-deny (installs nothing) ────────────────
+  smoke:
+    name: Eval smoke (1 matched fixture, real host)
+    needs: build
+    runs-on: ubuntu-latest
+    # Bound wall-clock (and therefore provider spend) — 3 Haiku episodes take a
+    # few minutes; anything approaching this is a hang, not a real run.
+    timeout-minutes: 30
+    env:
+      # The bundle contents live under RUNNER_TEMP after unpack (below). These
+      # make every step import the bundled deps + drive the bundled CLI. The
+      # provider key is NOT here — it is bound step-locally on the eval run only.
+      PYTHONPATH: ${{ runner.temp }}/evalbundle/pydeps
+      TRANSON_EVAL_CLI_PATH: ${{ runner.temp }}/evalbundle/npmglobal/bin/claude
+      # OQ-027f(iii): keep the Claude Code CLI's egress to the essential model
+      # call only (no telemetry / statsig / autoupdate), so under the block its
+      # sole upstream is the loopback key proxy. Also deterministic (NFR-002).
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+    steps:
+      # ── OQ-027f(iii): deny egress except the API + GitHub infra ────────────
+      # harden-runner's block is active from job start (Pre hook). This job
+      # installs nothing and checks out nothing, so the only egress it needs is:
+      # api.anthropic.com (the model call, via the loopback proxy), the GitHub
+      # endpoints setup-python resolves the interpreter from, and the artifact
+      # download/upload endpoints. No package registries, no general egress —
+      # a determined model reading the key from /proc has nowhere to send it.
+      # Kept in sync with evals.yml; harden-runner annotates any blocked host.
       - name: Deny egress except the Anthropic API (OQ-027f(iii))
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.anthropic.com:443
-            github.com:443
             api.github.com:443
+            objects.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
             *.blob.core.windows.net:443
+
+      # Interpreter only — no checkout, no pip/npm install. setup-python resolves
+      # 3.12 from the runner's preinstalled toolcache (matching the build job).
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Download + unpack the eval bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: eval-smoke-bundle
+          path: ${{ runner.temp }}
+
+      - name: Unpack + sanity-check the transfer (fail fast, before any API spend)
+        run: |
+          set -euo pipefail
+          tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/evalbundle.tgz"
+          echo "python: $(python3 --version)"
+          # The relocated deps must import, and the relocated CLI must launch —
+          # if the bundle didn't survive the job hop, fail HERE (no provider
+          # spend), not opaquely mid-episode.
+          python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
+          "${TRANSON_EVAL_CLI_PATH}" --version
+
+      # ONE seedless matched fixture + empty seeds/ => the seed lint treats it as
+      # hand-authored (no provenance/regen check); the empty throwaway baseline
+      # means nothing normative is touched. Sourced from the bundle (repo/evals).
+      - name: Build throwaway 1-fixture eval root
+        id: root
+        run: |
+          set -euo pipefail
+          B="${RUNNER_TEMP}/evalbundle/repo"
+          ROOT="${RUNNER_TEMP}/smoke-root"
+          FIXTURE="seed-matched-flatten-orders"
+          mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds"
+          cp "${B}/SKILL.md" "${ROOT}/SKILL.md"
+          cp "${B}/evals/runner.json" "${B}/evals/targets.json" "${ROOT}/evals/"
+          printf '%s\n' '{ "schema_version": "1.0", "passing": [] }' > "${ROOT}/evals/baseline.json"
+          cp "${B}/evals/cases/${FIXTURE}.json" "${ROOT}/evals/cases/"
+          echo "Throwaway eval root:"
+          find "${ROOT}" -type f | sort
+          echo "root=${ROOT}" >> "${GITHUB_OUTPUT}"
+          echo "fixture=${FIXTURE}" >> "${GITHUB_OUTPUT}"
 
       - name: Run smoke gate (key withheld from tool sandbox — OQ-027f(ii))
         # Bind the secret via env: (not `${{ }}` interpolation in the script
         # body, which would place the literal secret in the on-disk step script)
         # and UNSET it below before the gate runs — the eval process and the
-        # model's Bash never inherit it. Same pattern as evals.yml.
+        # model's Bash never inherit it.
         env:
           PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # OQ-027f(iii): keep the Claude Code CLI's egress to the essential
-          # model call only (no telemetry / statsig / autoupdate) so its sole
-          # upstream under the block is the loopback key proxy.
-          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: |
           set -euo pipefail
+          B="${RUNNER_TEMP}/evalbundle"
           ROOT="${{ steps.root.outputs.root }}"
           TRANSCRIPTS="${RUNNER_TEMP}/transcripts"
           REPORT="${RUNNER_TEMP}/report.json"
@@ -149,15 +204,13 @@ jobs:
           # (ii) Start the key-scoped proxy with the REAL provider key in its OWN
           # environment only (inline assignment → the proxy process's env, not
           # this shell). Then unset it so check_evals and the model's Bash never
-          # inherit it.
+          # inherit it. The proxy is stdlib-only — any python3 runs it.
           ANTHROPIC_API_KEY="${PROXY_UPSTREAM_KEY}" \
-            python3 scripts/eval_key_proxy.py --host 127.0.0.1 --port 8787 &
+            python3 "${B}/repo/scripts/eval_key_proxy.py" --host 127.0.0.1 --port 8787 &
           PROXY_PID=$!
           unset PROXY_UPSTREAM_KEY
           trap 'kill "${PROXY_PID}" 2>/dev/null || true' EXIT
 
-          # Wait for the proxy to accept connections — fail fast if it never
-          # comes up rather than falling through to opaque gate errors.
           for _ in $(seq 1 50); do
             if curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then break; fi
             sleep 0.2
@@ -167,17 +220,15 @@ jobs:
             exit 1
           fi
 
-          # Run the gate against the throwaway root with the base URL pointed at
-          # the proxy and only a PLACEHOLDER key in env (satisfies check_evals'
-          # key-present guard; the proxy rewrites it to the real secret on
-          # egress). The aggregate gate is RED by construction (empty adversarial
-          # bucket), so DON'T let its exit code fail the job — capture the JSON
-          # report (stdout) + progress/token totals (stderr) and assert on the
-          # per-fixture majority in the next step.
+          # The aggregate gate is RED by construction (empty adversarial bucket),
+          # so DON'T let its exit code fail the job — capture the JSON report
+          # (stdout) + progress/token totals (stderr) and assert on the
+          # per-fixture majority in the next step. The bundled deps import via
+          # PYTHONPATH (job env); the CLI is bound via TRANSON_EVAL_CLI_PATH.
           set +e
           ANTHROPIC_BASE_URL="http://127.0.0.1:8787" \
           ANTHROPIC_API_KEY="placeholder-not-the-secret" \
-            python3 scripts/check_evals.py --root "${ROOT}" \
+            python3 "${B}/repo/scripts/check_evals.py" --root "${ROOT}" \
               --transcripts-dir "${TRANSCRIPTS}" \
               > "${REPORT}" 2> "${LOG}"
           CE=$?
@@ -273,10 +324,12 @@ jobs:
           PY
 
       # (iv) Secret-scan the captured transcripts — same patterns as the
-      # committed-fixture lint (NFR-011). Runs even if the assertion failed.
+      # committed-fixture lint (NFR-011). Runs even if the assertion failed. The
+      # scanner is in the bundle; it imports check_evals (SECRET_PATTERNS) via
+      # the bundled scripts dir + PYTHONPATH.
       - name: Secret-scan transcripts (OQ-027f(iv) / NFR-011)
         if: always()
-        run: python3 scripts/scan_transcripts.py "${RUNNER_TEMP}/transcripts"
+        run: python3 "${RUNNER_TEMP}/evalbundle/repo/scripts/scan_transcripts.py" "${RUNNER_TEMP}/transcripts"
 
       # (iv) Upload the transcripts as a build artifact (never committed) — same
       # as evals.yml, so the smoke also validates that the upload works UNDER the
