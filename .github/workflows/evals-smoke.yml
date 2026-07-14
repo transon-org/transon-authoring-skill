@@ -115,19 +115,22 @@ jobs:
     # few minutes; anything approaching this is a hang, not a real run.
     timeout-minutes: 30
     steps:
-      # ── OQ-027f(iii) DIAGNOSTIC (temporary): egress-policy is AUDIT, not block ──
-      # The isolated eval was flaky (1/3 vs 3/3 unisolated). audit mode does NOT
-      # block — it monitors and REPORTS every host the CLI reaches, running the
-      # CLI fully online via the two-job relocated bundle. This isolates the
-      # confound: if the fixture returns to 3/3 the BLOCK was disrupting the CLI;
-      # if still ~1/3 the block is NOT the cause (bundle / hard fixture). The
-      # reported host list also tells us the correct allow-list for a real block.
-      # REVERT to `egress-policy: block` (evals.yml already is) once diagnosed.
-      - name: Egress AUDIT (diagnostic — temporarily not blocking, OQ-027f(iii))
+      # ── OQ-027f(iii): deny egress except Anthropic + GitHub infra ──────────
+      # harden-runner's block is active from job start (Pre hook). This job
+      # installs nothing and checks out nothing. Its egress is confined to:
+      #   - Anthropic-owned hosts (*.anthropic.com) — the model call via the
+      #     loopback proxy AND the Claude Code CLI's own statsig/telemetry, so the
+      #     CLI behaves as a shipped online session.
+      #   - the GitHub endpoints setup-python + the artifact up/download need.
+      # NO package registries, NO third-party or arbitrary egress. A one-off audit
+      # diagnostic (run eb4c030) confirmed the block is NOT the cause of the eval
+      # flakiness — the CLI ran fully online and the fixture still scored the same
+      # (a model envelope-discipline effect, not isolation). Kept in sync with
+      # evals.yml; harden-runner annotates any blocked host.
+      - name: Deny egress except Anthropic + GitHub infra (OQ-027f(iii))
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
-          # allowed-endpoints is ignored in audit mode; kept for the block revert.
+          egress-policy: block
           allowed-endpoints: >
             api.anthropic.com:443
             *.anthropic.com:443
