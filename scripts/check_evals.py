@@ -74,6 +74,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -872,12 +873,164 @@ def write_transcripts(
             )
 
 
+#: FR-035 — the additive per-episode token telemetry keys rolled up in the run
+#: summary (mirrors host_harness._new_tokens; never scored, AC-034).
+_TOKEN_KEYS = ("input", "output", "cache_read", "cache_creation", "turns")
+
+#: FR-035 — the four §11.8 harness outcome classes, always present in the
+#: run-summary outcome histogram (each possibly zero) so the shape is stable.
+_OUTCOME_KEYS = ("submitted", "no_submit", "budget_exceeded", "infra_error")
+
+
+def _episode_stats(fixture_id: str, run_index: int, episode: dict[str, Any]) -> dict[str, Any]:
+    """FR-035 — one episode's telemetry row for the run summary: tokens, cost,
+    step count and the tool-call histogram (steps by category). Pure; derived
+    from the additive fields the host adapter records (never scored, AC-034)."""
+    log = episode.get("tool_call_log") or []
+    tokens = episode.get("tokens") or {}
+    return {
+        "fixture_id": fixture_id,
+        "run_index": run_index,
+        "outcome": episode["outcome"],
+        "error": episode.get("error"),
+        "tokens": {key: int(tokens.get(key, 0) or 0) for key in _TOKEN_KEYS},
+        "cost_usd": episode.get("cost_usd"),
+        "steps": len(log),
+        "steps_by_category": dict(Counter(str(call.get("name")) for call in log)),
+    }
+
+
+def build_run_summary(
+    fixtures: list[dict[str, Any]],
+    per_fixture_episodes: dict[str, list[dict[str, Any]]],
+    runner_cfg: dict[str, Any],
+    fixture_bytes: dict[str, int],
+) -> dict[str, Any]:
+    """FR-035 / AC-038 — pure telemetry roll-up over every episode (§11.8
+    RunSummary shape). Per-episode + totals of tokens, cost, steps and the
+    tool-call histogram; per-fixture normalized cost. **Additive telemetry**:
+    derived mechanically from recorded episodes, gates nothing, changes no
+    scoring (AC-034)."""
+    episodes: list[dict[str, Any]] = []
+    total_tokens = {key: 0 for key in _TOKEN_KEYS}
+    total_steps_by_category: Counter[str] = Counter()
+    outcomes = {key: 0 for key in _OUTCOME_KEYS}
+    total_cost = 0.0
+    total_steps = 0
+    total_errors = 0
+    by_fixture: dict[str, Any] = {}
+
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        eps = per_fixture_episodes[fixture_id]
+        rows = [
+            _episode_stats(fixture_id, i, ep) for i, ep in enumerate(eps)
+        ]
+        episodes.extend(rows)
+
+        fx_tokens = {key: 0 for key in _TOKEN_KEYS}
+        fx_cost = 0.0
+        fx_steps = 0
+        for row in rows:
+            for key in _TOKEN_KEYS:
+                total_tokens[key] += row["tokens"][key]
+                fx_tokens[key] += row["tokens"][key]
+            total_steps_by_category.update(row["steps_by_category"])
+            outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
+            cost = row["cost_usd"] or 0.0
+            total_cost += cost
+            fx_cost += cost
+            total_steps += row["steps"]
+            fx_steps += row["steps"]
+            if row["error"] is not None:
+                total_errors += 1
+
+        runs = len(rows)
+        size = fixture_bytes.get(fixture_id, 0)
+        prompt_tokens = fx_tokens["input"] + fx_tokens["cache_read"] + fx_tokens["cache_creation"]
+        by_fixture[fixture_id] = {
+            "runs": runs,
+            "fixture_bytes": size,
+            "cost_usd_total": fx_cost,
+            "cost_usd_mean": (fx_cost / runs) if runs else None,
+            "tokens_mean": {
+                key: (fx_tokens[key] / runs) if runs else 0 for key in _TOKEN_KEYS
+            },
+            "steps_mean": (fx_steps / runs) if runs else None,
+            "cache_read_ratio": (
+                fx_tokens["cache_read"] / prompt_tokens if prompt_tokens else 0.0
+            ),
+            "cost_usd_per_kb": (fx_cost / (size / 1024)) if size else None,
+        }
+
+    return {
+        "schema_version": "1.0",
+        "model_id": runner_cfg["model_id"],
+        "harness": runner_cfg.get("harness"),
+        "runs_per_fixture": runner_cfg["runs_per_fixture"],
+        "episodes": episodes,
+        "totals": {
+            "episodes": len(episodes),
+            "tokens": total_tokens,
+            "cost_usd": total_cost,
+            "steps": total_steps,
+            "steps_by_category": dict(total_steps_by_category),
+            "outcomes": outcomes,
+            "errors": total_errors,
+        },
+        "by_fixture": by_fixture,
+    }
+
+
+def write_episode_messages(
+    transcripts_dir: Path,
+    fixtures: list[dict[str, Any]],
+    per_fixture_episodes: dict[str, list[dict[str, Any]]],
+    runner_cfg: dict[str, Any],
+) -> None:
+    """FR-035 / AC-038 — persist one whole-episode message transcript
+    (``EpisodeMessages``) per episode to ``transcripts_dir/messages/``. A build
+    artifact only, **never committed**; additive telemetry that changes no
+    scoring (AC-034). The host records the serialized stream in
+    ``episode['messages']`` (empty for a host that exposes none)."""
+    messages_dir = transcripts_dir / "messages"
+    messages_dir.mkdir(parents=True, exist_ok=True)
+    model_id = runner_cfg["model_id"]
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        for run_index, episode in enumerate(per_fixture_episodes[fixture_id]):
+            document = {
+                "schema_version": "1.0",
+                "fixture_id": fixture_id,
+                "run_index": run_index,
+                "model_id": model_id,
+                "messages": episode.get("messages") or [],
+            }
+            path = messages_dir / f"{fixture_id}.{run_index}.messages.json"
+            path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+
+def write_run_summary(transcripts_dir: Path, summary: dict[str, Any]) -> None:
+    """FR-035 / AC-038 — persist the run-level telemetry roll-up to
+    ``transcripts_dir/run_summary.json``. Build artifact only, never committed;
+    additive (AC-034)."""
+    transcripts_dir.mkdir(parents=True, exist_ok=True)
+    (transcripts_dir / "run_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def run_evals(
     repo_root: Path,
     *,
     update_baseline: bool = False,
     verbose: bool = False,
     transcripts_dir: Path | None = None,
+    only: list[str] | None = None,
 ) -> int:
     """Full FR-017 eval gate: lint, provider episodes, scoring, aggregation.
 
@@ -908,10 +1061,31 @@ def run_evals(
     runner_cfg = load_document(evals_dir / "runner.json", "eval_runner.json")
     targets = load_document(evals_dir / "targets.json", "eval_targets.json")
     baseline = load_document(evals_dir / "baseline.json", "eval_baseline.json")
-    fixtures = [
-        load_document(path, "eval_fixture.json")
+    loaded = [
+        (load_document(path, "eval_fixture.json"), path)
         for path in sorted((evals_dir / "cases").glob("*.json"))
     ]
+    # FR-035 — on-disk fixture size feeds the run-summary per-fixture cost
+    # normalization (cost per KB against the intent+samples the fixture carries).
+    fixture_bytes = {fixture["id"]: path.stat().st_size for fixture, path in loaded}
+    fixtures = [fixture for fixture, _ in loaded]
+
+    # FR-035 — --only scopes the PROVIDER run (and thus the report) to named
+    # fixtures for a cost/diagnostic probe. The lint above already covered the
+    # full committed corpus; an unknown id is a config error (exit 2). A probe
+    # that omits a whole bucket makes the aggregate red-by-construction — that is
+    # expected: the run_summary telemetry, not the gate verdict, is the point.
+    if only:
+        known = {fixture["id"] for fixture in fixtures}
+        missing = [fid for fid in only if fid not in known]
+        if missing:
+            print(
+                "check-evals: config error: --only names unknown fixture id(s): "
+                + ", ".join(sorted(missing)),
+                file=sys.stderr,
+            )
+            return 2
+        fixtures = [fixture for fixture in fixtures if fixture["id"] in only]
 
     # AD-024/OQ-027: the gate harness is the real host (Agent SDK reference),
     # selected by runner.json.harness.kind; the raw loop is retired as the gate.
@@ -956,10 +1130,28 @@ def run_evals(
         flush=True,
     )
 
-    # FR-032 — persist episode transcripts when a directory is given, before
-    # scoring and regardless of red/green (a build artifact, never committed).
+    # FR-032 / FR-035 — persist run artifacts when a directory is given, before
+    # scoring and regardless of red/green (build artifacts, never committed):
+    # the scored EpisodeTranscript (FR-032), the whole-episode message transcript
+    # and the run-summary telemetry roll-up (FR-035). All additive — a run
+    # without --transcripts-dir scores byte-identically (AC-034 / AC-038).
     if transcripts_dir is not None:
         write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
+        write_episode_messages(
+            transcripts_dir, fixtures, per_fixture_episodes, runner_cfg
+        )
+        summary = build_run_summary(
+            fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
+        )
+        write_run_summary(transcripts_dir, summary)
+        print(
+            f"check-evals: run_summary — cost=${summary['totals']['cost_usd']:.4f} "
+            f"steps={summary['totals']['steps']} "
+            f"outcomes={summary['totals']['outcomes']} "
+            f"-> {transcripts_dir}/run_summary.json",
+            file=sys.stderr,
+            flush=True,
+        )
 
     report = aggregate(fixtures, per_fixture_episodes, targets, baseline)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -1030,6 +1222,15 @@ def main(argv: list[str] | None = None) -> int:
         "never committed to the repo (repo hygiene + NFR-011)",
     )
     parser.add_argument(
+        "--only",
+        type=str,
+        default=None,
+        help="FR-035: comma-separated fixture id(s) to run through the provider "
+        "(a cost/diagnostic probe); the --lint corpus checks stay full-corpus. "
+        "Omitting a whole bucket makes the gate report red-by-construction — the "
+        "run_summary telemetry is the point, not the verdict",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
@@ -1043,11 +1244,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.lint:
+        only = (
+            [fid.strip() for fid in args.only.split(",") if fid.strip()]
+            if args.only
+            else None
+        )
         return run_evals(
             args.root.resolve(),
             update_baseline=args.update_baseline,
             verbose=args.verbose,
             transcripts_dir=args.transcripts_dir,
+            only=only,
         )
 
     failures = lint_evals(args.root.resolve(), verbose=args.verbose)

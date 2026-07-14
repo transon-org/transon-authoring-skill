@@ -123,7 +123,9 @@ def test_ac_036_oq_027_adapter_maps_all_outcomes():
             assert episode["submitted"] == result_payload
         else:
             assert episode["submitted"] is None
-        # Every EpisodeResult carries the full §11.8 shape the scorer reads.
+        # Every EpisodeResult carries the full §11.8 shape the scorer reads,
+        # plus the additive FR-035 telemetry (cost_usd, messages) the run
+        # artifacts consume — never scored (AC-034).
         assert set(episode) == {
             "submitted",
             "outcome",
@@ -131,6 +133,8 @@ def test_ac_036_oq_027_adapter_maps_all_outcomes():
             "error",
             "tool_call_log",
             "tokens",
+            "cost_usd",
+            "messages",
         }
 
     # Defensive: an unknown host status degrades to infra_error, never a crash.
@@ -364,3 +368,99 @@ def test_fr_032_tool_result_value_bounds_large_payloads():
     assert out.startswith("x" * host_harness._TOOL_RESULT_MAX) and "chars)" in out
     assert len(out) < len(big)
     assert val({"a": 1}) == '{"a": 1}'
+
+
+def test_fr_035_serialize_messages_reproduces_turn_stream():
+    """FR-035 / AC-038 — the whole-episode serializer reproduces the host turn
+    stream: message class + subtype + ordered content blocks (text/thinking/
+    tool_use/tool_result), each payload bounded. Duck-typed, so it runs offline
+    on SimpleNamespace stand-ins for the SDK message objects."""
+    from types import SimpleNamespace as NS
+
+    # Named stand-ins so the serialized `type` is the SDK message class name.
+    class AssistantMessage(NS):
+        pass
+
+    class UserMessage(NS):
+        pass
+
+    class ResultMessage(NS):
+        pass
+
+    msgs = [
+        AssistantMessage(content=[
+            NS(thinking="let me draft the template"),
+            NS(text="Here is the template for your approval."),
+            NS(name="Bash", input={"command": "python -m transon_authoring result"}, id="tu1"),
+        ]),
+        UserMessage(content=[NS(tool_use_id="tu1", content="matched\n" + "y" * 10)]),
+        ResultMessage(subtype="success", content=None),
+    ]
+    out = host_harness._serialize_messages(msgs)
+    assert [m["type"] for m in out] == [
+        "AssistantMessage", "UserMessage", "ResultMessage"
+    ]
+    assert out[0]["subtype"] is None and out[2]["subtype"] == "success"
+    # Assistant blocks are serialized in order with their kinds.
+    assert out[0]["content"] == [
+        {"type": "thinking", "thinking": "let me draft the template"},
+        {"type": "text", "text": "Here is the template for your approval."},
+        {"type": "tool_use", "name": "Bash",
+         "input": {"command": "python -m transon_authoring result"}},
+    ]
+    # tool_result content is captured (and bounded via _tool_result_value).
+    assert out[1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "tu1", "result": "matched\n" + "y" * 10}
+    ]
+    # A bare-string content turn and a None-content terminal are handled.
+    assert out[2]["content"] is None
+    assert host_harness._serialize_content("plain str") == "plain str"
+
+    # Payloads are length-bounded so a huge tool result can't blow up the file.
+    big = "z" * (host_harness._TOOL_RESULT_MAX + 50)
+    huge = [UserMessage(content=[NS(tool_use_id="t", content=big)])]
+    bounded = host_harness._serialize_messages(huge)[0]["content"][0]["result"]
+    assert len(bounded) < len(big) and "chars)" in bounded
+
+
+def test_fr_035_classify_terminal_carries_cost():
+    """FR-035 — the host-reported episode cost (SDK total_cost_usd) rides through
+    the classifier onto the outcome for every terminal class; additive telemetry,
+    never touching the status decision (AC-034)."""
+    cl = host_harness._classify_terminal
+    env = {"schema_version": "1.0", "ok": True, "status": "matched"}
+    assert cl("success", env, None, None, 0.19).cost_usd == 0.19
+    assert cl("success", None, "nope", None, 0.02).cost_usd == 0.02  # no_submit
+    assert cl("error_max_turns", None, None, None, 0.5).cost_usd == 0.5  # budget
+    assert cl("error_during_execution", None, None, None, 0.01).cost_usd == 0.01  # infra
+    # Cost is optional — a host that reports none leaves it None (additive identity).
+    assert cl("success", env, None).cost_usd is None
+
+
+def test_fr_035_to_episode_result_carries_cost_and_messages():
+    """FR-035 / AC-038 — the adapter forwards the additive cost + whole-transcript
+    telemetry from the HostOutcome into the EpisodeResult the run artifacts read;
+    absent telemetry defaults to None / []."""
+    serialized = [{"type": "AssistantMessage", "subtype": None, "content": None}]
+    rich = HostOutcome(
+        status=STATUS_RESULT,
+        result={"ok": True, "status": "matched"},
+        cost_usd=0.19,
+        messages=serialized,
+    )
+    ep = to_episode_result(rich)
+    assert ep["cost_usd"] == 0.19
+    assert ep["messages"] == serialized
+    # Defaults when the host exposes no cost/message telemetry.
+    bare = to_episode_result(HostOutcome(status=STATUS_NO_RESULT))
+    assert bare["cost_usd"] is None and bare["messages"] == []
+
+
+def test_fr_035_add_cost_is_none_identity():
+    """FR-035 — multi-turn episode cost sums across turns with None as the
+    additive identity (an all-None episode stays None, not 0.0)."""
+    add = host_harness._add_cost
+    assert add(None, None) is None
+    assert add(0.1, None) == 0.1
+    assert add(None, 0.2) == 0.2
+    assert add(0.1, 0.2) == pytest.approx(0.3)

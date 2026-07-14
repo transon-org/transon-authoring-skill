@@ -13,3 +13,7 @@ build/
 # Local secrets (API keys for cache_ab / evals) — never commit
 .env
 .env.*
+
+# Eval run artifacts (FR-032 transcripts + FR-035 whole-transcript / run_summary
+# telemetry) — build artifacts, never committed (SPEC §11.8 / AD-025)
+evals/_runs/

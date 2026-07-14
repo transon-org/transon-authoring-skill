@@ -63,9 +63,10 @@ class HostOutcome:
 
     ``result`` is the returned ``AuthoringResult`` **verbatim** (kept even when
     schema-invalid, so OQ-016b failures stay diagnosable) and is only meaningful
-    when ``status == STATUS_RESULT``. ``step_log`` and ``tokens`` are additive
-    telemetry (never scored, AC-034); a host that exposes no per-step record
-    leaves ``step_log`` empty.
+    when ``status == STATUS_RESULT``. ``step_log``, ``tokens``, ``cost_usd`` and
+    ``messages`` are additive telemetry (never scored, AC-034 / FR-035); a host
+    that exposes no per-step record leaves ``step_log``/``messages`` empty and
+    ``cost_usd`` None.
     """
 
     status: str
@@ -73,6 +74,12 @@ class HostOutcome:
     error: Optional[str] = None
     step_log: list[dict[str, Any]] = field(default_factory=list)
     tokens: Optional[dict[str, int]] = None
+    #: FR-035 — host-reported episode cost (SDK ``ResultMessage.total_cost_usd``).
+    cost_usd: Optional[float] = None
+    #: FR-035 — the whole host message transcript, serialized (every turn's
+    #: assistant text/thinking, tool_use/tool_result), for the EpisodeMessages
+    #: artifact. Additive telemetry only.
+    messages: list[dict[str, Any]] = field(default_factory=list)
 
 
 class Host(Protocol):
@@ -125,6 +132,8 @@ def to_episode_result(outcome: HostOutcome) -> dict[str, Any]:
         error=outcome.error,
         step_log=outcome.step_log,
         tokens=outcome.tokens,
+        cost_usd=outcome.cost_usd,
+        messages=outcome.messages,
     )
 
 
@@ -135,10 +144,14 @@ def _episode_result(
     error: Optional[str] = None,
     step_log: Optional[list[dict[str, Any]]] = None,
     tokens: Optional[dict[str, int]] = None,
+    cost_usd: Optional[float] = None,
+    messages: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Build the §11.8 EpisodeResult dict (identical shape to
     :func:`eval_harness._episode_result`). ``tool_calls`` is the int step count
-    the scorer reads; ``tool_call_log`` is the FR-032 transcript record."""
+    the scorer reads; ``tool_call_log`` is the FR-032 transcript record.
+    ``cost_usd`` and ``messages`` are the additive FR-035 telemetry the
+    ``run_summary`` / EpisodeMessages artifacts read (never scored, AC-034)."""
     log = step_log if step_log is not None else []
     return {
         "submitted": submitted,
@@ -147,6 +160,8 @@ def _episode_result(
         "error": error,
         "tool_call_log": log,
         "tokens": tokens if tokens is not None else _new_tokens(),
+        "cost_usd": cost_usd,
+        "messages": messages if messages is not None else [],
     }
 
 
@@ -301,11 +316,13 @@ def _classify_terminal(
     structured: Any,
     result_text: Any,
     tokens: Optional[dict[str, int]] = None,
+    cost_usd: Optional[float] = None,
 ) -> HostOutcome:
     """Pure host-terminal → :class:`HostOutcome` classification (OQ-027e /
     OQ-016d) — unit-tested offline (the surrounding SDK call is not). ``subtype``
     is the SDK ``ResultMessage.subtype`` (``None`` when the host produced no
-    terminal message at all).
+    terminal message at all). ``cost_usd`` (SDK ``total_cost_usd``) is carried
+    unchanged onto the outcome as additive FR-035 telemetry.
 
     - ``success`` + a recoverable AuthoringResult → ``STATUS_RESULT``;
     - ``success`` with no parseable result → ``STATUS_NO_RESULT`` (the model
@@ -318,12 +335,15 @@ def _classify_terminal(
     """
     sub = subtype or ""
     if "max_turns" in sub:
-        return HostOutcome(status=STATUS_BUDGET, error=f"host ended: {sub}", tokens=tokens)
+        return HostOutcome(
+            status=STATUS_BUDGET, error=f"host ended: {sub}", tokens=tokens, cost_usd=cost_usd
+        )
     if sub != "success":
         return HostOutcome(
             status=STATUS_INFRA,
             error=f"host ended: {sub or 'no ResultMessage'}",
             tokens=tokens,
+            cost_usd=cost_usd,
         )
     payload = (
         structured
@@ -331,11 +351,14 @@ def _classify_terminal(
         else _extract_authoring_result(result_text)
     )
     if isinstance(payload, dict):
-        return HostOutcome(status=STATUS_RESULT, result=payload, tokens=tokens)
+        return HostOutcome(
+            status=STATUS_RESULT, result=payload, tokens=tokens, cost_usd=cost_usd
+        )
     return HostOutcome(
         status=STATUS_NO_RESULT,
         error="host ended: success; no parseable AuthoringResult",
         tokens=tokens,
+        cost_usd=cost_usd,
     )
 
 
@@ -383,6 +406,17 @@ def _add_tokens(
     if b is None:
         return a
     return {key: int(a.get(key, 0)) + int(b.get(key, 0)) for key in set(a) | set(b)}
+
+
+def _add_cost(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    """Sum two host-reported costs across a multi-turn episode (FR-035, additive
+    telemetry, never scored). None is the additive identity so an episode where
+    no turn reported a cost stays None rather than becoming 0.0."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + b
 
 
 #: Cap a recorded tool-result payload so transcripts stay diagnosable without
@@ -443,6 +477,68 @@ def _tool_calls_from_messages(messages: list[Any]) -> list[dict[str, Any]]:
                 if block_id is not None:
                     by_id[block_id] = entry
     return calls
+
+
+def _serialize_block(block: Any) -> dict[str, Any]:
+    """Serialize one SDK content block into a plain, bounded dict for the FR-035
+    whole-episode transcript. Duck-typed (matching :func:`_tool_calls_from_messages`)
+    so it is unit-testable without live SDK objects: a ``tool_use`` block exposes
+    ``name``/``input``, a ``tool_result`` block exposes ``tool_use_id``, a text
+    block exposes ``text``, a thinking block exposes ``thinking``. Text / thinking
+    / tool-result payloads are length-bounded (:data:`_TOOL_RESULT_MAX`).
+    Additive telemetry only, never scored (AC-034)."""
+    tool_use_id = getattr(block, "tool_use_id", None)
+    if tool_use_id is not None:  # tool_result
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_use_id,
+            "result": _tool_result_value(getattr(block, "content", None)),
+        }
+    name = getattr(block, "name", None)
+    if name is not None and hasattr(block, "input"):  # tool_use
+        return {
+            "type": "tool_use",
+            "name": name,
+            "input": getattr(block, "input", None),
+        }
+    thinking = getattr(block, "thinking", None)
+    if thinking is not None:
+        return {"type": "thinking", "thinking": _tool_result_value(thinking)}
+    text = getattr(block, "text", None)
+    if text is not None:
+        return {"type": "text", "text": _tool_result_value(text)}
+    # Unknown block kind: keep a bounded best-effort record rather than drop it.
+    return {"type": getattr(block, "type", "unknown"), "repr": _tool_result_value(str(block))}
+
+
+def _serialize_content(content: Any) -> Any:
+    """Serialize a message's ``content`` (a block list, a bare string, or None)
+    for the FR-035 whole-episode transcript. Bounded / additive (AC-034)."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return _tool_result_value(content)
+    if isinstance(content, list):
+        return [_serialize_block(block) for block in content]
+    return _tool_result_value(content)
+
+
+def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
+    """FR-035 / AD-025 — serialize a host turn's whole SDK message stream into
+    plain dicts for the EpisodeMessages artifact: one ``{type, subtype, content}``
+    per message, in order, with content blocks bounded (text/thinking/tool-result).
+    ``type`` is the SDK message class name (system/assistant/user/result); pure
+    and unit-testable without live SDK objects. Additive telemetry only, never
+    scored (AC-034) — makes a real-host episode fully diagnosable from the
+    committed-out artifact directory without a local reproduction."""
+    return [
+        {
+            "type": type(message).__name__,
+            "subtype": getattr(message, "subtype", None),
+            "content": _serialize_content(getattr(message, "content", None)),
+        }
+        for message in messages
+    ]
 
 
 class AgentSDKHost:
@@ -546,9 +642,13 @@ class AgentSDKHost:
                 getattr(terminal, "structured_output", None),
                 getattr(terminal, "result", None),
                 _sdk_usage(getattr(terminal, "usage", None)),
+                getattr(terminal, "total_cost_usd", None),
             )
             # FR-032 — record this turn's tool calls into the transcript log.
             outcome.step_log = _tool_calls_from_messages(messages)
+            # FR-035 — record the whole message stream for the EpisodeMessages
+            # artifact (assistant text/thinking + every tool_use/tool_result).
+            outcome.messages = _serialize_messages(messages)
             return outcome
 
         async with ClaudeSDKClient(options=options) as client:
@@ -567,11 +667,15 @@ class AgentSDKHost:
                 await client.query(_REVIEW_APPROVAL)
                 followup = await _turn_outcome()
                 followup.tokens = _add_tokens(outcome.tokens, followup.tokens)
+                # FR-035 — episode cost is the sum across both turns.
+                followup.cost_usd = _add_cost(outcome.cost_usd, followup.cost_usd)
                 # Keep the full tool-call trail across both turns, re-sequenced
                 # (FR-032 — the transcript reflects everything the model did).
                 combined = outcome.step_log + followup.step_log
                 for seq, call in enumerate(combined, 1):
                     call["seq"] = seq
                 followup.step_log = combined
+                # FR-035 — the whole-message transcript spans both turns in order.
+                followup.messages = outcome.messages + followup.messages
                 outcome = followup
             return outcome

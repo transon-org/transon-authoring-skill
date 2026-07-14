@@ -714,6 +714,7 @@ def orchestrate(
     update_baseline=False,
     transcripts_dir=None,
     episode_for=None,
+    only=None,
 ):
     """Run `check_evals.main` in full-run mode, fully offline (OQ-027e):
     env key faked, host factory stubbed, `host_harness.run_fixture`
@@ -741,6 +742,8 @@ def orchestrate(
         argv.append("--update-baseline")
     if transcripts_dir is not None:
         argv += ["--transcripts-dir", str(transcripts_dir)]
+    if only is not None:
+        argv += ["--only", ",".join(only)]
     return check_evals.main(argv)
 
 
@@ -1040,11 +1043,13 @@ def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
     runs = runner["runs_per_fixture"]
     model_id = runner["model_id"]
 
-    # Exactly one transcript per (fixture, run_index).
+    # Exactly one EpisodeTranscript per (fixture, run_index). The FR-035
+    # run_summary.json sibling and the messages/ subdir are additive artifacts
+    # (asserted in test_fr_035_*) and excluded from this AC-034 transcript set.
     expected_names = {
         f"{fid}.{i}.json" for fid in ALL_FIXTURES for i in range(runs)
     }
-    written = {p.name for p in transcripts_dir.glob("*.json")}
+    written = {p.name for p in transcripts_dir.glob("*.json")} - {"run_summary.json"}
     assert written == expected_names
     assert len(written) == len(ALL_FIXTURES) * runs
 
@@ -1080,6 +1085,177 @@ def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
     }
     # The whole report is identical — transcripts are a pure side artifact.
     assert report_with == report_without
+
+
+def test_fr_035_ac_038_run_summary_rollup_matches_hand_computed():
+    # FR-035 / AC-038 — build_run_summary is a pure telemetry roll-up: its
+    # per-episode rows, totals, and per-fixture normalization equal a
+    # hand-computed histogram over the same episodes. Gates nothing (AC-034).
+    fixtures = [{"id": "fa", "expect": "matched"}, {"id": "fb", "expect": "matched"}]
+    per_fixture_episodes = {
+        "fa": [
+            {
+                "outcome": "submitted", "error": None,
+                "tokens": {"input": 100, "output": 50, "cache_read": 200,
+                           "cache_creation": 10, "turns": 2},
+                "cost_usd": 0.10,
+                "tool_call_log": [{"name": "Bash"}, {"name": "Read"}, {"name": "Bash"}],
+            },
+            {
+                "outcome": "no_submit", "error": "stalled",
+                "tokens": {"input": 80, "output": 40, "cache_read": 100,
+                           "cache_creation": 0, "turns": 1},
+                "cost_usd": 0.05,
+                "tool_call_log": [{"name": "Bash"}],
+            },
+        ],
+        "fb": [
+            {
+                "outcome": "submitted", "error": None,
+                "tokens": {"input": 60, "output": 30, "cache_read": 0,
+                           "cache_creation": 0, "turns": 1},
+                "cost_usd": None,  # host reported no cost this episode
+                "tool_call_log": [],
+            },
+        ],
+    }
+    runner_cfg = {
+        "model_id": "claude-haiku-4-5-20251001", "runs_per_fixture": 3,
+        "harness": {"kind": "agent-sdk", "version": "0.2.116"},
+    }
+    fixture_bytes = {"fa": 2048, "fb": 1024}
+
+    summary = check_evals.build_run_summary(
+        fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
+    )
+
+    assert summary["schema_version"] == "1.0"
+    assert summary["model_id"] == "claude-haiku-4-5-20251001"
+    assert summary["harness"] == {"kind": "agent-sdk", "version": "0.2.116"}
+    # Per-episode rows in fixture order, each with steps + histogram.
+    assert [e["fixture_id"] for e in summary["episodes"]] == ["fa", "fa", "fb"]
+    assert summary["episodes"][0]["steps"] == 3
+    assert summary["episodes"][0]["steps_by_category"] == {"Bash": 2, "Read": 1}
+    assert summary["episodes"][1]["steps_by_category"] == {"Bash": 1}
+    assert summary["episodes"][2]["steps_by_category"] == {}
+    # Totals — a hand-computed histogram over the same three episodes.
+    totals = summary["totals"]
+    assert totals["episodes"] == 3
+    assert totals["tokens"] == {
+        "input": 240, "output": 120, "cache_read": 300,
+        "cache_creation": 10, "turns": 4,
+    }
+    assert totals["cost_usd"] == pytest.approx(0.15)  # None counts as 0
+    assert totals["steps"] == 4
+    assert totals["steps_by_category"] == {"Bash": 3, "Read": 1}
+    assert totals["outcomes"] == {
+        "submitted": 2, "no_submit": 1, "budget_exceeded": 0, "infra_error": 0,
+    }
+    assert totals["errors"] == 1
+    # Per-fixture normalization divides the fixture's totals by its run count.
+    fa = summary["by_fixture"]["fa"]
+    assert fa["runs"] == 2 and fa["fixture_bytes"] == 2048
+    assert fa["cost_usd_total"] == pytest.approx(0.15)
+    assert fa["cost_usd_mean"] == pytest.approx(0.075)
+    assert fa["steps_mean"] == pytest.approx(2.0)
+    assert fa["tokens_mean"]["cache_read"] == pytest.approx(150.0)
+    assert fa["cache_read_ratio"] == pytest.approx(300 / (180 + 300 + 10))
+    assert fa["cost_usd_per_kb"] == pytest.approx(0.15 / (2048 / 1024))
+    fb = summary["by_fixture"]["fb"]
+    assert fb["cost_usd_total"] == 0.0 and fb["cost_usd_per_kb"] == 0.0
+    assert fb["cache_read_ratio"] == 0.0  # no prompt tokens cached
+
+
+def test_fr_035_ac_038_artifacts_written_and_scoring_parity(
+    monkeypatch, tmp_repo, tmp_path, capsys
+):
+    # FR-035 / AC-038 — a run with --transcripts-dir also writes, per episode,
+    # a whole-transcript messages/<id>.<run>.messages.json, and one
+    # run_summary.json; the same run without the dir scores byte-identically
+    # (extends AC-034), and the scored EpisodeTranscript files are unchanged.
+    transcripts_dir = tmp_path / "runs"
+    scores = corpus_scores()
+    serialized_msgs = [
+        {"type": "AssistantMessage", "subtype": None,
+         "content": [{"type": "text", "text": "presenting for approval"}]},
+        {"type": "ResultMessage", "subtype": "success", "content": None},
+    ]
+
+    def episode_for(fixture):
+        return dict(
+            episode(outcome="submitted", tool_calls=2),
+            tool_call_log=[
+                {"seq": 1, "name": "Bash", "input": {"command": "x"}, "result": "ok"},
+                {"seq": 2, "name": "Read", "input": {"file_path": "s"}, "result": "{}"},
+            ],
+            tokens={"input": 10, "output": 5, "cache_read": 40,
+                    "cache_creation": 0, "turns": 1},
+            cost_usd=0.12,
+            messages=serialized_msgs,
+        )
+
+    exit_with = orchestrate(
+        monkeypatch, tmp_repo, scores,
+        transcripts_dir=transcripts_dir, episode_for=episode_for,
+    )
+    report_with, err = report_from(capsys)
+
+    runner = json.loads((tmp_repo / "evals" / "runner.json").read_text("utf-8"))
+    runs, model_id = runner["runs_per_fixture"], runner["model_id"]
+
+    # (a) one whole-transcript per (fixture, run), carrying the serialized stream.
+    for fid in ALL_FIXTURES:
+        for i in range(runs):
+            path = transcripts_dir / "messages" / f"{fid}.{i}.messages.json"
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            assert doc["fixture_id"] == fid and doc["run_index"] == i
+            assert doc["model_id"] == model_id
+            assert doc["messages"] == serialized_msgs
+    # (b) exactly one run_summary.json whose totals match the episodes.
+    summary = json.loads(
+        (transcripts_dir / "run_summary.json").read_text(encoding="utf-8")
+    )
+    n = len(ALL_FIXTURES) * runs
+    assert summary["totals"]["episodes"] == n
+    assert summary["totals"]["cost_usd"] == pytest.approx(0.12 * n)
+    assert summary["totals"]["steps"] == 2 * n
+    assert summary["totals"]["steps_by_category"] == {"Bash": n, "Read": n}
+    assert "run_summary" in err  # the stderr one-line telemetry summary
+    # The scored EpisodeTranscript files still exist, one per episode.
+    assert len({p.name for p in transcripts_dir.glob("*.json")} - {"run_summary.json"}) == n
+
+    # Parity: the same run WITHOUT --transcripts-dir gives an identical report.
+    exit_without = orchestrate(monkeypatch, tmp_repo, scores, episode_for=episode_for)
+    report_without, _ = report_from(capsys)
+    assert exit_with == exit_without == 0
+    assert report_with == report_without
+
+
+def test_fr_035_only_scopes_provider_run(monkeypatch, tmp_repo, capsys):
+    # FR-035 — --only restricts the provider run (and thus the report) to the
+    # named fixtures. One fixture from each bucket keeps every gating bucket
+    # populated, so a corpus-all-pass plan stays green.
+    selected = [
+        "seed-matched-flatten-orders",   # matched
+        "refuse-uppercase-currency",     # refuse
+        "seed-correction-attr-misspelled",  # correction
+    ]
+    for fid in selected:
+        assert ALL_FIXTURES[fid]  # guard: the ids exist in the committed corpus
+    exit_code = orchestrate(monkeypatch, tmp_repo, corpus_scores(), only=selected)
+    report, err = report_from(capsys)
+    assert exit_code == 0, err
+    assert set(report["fixtures"]) == set(selected)
+
+
+def test_fr_035_only_unknown_id_is_config_error(monkeypatch, tmp_repo, capsys):
+    # FR-035 — an --only id absent from the corpus is a config error (exit 2),
+    # naming the unknown id; no provider run happens.
+    exit_code = orchestrate(
+        monkeypatch, tmp_repo, corpus_scores(), only=["no-such-fixture"]
+    )
+    assert exit_code == 2
+    assert "unknown fixture id" in capsys.readouterr().err
 
 
 def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
