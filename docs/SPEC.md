@@ -432,6 +432,22 @@ No console-script product; no MCP.
   faked output. The pack counts in the §11.8 authoring/adversarial denominators and is expected to
   lower the measured authoring rate, corrected by improving `SKILL.md`, never by lowering the §11.8
   targets.
+- **FR-034** — *(added 2026-07-14, OQ-027)* **Deterministic result emission (`result` command).**
+  The module CLI (§11.6) provides `python -m transon_authoring result --template <path>
+  --samples <path>`: it re-runs the §11.4 `verify` of the template against the SampleSet and emits
+  the COMPLETE §11.5 `AuthoringResult` envelope on stdout — **machine-generated, never hand-written.**
+  A matched verdict emits the success envelope (`ok: true`, `status: "matched"`, the verified
+  `template`, the verify `verdict`, `repair_count: 0`); a non-matched verdict emits the failure
+  envelope (`ok: false`, no `template`, the verify-derived §11.5 `status` — `samples-rejected` when
+  the SampleSet stage failed, otherwise `verify-failed` — with the `verdict` diagnostic); malformed
+  ingress is the §11.6 `schema-error` CliError, as for every subcommand. `SKILL.md` §7's result step
+  MUST emit its `AuthoringResult` by running this command and returning its output verbatim, so the
+  authoring model never constructs the envelope itself — removing the dropped-field / bare-template /
+  prose-wrapped failure mode the §11.8 real-host gate surfaced under the AD-021 small model.
+  Determinism (NFR-002) and authority (NFR-001) are unchanged: `result` runs only the pinned engine
+  through the AD-017 sandbox. The other §11.5 statuses (`need-samples`, `deferred`, `aborted`,
+  `repair-exhausted`, `profile-rejected`) arise from the skill's sample-loop / repair / refusal
+  steps, not from a single verify, and stay skill-emitted.
 
 ### Observability
 - **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
@@ -622,6 +638,17 @@ No console-script product; no MCP.
   `score_episode` (OQ-016) yields the same score the equivalent raw-loop EpisodeResult would — the
   scorer, targets, baseline, and lint semantics are byte-for-byte unchanged (AD-024). The adapter
   is unit-tested with a fake host (no live credentials), mirroring the OQ-017e fake-provider tests.
+- **AC-037** — *(FR-034 / OQ-027, added 2026-07-14)* **`result` emits a schema-valid AuthoringResult
+  matching the verify outcome; `SKILL.md` §7 mandates it.** (a) `python -m transon_authoring result
+  --template T --samples S` writes exactly one `AuthoringResult` (§11.5 schema) to stdout: when
+  `verify(T, S)` returns `ok` with `assurance: "matched"`, the success envelope (`ok: true`,
+  `status: "matched"`, `template` = T, `verdict` = the Verdict, `repair_count: 0`), exit 0; otherwise
+  a failure envelope (`ok: false`, no `template`, `status: "samples-rejected"` if the samples stage
+  failed else `"verify-failed"`, carrying the `verdict`), exit 1; malformed ingress → §11.6
+  `schema-error` CliError, exit 2. (b) `SKILL.md` §7 instructs the model to emit its `AuthoringResult`
+  by running `result` and returning its stdout verbatim, and forbids hand-writing the envelope
+  (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
+  scorer to a correct hand-written one — the scorer's independent re-verify (AD-004) is unaffected.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -1076,6 +1103,7 @@ primary machine result on stderr.
 | `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
+| `result` | `--template PATH --samples PATH` | complete §11.5 `AuthoringResult`, machine-built (FR-034) | 0 if matched else 1 |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
 | `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (rev 2026-07-11: flags aligned with §11.9) | `ProjectConfig` | 0/2 |
