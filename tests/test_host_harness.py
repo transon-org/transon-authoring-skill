@@ -271,3 +271,30 @@ def test_oq_027_extract_authoring_result_recovers_envelope():
     # nothing parseable → None
     assert host_harness._extract_authoring_result("no json here at all") is None
     assert host_harness._extract_authoring_result(None) is None
+    # A prose-wrapped FULL envelope whose nested `verdict` also has an "ok" key
+    # must recover the whole envelope, not the inner verdict (top-level scan).
+    full = _matched_result(CORRECT_TEMPLATE)
+    assert "verdict" in full and full["verdict"].get("ok") is True
+    got = host_harness._extract_authoring_result(f"Done. {json.dumps(full)} bye")
+    assert got == full
+    assert "template" in got and "status" in got  # not the nested verdict
+
+
+def test_oq_027_classify_terminal_maps_subtypes():
+    # OQ-027e / OQ-016d — the pure host-terminal classifier (the one slice of
+    # the SDK path the offline gates can cover).
+    cl = host_harness._classify_terminal
+    STATUS = (host_harness.STATUS_RESULT, host_harness.STATUS_NO_RESULT,
+              host_harness.STATUS_BUDGET, host_harness.STATUS_INFRA)
+    env = {"schema_version": "1.0", "ok": True, "status": "matched"}
+    # success + structured dict → submitted; success + prose envelope → submitted
+    assert cl("success", env, None).status == host_harness.STATUS_RESULT
+    assert cl("success", None, f"here: {json.dumps(env)}").status == host_harness.STATUS_RESULT
+    # success but nothing parseable → no_submit (model's fault, a bucket failure)
+    assert cl("success", None, "I wrote flatten.js instead").status == host_harness.STATUS_NO_RESULT
+    # budget stop → budget_exceeded
+    assert cl("error_max_turns", None, None).status == host_harness.STATUS_BUDGET
+    # any other terminal subtype (or no ResultMessage) → infra_error, not no_submit
+    assert cl("error_during_execution", None, None).status == host_harness.STATUS_INFRA
+    assert cl(None, None, None).status == host_harness.STATUS_INFRA
+    assert all(s in STATUS for s in (cl("success", env, None).status,))

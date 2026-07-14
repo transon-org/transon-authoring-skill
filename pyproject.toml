@@ -23,7 +23,9 @@ dev = ["pytest>=8"]
 # `anthropic` drives the demoted raw-loop smoke fixture (OQ-027d);
 # `claude-agent-sdk` is the real-host gate driver (AD-024/OQ-027a), pinned in
 # evals/runner.json.harness — bump both there and here in one eval-policy commit.
-evals = ["anthropic>=0.40", "claude-agent-sdk>=0.2"]
+# claude-agent-sdk is pinned to the runner.json harness.version (gate identity,
+# AD-024/OQ-027b) — bump both together in an eval-policy commit.
+evals = ["anthropic>=0.40", "claude-agent-sdk==0.2.116"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/transon_authoring"]

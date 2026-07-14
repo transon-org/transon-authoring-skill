@@ -83,24 +83,36 @@ jobs:
           echo "pinning claude-agent-sdk==${V}"
           python3 -m pip install "claude-agent-sdk==${V}"
 
-      # The Claude Agent SDK drives the Claude Code CLI as a subprocess. Node is
-      # preinstalled on ubuntu-latest. Keep this CLI version tracking the SDK/
-      # harness pin (an eval-policy concern) once a compatible pin is confirmed.
+      # The Claude Agent SDK drives the Claude Code CLI as a subprocess — it is
+      # the actual host that executes every tool call, so its version is part of
+      # gate identity (AD-024 / NFR-002). Pinned to the CLI the driver was
+      # validated against; keep it tracking the SDK/harness pin (an eval-policy
+      # concern — confirm compatibility + bump on the first dispatch). Node is
+      # preinstalled on ubuntu-latest.
       - name: Install Claude Code CLI (real host, OQ-027a)
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.207
 
       - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
+        # Bind the secret via env: (not `${{ }}` interpolation in the script body,
+        # which would place the literal secret in the on-disk step script and
+        # risk shell injection). It is referenced as a shell variable and then
+        # UNSET below before the gate runs — the raw CodeRabbit suggestion would
+        # leave it in the step env for check_evals and the model's Bash to
+        # inherit, defeating OQ-027f(ii).
+        env:
+          PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
           TRANSCRIPTS="${RUNNER_TEMP}/transcripts"
 
           # (ii) Start the key-scoped proxy with the REAL provider key in its OWN
-          # environment only (inline assignment — NOT exported to this shell, so
-          # check_evals and the model's Bash never inherit it). The proxy holds
-          # the secret and forwards to api.anthropic.com.
-          ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
+          # environment only (inline assignment → the proxy process's env, not
+          # its argv, and not this shell). Then unset PROXY_UPSTREAM_KEY so
+          # check_evals and the model's Bash — spawned after — never inherit it.
+          ANTHROPIC_API_KEY="${PROXY_UPSTREAM_KEY}" \
             python3 scripts/eval_key_proxy.py --host 127.0.0.1 --port 8787 &
           PROXY_PID=$!
+          unset PROXY_UPSTREAM_KEY
           trap 'kill "${PROXY_PID}" 2>/dev/null || true' EXIT
 
           # Wait for the proxy to accept connections.

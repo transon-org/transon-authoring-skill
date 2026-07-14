@@ -252,25 +252,31 @@ def _extract_authoring_result(text: Any) -> Optional[dict[str, Any]]:
             continue
         if isinstance(obj, dict):
             return obj
-    # Balanced-brace scan: last top-level {...} that parses to an envelope-shaped
-    # dict wins (the skill's final answer, if wrapped in prose).
+    # Balanced-brace scan restricted to TRUE top-level objects: the last
+    # depth-0 {...} that parses to an envelope-shaped dict wins (the skill's
+    # final answer, if wrapped in prose). Scanning every '{' would let a nested
+    # object — e.g. the envelope's own `verdict` (which also carries an "ok"
+    # key) — overwrite the correct full-envelope match.
     found: Optional[dict[str, Any]] = None
-    for start in (i for i, ch in enumerate(text) if ch == "{"):
-        depth = 0
-        for end in range(start, len(text)):
-            if text[end] == "{":
-                depth += 1
-            elif text[end] == "}":
+    depth = 0
+    top_start: Optional[int] = None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                top_start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
                 depth -= 1
-                if depth == 0:
+                if depth == 0 and top_start is not None:
                     try:
-                        obj = json.loads(text[start : end + 1])
+                        obj = json.loads(text[top_start : i + 1])
                     except ValueError:
                         pass
                     else:
                         if isinstance(obj, dict) and ("status" in obj or "ok" in obj):
                             found = obj
-                    break
+                    top_start = None
     return found
 
 
@@ -287,6 +293,49 @@ def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
     tokens["cache_creation"] = int(get("cache_creation_input_tokens", 0) or 0)
     tokens["turns"] = 1
     return tokens
+
+
+def _classify_terminal(
+    subtype: Any,
+    structured: Any,
+    result_text: Any,
+    tokens: Optional[dict[str, int]] = None,
+) -> HostOutcome:
+    """Pure host-terminal → :class:`HostOutcome` classification (OQ-027e /
+    OQ-016d) — unit-tested offline (the surrounding SDK call is not). ``subtype``
+    is the SDK ``ResultMessage.subtype`` (``None`` when the host produced no
+    terminal message at all).
+
+    - ``success`` + a recoverable AuthoringResult → ``STATUS_RESULT``;
+    - ``success`` with no parseable result → ``STATUS_NO_RESULT`` (the model
+      ended cleanly but submitted nothing valid — a bucket failure);
+    - any subtype naming a turn/step-budget stop (``…max_turns…``) →
+      ``STATUS_BUDGET``;
+    - **every other** terminal subtype (error_during_execution, transport, or
+      no ResultMessage at all) is a host/execution fault → ``STATUS_INFRA``,
+      never ``no_submit`` (OQ-016d).
+    """
+    sub = subtype or ""
+    if "max_turns" in sub:
+        return HostOutcome(status=STATUS_BUDGET, error=f"host ended: {sub}", tokens=tokens)
+    if sub != "success":
+        return HostOutcome(
+            status=STATUS_INFRA,
+            error=f"host ended: {sub or 'no ResultMessage'}",
+            tokens=tokens,
+        )
+    payload = (
+        structured
+        if isinstance(structured, dict)
+        else _extract_authoring_result(result_text)
+    )
+    if isinstance(payload, dict):
+        return HostOutcome(status=STATUS_RESULT, result=payload, tokens=tokens)
+    return HostOutcome(
+        status=STATUS_NO_RESULT,
+        error="host ended: success; no parseable AuthoringResult",
+        tokens=tokens,
+    )
 
 
 class AgentSDKHost:
@@ -361,35 +410,19 @@ class AgentSDKHost:
         # System/Assistant/User/Stream messages (which may also carry a
         # ``subtype``, e.g. init/thinking) must be ignored, else a mid-episode
         # message is mistaken for the outcome.
+        # Only the terminal ResultMessage classifies the episode (OQ-027e).
+        # The skill emits the §11.5 AuthoringResult as its final answer; the SDK
+        # exposes it as structured_output (when a schema is set) or as result
+        # text (the shipped skill's natural output) — the classifier recovers it
+        # either way, and the scorer re-validates it (AD-004), so a schema-invalid
+        # payload still counts as a submission (OQ-016b / OQ-027e).
         terminal = None
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, ResultMessage):
                 terminal = message
-        if terminal is None:
-            return HostOutcome(
-                status=STATUS_NO_RESULT, error="host produced no ResultMessage"
-            )
-        subtype = getattr(terminal, "subtype", None) or ""
-        tokens = _sdk_usage(getattr(terminal, "usage", None))
-        if "max_turns" in subtype:
-            return HostOutcome(
-                status=STATUS_BUDGET, error=f"host ended: {subtype}", tokens=tokens
-            )
-        # The skill emits the §11.5 AuthoringResult as its final answer; the SDK
-        # exposes it as structured_output (when a schema is set) or as result
-        # text (the shipped skill's natural output). Recover it either way; the
-        # scorer re-validates it (AD-004), so a schema-invalid payload still
-        # counts as a submission (OQ-016b / OQ-027e).
-        structured = getattr(terminal, "structured_output", None)
-        payload = (
-            structured
-            if isinstance(structured, dict)
-            else _extract_authoring_result(getattr(terminal, "result", None))
-        )
-        if isinstance(payload, dict):
-            return HostOutcome(status=STATUS_RESULT, result=payload, tokens=tokens)
-        return HostOutcome(
-            status=STATUS_NO_RESULT,
-            error=f"host ended: {subtype or 'no result'}; no parseable AuthoringResult",
-            tokens=tokens,
+        return _classify_terminal(
+            getattr(terminal, "subtype", None),
+            getattr(terminal, "structured_output", None),
+            getattr(terminal, "result", None),
+            _sdk_usage(getattr(terminal, "usage", None)),
         )

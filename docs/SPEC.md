@@ -1182,6 +1182,7 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
   }
 }
 ```
+
 Initial committed values are chosen at A2 standup and become part of the gate identity; changing
 them is an explicit eval-policy commit. *(rev 2026-07-14, AD-024 / OQ-027: the `harness` block is
 part of gate identity — a change to `harness.kind` or `harness.version` is an eval-policy commit
