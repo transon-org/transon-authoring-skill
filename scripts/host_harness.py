@@ -311,12 +311,78 @@ def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
     return tokens
 
 
+#: OQ-016d — substrings that mark a provider/credential/transport fault the host
+#: may report as ordinary assistant text. Lowercased comparison.
+_INFRA_MARKERS = (
+    "invalid api key",
+    "fix external api key",
+    "authentication_error",
+    "credit balance is too low",
+    "insufficient credit",
+    "quota",
+    "rate limit",
+    "overloaded",
+)
+
+
+def _infra_hint(
+    messages: list[dict[str, Any]], tokens: Optional[dict[str, int]]
+) -> Optional[str]:
+    """OQ-016d — is this "successful" turn actually a provider/infra fault?
+
+    The Claude Code CLI reports an invalid key as a NORMAL assistant turn that
+    ends ``subtype: "success"`` (observed verbatim: two ``api_retry`` system
+    messages then the text "Invalid API key · Fix external API key"). Left alone,
+    the classifier maps that to ``no_submit`` — i.e. a MODEL failure counted
+    against the authoring target — when it is an infra fault that must be
+    ``infra_error`` and excluded from the bucket denominator (§11.8 / OQ-016d).
+    A dead key would score as the skill failing 150 times.
+
+    Two signals, either sufficient: (1) an explicit fault marker in the turn's
+    text; (2) the turn consumed **zero model tokens** — a real model turn always
+    burns input tokens, so a "success" with no usage never ran. Takes the
+    SERIALIZED message stream (:func:`_serialize_messages`) so it is pure and
+    unit-testable without live SDK objects. Returns a reason, or None when the
+    turn looks like a genuine model turn."""
+    consumed = 0
+    if tokens:
+        consumed = sum(
+            int(tokens.get(key, 0) or 0)
+            for key in ("input", "output", "cache_read", "cache_creation")
+        )
+    texts: list[str] = []
+    retried = False
+    for message in messages:
+        if message.get("subtype") == "api_retry":
+            retried = True
+        content = message.get("content")
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                text = block.get("text") if isinstance(block, dict) else None
+                if isinstance(text, str):
+                    texts.append(text)
+    blob = " ".join(texts).lower()
+    for marker in _INFRA_MARKERS:
+        if marker in blob:
+            return f"provider/credential fault reported by the host ({marker!r})"
+    if consumed == 0:
+        suffix = " after api_retry" if retried else ""
+        return (
+            f"the turn consumed no model tokens{suffix} — it never ran "
+            "(provider/transport fault, not a model failure)"
+        )
+    return None
+
+
 def _classify_terminal(
     subtype: Any,
     structured: Any,
     result_text: Any,
     tokens: Optional[dict[str, int]] = None,
     cost_usd: Optional[float] = None,
+    infra_hint: Optional[str] = None,
 ) -> HostOutcome:
     """Pure host-terminal → :class:`HostOutcome` classification (OQ-027e /
     OQ-016d) — unit-tested offline (the surrounding SDK call is not). ``subtype``
@@ -351,8 +417,21 @@ def _classify_terminal(
         else _extract_authoring_result(result_text)
     )
     if isinstance(payload, dict):
+        # The episode demonstrably ran (it returned an envelope), so an infra
+        # hint never overrides a real answer.
         return HostOutcome(
             status=STATUS_RESULT, result=payload, tokens=tokens, cost_usd=cost_usd
+        )
+    # OQ-016d — "success" with no envelope is only a MODEL failure (no_submit) if
+    # a model turn actually happened. An auth/credit/transport fault that the host
+    # dressed up as a successful assistant turn is an INFRA fault: it must not be
+    # counted against the authoring target (it is excluded from the denominator).
+    if infra_hint:
+        return HostOutcome(
+            status=STATUS_INFRA,
+            error=f"host ended: success, but {infra_hint}",
+            tokens=tokens,
+            cost_usd=cost_usd,
         )
     return HostOutcome(
         status=STATUS_NO_RESULT,
@@ -639,18 +718,24 @@ class AgentSDKHost:
                 messages.append(message)
                 if isinstance(message, ResultMessage):
                     terminal = message
+            usage = _sdk_usage(getattr(terminal, "usage", None))
+            # FR-035 — the whole message stream (assistant text/thinking + every
+            # tool_use/tool_result) for the EpisodeMessages artifact...
+            serialized = _serialize_messages(messages)
+            # ...which OQ-016d also reads: a provider/credential fault the host
+            # dressed up as a `success` turn must score infra_error, never
+            # no_submit (see _infra_hint).
             outcome = _classify_terminal(
                 getattr(terminal, "subtype", None),
                 getattr(terminal, "structured_output", None),
                 getattr(terminal, "result", None),
-                _sdk_usage(getattr(terminal, "usage", None)),
+                usage,
                 getattr(terminal, "total_cost_usd", None),
+                _infra_hint(serialized, usage),
             )
             # FR-032 — record this turn's tool calls into the transcript log.
             outcome.step_log = _tool_calls_from_messages(messages)
-            # FR-035 — record the whole message stream for the EpisodeMessages
-            # artifact (assistant text/thinking + every tool_use/tool_result).
-            outcome.messages = _serialize_messages(messages)
+            outcome.messages = serialized
             return outcome
 
         async with ClaudeSDKClient(options=options) as client:

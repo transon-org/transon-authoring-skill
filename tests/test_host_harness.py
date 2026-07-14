@@ -457,6 +457,84 @@ def test_fr_035_to_episode_result_carries_cost_and_messages():
     assert bare["cost_usd"] is None and bare["messages"] == []
 
 
+def _zero_tokens():
+    return {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0, "turns": 1}
+
+
+def test_oq_016d_auth_fault_is_infra_error_not_no_submit():
+    """OQ-016d — a provider/credential fault the host dresses up as a `success`
+    turn must score infra_error, NEVER no_submit.
+
+    Regression from a real capture: with an invalid key the Claude Code CLI emits
+    two `api_retry` system messages, then the assistant text "Invalid API key ·
+    Fix external API key", then ends `subtype: "success"` with no usage. The old
+    classifier called that no_submit — a MODEL failure counted against the
+    authoring target — so a dead/rate-limited key would score as the skill failing
+    every episode, corrupting the rates, failure_modes and any accepted baseline.
+    infra_error is instead excluded from the bucket denominator (capped at 10%)."""
+    messages = [  # exactly the shape the FR-035 whole-transcript artifact captured
+        {"type": "SystemMessage", "subtype": "init", "content": None},
+        {"type": "SystemMessage", "subtype": "api_retry", "content": None},
+        {"type": "SystemMessage", "subtype": "api_retry", "content": None},
+        {"type": "AssistantMessage", "subtype": None,
+         "content": [{"type": "text", "text": "Invalid API key · Fix external API key"}]},
+        {"type": "ResultMessage", "subtype": "success", "content": None},
+    ]
+    hint = host_harness._infra_hint(messages, _zero_tokens())
+    assert hint and "provider/credential fault" in hint
+
+    outcome = host_harness._classify_terminal(
+        "success", None, None, _zero_tokens(), 0.0, hint
+    )
+    assert outcome.status == STATUS_INFRA
+    episode = to_episode_result(outcome)
+    assert episode["outcome"] == "infra_error"  # NOT no_submit
+
+    # And it scores as infra (excluded), not as a failed authoring fixture.
+    matched = _load("matched")
+    assert check_evals.score_episode(matched, episode) == "infra"
+
+
+def test_oq_016d_zero_token_turn_is_infra_even_without_a_marker():
+    """OQ-016d — the general rule, independent of any error wording: a `success`
+    turn that consumed ZERO model tokens never ran (a real turn always burns input
+    tokens), so it is a transport/provider fault, not a model failure."""
+    silent = [{"type": "ResultMessage", "subtype": "success", "content": None}]
+    hint = host_harness._infra_hint(silent, _zero_tokens())
+    assert hint and "no model tokens" in hint
+    assert host_harness._classify_terminal(
+        "success", None, None, _zero_tokens(), 0.0, hint
+    ).status == STATUS_INFRA
+    # Missing usage entirely is treated the same way.
+    assert host_harness._infra_hint(silent, None) is not None
+
+
+def test_oq_016d_real_model_turn_without_envelope_stays_no_submit():
+    """OQ-016d — the fix must NOT launder genuine model failures into infra. A turn
+    that burned tokens and produced prose instead of an AuthoringResult is a real
+    bucket failure and stays no_submit."""
+    tokens = {"input": 120, "output": 900, "cache_read": 4000,
+              "cache_creation": 0, "turns": 1}
+    messages = [
+        {"type": "AssistantMessage", "subtype": None,
+         "content": [{"type": "text", "text": "I wrote flatten.js instead."}]},
+        {"type": "ResultMessage", "subtype": "success", "content": None},
+    ]
+    assert host_harness._infra_hint(messages, tokens) is None
+    outcome = host_harness._classify_terminal(
+        "success", None, "I wrote flatten.js instead.", tokens, 0.02,
+        host_harness._infra_hint(messages, tokens),
+    )
+    assert outcome.status == STATUS_NO_RESULT
+    assert to_episode_result(outcome)["outcome"] == "no_submit"
+
+    # A real envelope is never overridden by an infra hint either.
+    env = {"schema_version": "1.0", "ok": True, "status": "matched"}
+    assert host_harness._classify_terminal(
+        "success", env, None, _zero_tokens(), 0.0, "some infra hint"
+    ).status == STATUS_RESULT
+
+
 def test_fr_030_review_approval_prompt_mandates_result_verbatim():
     """FR-030 (rev 2026-07-14) / FR-034 — the driver's review-approval message
     tells the model to emit by RUNNING the `result` command and returning its
