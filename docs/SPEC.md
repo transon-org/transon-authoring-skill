@@ -262,6 +262,21 @@ No console-script product; no MCP.
   pinned `harness.kind`/`harness.version` is an eval-policy commit that resets `evals/baseline.json`
   (OQ-027b), mirroring the gate-model swap (§11.8 / OQ-024g). Determinism (NFR-002) is untouched:
   the harness is a measurement instrument, never a gate input beyond the EpisodeResult it produces.
+- **AD-025 — Run-artifact observability: whole transcript + telemetry roll-up (added 2026-07-14).**
+  Extends the AD-022 mechanical record so a run answers *which step failed, how often, at what cost*
+  (AD-022's own words) directly from artifacts. Beyond the scored `EpisodeTranscript` (FR-032), a
+  `check_evals` run given `--transcripts-dir` also persists, per episode, the **whole host message
+  transcript** (every turn's assistant text / thinking / tool-use / tool-result, including both
+  turns of the OQ-027 review-approval path) and, per run, a **`run_summary.json`** telemetry
+  roll-up — tokens, cost (`total_cost_usd` reported by the host), a tool-call histogram (steps by
+  category), step/turn counts, outcomes and errors, plus normalized per-fixture cost. Same status as
+  every FR-032 artifact: **additive, non-gating, never committed** (a run without `--transcripts-dir`
+  scores identically); the scorer, targets, baseline, and lint are untouched. Because these are pure
+  build artifacts they carry no `additionalProperties` schema pin and the scored `EpisodeTranscript`
+  (§11.8) stays frozen. The recommended project location is the **git-ignored `evals/_runs/`** — so
+  a run's full transcript and stats land in the working tree but never in git. A `--only ID[,…]`
+  selector scopes the **provider run** to named fixtures for a cost/diagnostic probe while the
+  NFR-011 lint still covers the full committed corpus.
 
 ---
 
@@ -468,6 +483,20 @@ No console-script product; no MCP.
   suffixed with `verdict.failed_stage`); the submitted status only ever labels a failure, it is
   never trusted as the score (AD-004). Scoring, targets, baseline, and lint semantics are
   unchanged by the presence or absence of transcripts.
+- **FR-035** — *(added 2026-07-14, AD-025)* **Run-observability artifacts + fixture selector.**
+  A `check_evals` run with `--transcripts-dir DIR` writes, in addition to the FR-032
+  `EpisodeTranscript`s: (a) per episode, `DIR/messages/<fixture-id>.<run-index>.messages.json` — the
+  **whole host message transcript** for that episode (ordered turns; each message's class/subtype
+  and content blocks, with text/thinking/tool-result payloads length-bounded, §11.8 shape); and (b)
+  `DIR/run_summary.json` — a telemetry roll-up over every episode (per-episode and totals: tokens,
+  `cost_usd`, `steps` and `steps_by_category` = the tool-call histogram, `turns`, `outcome`,
+  `error`; plus per-fixture normalized cost). `--only ID[,ID…]` restricts the provider run to the
+  named fixtures (unknown id → config error, exit 2); the `--lint` corpus checks are unaffected and
+  always cover the full committed set. All of this is **additive telemetry** — never scored, gating,
+  or a determinism input (AD-022/AD-024/AD-025); a run without `--transcripts-dir` produces a
+  byte-identical gate report (the AC-034 invariant), and the scored `EpisodeTranscript` files are
+  unchanged. Artifacts are **never committed** — written to the git-ignored `evals/_runs/` by
+  convention.
 
 ### Install CI
 - **FR-019** — CI install checks:
@@ -649,6 +678,16 @@ No console-script product; no MCP.
   by running `result` and returning its stdout verbatim, and forbids hand-writing the envelope
   (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
   scorer to a correct hand-written one — the scorer's independent re-verify (AD-004) is unaffected.
+- **AC-038** — *(FR-035 / AD-025, added 2026-07-14)* **Run-observability artifacts are complete,
+  correct, and inert.** A run with `--transcripts-dir DIR` writes (a) one
+  `DIR/messages/<id>.<run>.messages.json` per episode whose ordered `messages` reproduce the host
+  turn stream (assistant text/thinking, each dispatched tool call and its result, across every
+  turn), and (b) `DIR/run_summary.json` whose per-episode `tokens`, `cost_usd`, `steps`,
+  `steps_by_category`, and `totals` equal a hand-computed roll-up over the same episodes, and whose
+  per-fixture block divides those totals by that fixture's run count. `--only A,B` runs exactly the
+  episodes for fixtures `A` and `B` (an unknown id exits 2). None of it changes the stdout gate
+  report, scoring, targets, baseline, or lint: the same run without `--transcripts-dir` is
+  byte-identical (extends AC-034), and the scored `EpisodeTranscript` files are unchanged.
 
 ### Use cases
 - **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
@@ -1348,6 +1387,45 @@ EvalFixture = {
   transcripts MUST NOT be re-committed to the repo. Capturing a **real-use** failing
   conversation remains governed by FR-018/NFR-011 — the transcript mechanism records eval
   episodes only, never interactive sessions.
+- **Whole transcript + telemetry roll-up (FR-035 / AD-025, added 2026-07-14):** the same
+  `--transcripts-dir DIR` additionally persists, per episode, the **whole host message transcript**
+  and, per run, a **`run_summary.json`** — both additive, non-gating, never committed (a run without
+  the directory scores identically). The recommended, git-ignored location is `evals/_runs/`.
+  ```
+  # DIR/messages/<fixture-id>.<run-index>.messages.json
+  EpisodeMessages = {
+    schema_version: "1.0",
+    fixture_id: string, run_index: integer, model_id: string,
+    messages: [ { type: string,             # host message class (system/assistant/user/result)
+                  subtype: string | null,   # e.g. init / success / error_max_turns
+                  content: [ Block, … ] | string | null } ],   # ordered across every turn
+  }
+  Block = { type: "text"|"thinking"|"tool_use"|"tool_result"|…,   # verbatim block kind
+            text?: string, thinking?: string,                     # bounded
+            name?: string, input?: JsonValue,                     # tool_use
+            tool_use_id?: string, result?: JsonValue }            # tool_result (bounded)
+
+  # DIR/run_summary.json
+  RunSummary = {
+    schema_version: "1.0", model_id: string, harness: { kind, version },
+    runs_per_fixture: integer,
+    episodes: [ { fixture_id, run_index, outcome, error,
+                  tokens: { input, output, cache_read, cache_creation, turns },
+                  cost_usd: number | null,
+                  steps: integer, steps_by_category: { toolName: count, … } } ],
+    totals: { episodes, tokens: {…}, cost_usd, steps, steps_by_category: {…},
+              outcomes: { submitted, no_submit, budget_exceeded, infra_error },
+              errors: integer },
+    by_fixture: { <fixture-id>: { runs, fixture_bytes,
+                                  cost_usd_total, cost_usd_mean,
+                                  tokens_mean: {…}, steps_mean,
+                                  cache_read_ratio, cost_usd_per_kb } },
+  }
+  ```
+  Text/thinking/tool-result payloads are length-bounded (diagnosability without unbounded blow-up).
+  `--only ID[,…]` scopes the provider run to named fixtures (a cost/diagnostic probe; unknown id →
+  exit 2) while the lint still covers the full committed corpus. These artifacts change no scoring,
+  target, baseline, or lint semantics — exactly as the FR-032 transcripts.
 - **Privacy (NFR-011):** before committing a real-use failure: strip secrets/PII; set
   `redacted: true`; record `consent`; default deny.
 - **Synthetic fixtures (AD-021 / FR-029):** fixtures minted from snapshot `docs.examples` are
@@ -1429,7 +1507,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
 | `check_snapshot` | NFR-004 / AD-007 |
-| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` (non-gating report artifacts, AC-034) |
+| `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
 | Authoring evals | should-succeed → matched |
@@ -2018,6 +2096,8 @@ excluded from active coverage.
 | FR-031 | AC-033 | A3 | schema unit + skill-body unit |
 | FR-032 | AC-034 | A3 | check_evals unit |
 | FR-033 | AC-035 | A3+ (improvement) | check_evals lint |
+| FR-034 | AC-037 | A3+ (improvement) | CLI unit + skill-body |
+| FR-035 | AC-038 | A3+ (improvement) | check_evals + host_harness unit |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
