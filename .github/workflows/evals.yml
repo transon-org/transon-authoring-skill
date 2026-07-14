@@ -87,6 +87,13 @@ jobs:
           # Repo files the eval job runs — it checks out NOTHING, so ship the
           # gate/harness scripts, the full committed corpus, and SKILL.md.
           cp -R scripts evals SKILL.md "${BUNDLE}/repo/"
+          # docs/proposals/ is NOT documentation ballast here: every constructed
+          # real-world seed (AD-023/FR-033) carries a `source_ref` that the lint
+          # resolves to a file INSIDE the repo (FR-033d provenance link, AC-035).
+          # Without it the full-corpus lint fails 15x before any episode runs.
+          # (The smoke never needed it — its throwaway root has an empty seeds/.)
+          mkdir -p "${BUNDLE}/repo/docs"
+          cp -R docs/proposals "${BUNDLE}/repo/docs/"
 
           tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/evalbundle.tgz" evalbundle
           ls -la "${RUNNER_TEMP}/evalbundle.tgz"
