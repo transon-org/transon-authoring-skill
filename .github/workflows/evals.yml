@@ -158,7 +158,14 @@ jobs:
             echo "TRANSON_EVAL_CLI_PATH=${CLI}"
           } >> "${GITHUB_ENV}"
           echo "python: $(python3 --version)"
-          python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
+          # The relocated deps must import, and the relocated CLI must launch —
+          # if the bundle didn't survive the job hop, fail HERE (no provider
+          # spend), not opaquely mid-episode. NOTE: $GITHUB_ENV only takes effect
+          # in SUBSEQUENT steps, so this check must set PYTHONPATH inline for
+          # itself — without it the check fails ModuleNotFoundError even when the
+          # bundle is perfectly fine (as it did on this workflow's first two-job
+          # dispatch; the smoke already had the inline binding).
+          PYTHONPATH="${PYDEPS}" python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
           "${CLI}" --version
 
       - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
