@@ -1,26 +1,25 @@
 name: Evals
 
-# FR-017 / NFR-010 / AC-008 / AC-036 — full eval gate (SPEC §11.8). Per OQ-017e
-# the credential-holding full run lives in this manually-dispatched workflow
-# only; per-PR CI runs the credential-free `check_evals --lint` and the
-# fake-host / fake-provider unit tests (see ci.yml).
+# FR-017 / NFR-010 / AC-008 / AC-036 — full eval gate (SPEC §11.8), real-host
+# harness (AD-024 / OQ-027). Per OQ-017e the credential-holding full run lives
+# in this manually-dispatched workflow only; per-PR CI runs the credential-free
+# `check_evals --lint` + the fake-host / fake-provider unit tests (see ci.yml).
 #
-# AD-024 / OQ-027 (2026-07-14): the gate runs the skill in the REAL HOST (the
-# Claude Agent SDK reference host, pinned in evals/runner.json.harness), not the
-# retired raw loop. Because that host runs Bash over untrusted fixture input,
-# the live run is gated on the OQ-027f isolation contract, which THIS workflow
-# environment must enforce before the run is trusted:
-#   (i)   ephemeral per-episode workspace, no repo checkout mounted to the host
-#         tool cwd (the driver creates + tears it down);
-#   (ii)  the provider key is available to the model-API call only, NEVER
-#         exported into the environment the model's Bash sees;
-#   (iii) network egress denied by default after the pinned engine install
-#         (mirrors NFR-003) — enforce at the runner/container/network layer;
-#   (iv)  only the AuthoringResult (+ opt-in transcript) leaves the sandbox;
-#         nothing is committed; the NFR-011 secret scan covers captured text.
-# (ii)/(iii) are environment controls the harness cannot self-attest; wire them
-# here (e.g. a container with egress-deny + a key-scoped API proxy) before
-# accepting a baseline from this run.
+# AD-024 / OQ-027: the gate runs the skill in the REAL HOST (the Claude Agent
+# SDK reference host, pinned in evals/runner.json.harness), auto-activated from
+# the installed SKILL.md — not the retired raw loop.
+#
+# ── OQ-027f isolation contract — status of each control in this workflow ──────
+#   (i)   ephemeral per-episode workspace ............ ACTIVE  (driver: host_harness.run_fixture)
+#   (ii)  provider key withheld from tool sandbox .... ACTIVE  (key proxy, below)
+#   (iii) egress denied except the API ............... STAGED  (harden-runner block — see NOTE)
+#   (iv)  artifact controls (secret scan; only the
+#         transcript may leave; nothing committed) ... PARTIAL (scan ACTIVE; upload STAGED)
+# The live real-host path (Agent SDK activation at corpus scale) AND this
+# isolation wiring are UNVALIDATED until the first dispatch. Do NOT accept a
+# baseline (`check_evals --update-baseline`) from a run whose isolation you have
+# not verified in force (OQ-027f is a blocker before a trusted baseline).
+
 on:
   workflow_dispatch:
 
@@ -36,21 +35,103 @@ permissions:
 
 jobs:
   evals:
-    name: Eval gate (check_evals)
+    name: Eval gate (check_evals, real host)
     runs-on: ubuntu-latest
     steps:
+      # ── OQ-027f(iii): deny egress except the Anthropic API ─────────────────
+      # STAGED. Network egress must be denied by default after the installs
+      # below, leaving only api.anthropic.com reachable (the key proxy forwards
+      # there). A raw `iptables -P OUTPUT DROP` on a GitHub-hosted runner also
+      # severs the runner's own control channel to GitHub, so use an egress-aware
+      # guard. Recommended: step-security/harden-runner in `block` mode allowing
+      # only api.anthropic.com — and split the installs into a separate build
+      # job so the registries are allow-listed only there. PIN A VERIFIED SHA
+      # (this repo pins actions by SHA) and validate on first dispatch before
+      # uncommenting:
+      #
+      #   - name: Deny egress except the Anthropic API (OQ-027f(iii))
+      #     uses: step-security/harden-runner@<PINNED_SHA>   # PIN before enabling
+      #     with:
+      #       egress-policy: block
+      #       allowed-endpoints: >
+      #         api.anthropic.com:443
+      #
+      # Until (iii) is in force, (i) ephemeral workspace and (ii) key withholding
+      # already remove key-in-env and repo-data exposure; egress-deny closes the
+      # residual (a determined model reading the key via /proc and exfiltrating,
+      # or fetching arbitrary payloads). A baseline from a run without (iii)
+      # active is NOT trusted.
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
+
       # Installs the pinned engine (transon==0.1.7, AD-007) plus the optional
-      # provider SDK extra ([evals], OQ-017d — never a runtime dependency).
+      # eval SDKs ([evals] extra, OQ-017d/AD-024 — never a runtime dependency).
       - run: python3 -m pip install -e ".[evals]"
-      # Full red/green run: lint, provider tool loop (runs_per_fixture
-      # episodes per fixture), OQ-016 scoring, §11.8 aggregation. Exit 0
-      # green, 1 red gate, 2 config/credential errors.
-      - run: python3 scripts/check_evals.py
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # Pin the Agent SDK to the exact runner.json harness.version so the driver
+      # matches gate identity (AD-024 / OQ-027b — a version change is an
+      # eval-policy commit that resets the baseline).
+      - name: Pin Agent SDK to runner.json harness.version
+        run: |
+          V=$(python3 -c "import json,sys;print(json.load(open('evals/runner.json'))['harness']['version'])")
+          echo "pinning claude-agent-sdk==${V}"
+          python3 -m pip install "claude-agent-sdk==${V}"
+
+      # The Claude Agent SDK drives the Claude Code CLI as a subprocess. Node is
+      # preinstalled on ubuntu-latest. Keep this CLI version tracking the SDK/
+      # harness pin (an eval-policy concern) once a compatible pin is confirmed.
+      - name: Install Claude Code CLI (real host, OQ-027a)
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
+        run: |
+          set -euo pipefail
+          TRANSCRIPTS="${RUNNER_TEMP}/transcripts"
+
+          # (ii) Start the key-scoped proxy with the REAL provider key in its OWN
+          # environment only (inline assignment — NOT exported to this shell, so
+          # check_evals and the model's Bash never inherit it). The proxy holds
+          # the secret and forwards to api.anthropic.com.
+          ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
+            python3 scripts/eval_key_proxy.py --host 127.0.0.1 --port 8787 &
+          PROXY_PID=$!
+          trap 'kill "${PROXY_PID}" 2>/dev/null || true' EXIT
+
+          # Wait for the proxy to accept connections.
+          for _ in $(seq 1 50); do
+            if curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then break; fi
+            sleep 0.2
+          done
+
+          # Run the gate with the base URL pointed at the proxy and only a
+          # PLACEHOLDER key in env (satisfies check_evals' key-present guard; the
+          # proxy rewrites it to the real secret on egress). The real key is
+          # never in this process's environment.
+          ANTHROPIC_BASE_URL="http://127.0.0.1:8787" \
+          ANTHROPIC_API_KEY="placeholder-not-the-secret" \
+            python3 scripts/check_evals.py --transcripts-dir "${TRANSCRIPTS}"
+
+      # (iv) Secret-scan captured transcripts before any of them could leave the
+      # sandbox — same patterns as the committed-fixture lint (NFR-011).
+      - name: Secret-scan transcripts (OQ-027f(iv) / NFR-011)
+        if: always()
+        run: python3 scripts/scan_transcripts.py "${RUNNER_TEMP}/transcripts"
+
+      # (iv) Only the transcripts (AuthoringResult + tool log) may leave, as a
+      # build artifact — NEVER committed to the repo. STAGED: pin a verified
+      # actions/upload-artifact SHA and enable once (iii) is in force.
+      #
+      #   - name: Upload episode transcripts (build artifact, never committed)
+      #     if: always()
+      #     uses: actions/upload-artifact@<PINNED_SHA>   # PIN before enabling
+      #     with:
+      #       name: eval-transcripts
+      #       path: ${{ runner.temp }}/transcripts
+      #       retention-days: 7
+      #       if-no-files-found: ignore
