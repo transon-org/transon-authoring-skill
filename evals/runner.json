@@ -6,5 +6,9 @@
   "tool_budget": 32,
   "runs_per_fixture": 3,
   "pass_rule": "majority",
-  "seed": null
+  "seed": null,
+  "harness": {
+    "kind": "agent-sdk",
+    "version": "0.2.116"
+  }
 }

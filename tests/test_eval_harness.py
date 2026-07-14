@@ -1,4 +1,9 @@
-"""FR-017 / NFR-010 / OQ-017 — eval harness tool loop (scripted fake provider).
+"""FR-017 / OQ-017 — raw tool loop, now the OQ-027d offline smoke fixture.
+
+*(rev 2026-07-14, AD-024 / OQ-027d)* `scripts/eval_harness.py` is **no longer
+the NFR-010 gate harness** — the gate runs the real host (see
+`tests/test_host_harness.py`). It is retained as a non-gating offline smoke
+fixture; these fake-provider tests keep exercising its loop plumbing.
 
 `scripts/eval_harness.py` is the raw provider-API tool loop of SPEC §11.8
 (OQ-017): verbatim-SKILL.md system prompt plus fixed preamble (OQ-017a),

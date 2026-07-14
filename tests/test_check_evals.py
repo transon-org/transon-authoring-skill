@@ -19,10 +19,10 @@ Two surfaces:
   orchestrated default mode with its 0/1/2 exit-code discipline.
 
 All tests are offline and provider-free (OQ-017e): scoring/aggregation is
-driven with hand-built episodes; orchestration tests monkeypatch
-`eval_harness.run_fixture` and the provider factory, and never need the
-anthropic SDK or an API key. Only the pinned local engine is exercised
-(the OQ-016a re-verify subprocess).
+driven with hand-built episodes; orchestration tests monkeypatch the real-host
+gate seam — `host_harness.run_fixture` and the host factory `_build_host`
+(AD-024/OQ-027) — and never need any SDK or an API key. Only the pinned local
+engine is exercised (the OQ-016a re-verify subprocess).
 """
 
 import copy
@@ -41,6 +41,7 @@ CHECK = REPO_ROOT / "scripts" / "check_evals.py"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import check_evals  # noqa: E402
 import eval_harness  # noqa: E402
+import host_harness  # noqa: E402
 from check_evals import aggregate, lint_evals, score_episode  # noqa: E402
 
 from transon_authoring._ingress import schema_violations  # noqa: E402
@@ -714,8 +715,8 @@ def orchestrate(
     transcripts_dir=None,
     episode_for=None,
 ):
-    """Run `check_evals.main` in full-run mode, fully offline (OQ-017e):
-    env key faked, provider factory stubbed, `eval_harness.run_fixture`
+    """Run `check_evals.main` in full-run mode, fully offline (OQ-027e):
+    env key faked, host factory stubbed, `host_harness.run_fixture`
     scripted, and `score_episode` replaced by the episode's planned score.
 
     ``episode_for(fixture)`` optionally supplies a richer EpisodeResult
@@ -723,15 +724,15 @@ def orchestrate(
     FR-032 transcript path; ``transcripts_dir`` passes ``--transcripts-dir``.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
-    monkeypatch.setattr(check_evals, "_build_provider", lambda cfg: object())
+    monkeypatch.setattr(check_evals, "_build_host", lambda cfg: object())
 
-    def scripted_run_fixture(fixture, runner_cfg, provider, repo_root):
+    def scripted_run_fixture(fixture, runner_cfg, host, repo_root):
         base = episode_for(fixture) if episode_for is not None else episode(
             outcome="submitted"
         )
         return dict(base, score=scores_by_id[fixture["id"]])
 
-    monkeypatch.setattr(eval_harness, "run_fixture", scripted_run_fixture)
+    monkeypatch.setattr(host_harness, "run_fixture", scripted_run_fixture)
     monkeypatch.setattr(
         check_evals, "score_episode", lambda fixture, ep: ep["score"]
     )
@@ -910,7 +911,7 @@ def test_fr_017_missing_credentials_exit_2():
 
 def test_fr_017_red_lint_blocks_full_run_exit_1(monkeypatch, tmp_repo, capsys):
     # FR-017 — default mode runs the NFR-011 lint first; a red lint is exit 1
-    # and no episode ever runs (the provider factory would explode).
+    # and no episode ever runs (the host factory would explode).
     mutate_fixture(
         tmp_repo,
         "seed-refuse-nonexistent-operator",
@@ -919,9 +920,9 @@ def test_fr_017_red_lint_blocks_full_run_exit_1(monkeypatch, tmp_repo, capsys):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
 
     def explode(cfg):  # pragma: no cover - must not be reached
-        raise AssertionError("provider built despite red lint")
+        raise AssertionError("host built despite red lint")
 
-    monkeypatch.setattr(check_evals, "_build_provider", explode)
+    monkeypatch.setattr(check_evals, "_build_host", explode)
     assert check_evals.main(["--root", str(tmp_repo)]) == 1
     _, err = capsys.readouterr()
     assert "secret scan" in err

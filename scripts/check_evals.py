@@ -796,8 +796,9 @@ def _import_fixture_generator():
 
 
 def _import_eval_harness():
-    """Import scripts/eval_harness.py lazily (module-level attribute lookups
-    keep it monkeypatchable in offline tests, OQ-017e)."""
+    """Import scripts/eval_harness.py lazily. Since AD-024/OQ-027 this is the
+    **non-gating offline smoke fixture** (OQ-027d), no longer the gate harness;
+    module-level lookups keep it monkeypatchable in its own tests (OQ-017e)."""
     try:
         import eval_harness
     except ImportError:  # pragma: no cover - invoked outside scripts/
@@ -806,16 +807,34 @@ def _import_eval_harness():
     return eval_harness
 
 
-def _build_provider(runner_cfg: dict[str, Any]):
-    """Build the provider pinned by runner.json (OQ-017d). Raises on an
-    unsupported provider or a missing [evals] extra (config errors, exit 2).
+def _import_host_harness():
+    """Import scripts/host_harness.py lazily (AD-024/OQ-027 — the real-host gate
+    driver). Module-level lookups keep ``run_fixture`` monkeypatchable in the
+    offline orchestration tests (OQ-027e), exactly as the raw loop was."""
+    try:
+        import host_harness
+    except ImportError:  # pragma: no cover - invoked outside scripts/
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import host_harness
+    return host_harness
+
+
+def _build_host(runner_cfg: dict[str, Any]):
+    """Build the real host pinned by ``runner.json.harness`` (AD-024/OQ-027a).
+    Raises on an unimplemented ``harness.kind`` or a missing ``[evals]`` extra
+    (config errors, surfaced as exit 2 by :func:`run_evals` — AC-036a).
+
+    v1 implements ``kind: "agent-sdk"`` (the Claude Agent SDK reference host);
+    ``"claude-code"`` is admitted by the runner.json schema but unimplemented,
+    mirroring how ``provider`` is a string yet only ``"anthropic"`` is built.
     """
-    if runner_cfg["provider"] != "anthropic":
-        raise ValueError(
-            f"unsupported provider {runner_cfg['provider']!r} in "
-            "evals/runner.json (v1 implements 'anthropic' only, OQ-017d)"
-        )
-    return _import_eval_harness().AnthropicProvider(runner_cfg)
+    kind = runner_cfg["harness"]["kind"]
+    if kind == "agent-sdk":
+        return _import_host_harness().AgentSDKHost(runner_cfg)
+    raise ValueError(
+        f"unimplemented harness kind {kind!r} in evals/runner.json "
+        "(v1 implements 'agent-sdk' only, AD-024 / OQ-027a)"
+    )
 
 
 def write_transcripts(
@@ -894,9 +913,11 @@ def run_evals(
         for path in sorted((evals_dir / "cases").glob("*.json"))
     ]
 
-    harness = _import_eval_harness()
+    # AD-024/OQ-027: the gate harness is the real host (Agent SDK reference),
+    # selected by runner.json.harness.kind; the raw loop is retired as the gate.
+    harness = _import_host_harness()
     try:
-        provider = _build_provider(runner_cfg)
+        host = _build_host(runner_cfg)
     except Exception as exc:
         print(f"check-evals: config error: {exc}", file=sys.stderr)
         return 2
@@ -911,7 +932,7 @@ def run_evals(
     for i, fixture in enumerate(fixtures, 1):
         episodes: list[dict[str, Any]] = []
         for j in range(runs_per_fixture):
-            episode = harness.run_fixture(fixture, runner_cfg, provider, repo_root)
+            episode = harness.run_fixture(fixture, runner_cfg, host, repo_root)
             episodes.append(episode)
             tok = episode.get("tokens") or {}
             for key in run_tokens:

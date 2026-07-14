@@ -1,3 +1,8 @@
+---
+name: transon-authoring
+description: Author engine-valid Transon JSON transformation templates for a described data transform. Use when the user wants to create, generate, write, or fix a Transon template (a Transon transform), or to reshape, flatten, map, project, or restructure JSON data into another JSON shape via the Transon engine — especially when input/output sample pairs are available to verify against.
+---
+
 # transon-authoring
 
 Authors engine-valid [Transon](https://pypi.org/project/transon/) JSON templates and returns one

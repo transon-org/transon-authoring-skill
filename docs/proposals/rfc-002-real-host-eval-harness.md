@@ -1,10 +1,15 @@
 # RFC-002: Eval gate on the real host harness (`claude -p` / Agent SDK)
 
-- **Status:** **Draft (proposed 2026-07-13).** Not yet normative. If accepted, it
-  revises locked decisions and lands via a governed `docs/SPEC.md` edit
-  (maker ≠ checker): **OQ-017** (harness shape — reopened), **AD-020 / §11.8**
-  (eval runner + harness), **FR-017** (improvement loop), and the
-  `evals/runner.json` shape. On conflict the SPEC wins until then.
+- **Status:** **Accepted & absorbed into SPEC (2026-07-14).** Normative wording lives in
+  `docs/SPEC.md`: **AD-024** (real-host eval harness, Agent SDK reference), **OQ-027** (resolved
+  decisions for R1–R6: driver, harness pin, Cursor parity, retired raw loop, host→EpisodeResult
+  adapter, isolation contract), **AC-036** (harness pin + adapter), plus the **OQ-017** harness-shape
+  revision, the §11.8 `evals/runner.json` `harness` block + Harness bullet, and the **FR-017** /
+  **NFR-010** rev notes. This file is historical rationale only; on conflict the SPEC wins. Session
+  decisions recorded at absorption: driver = **Agent SDK** (extensible `harness.kind` pin, v1
+  implements `agent-sdk`); raw loop **demoted to non-gating offline smoke**; Cursor = **reference
+  host only** (parity stays AD-005/NFR-007). Live re-baseline under the new harness remains a
+  dispatch-workflow action gated on the OQ-027f isolation contract.
 - **Type:** Measurement-architecture proposal for the NFR-010 gate. Does **not**
   change Transon semantics, `verify`, `check_samples`, or the SampleSet schema.
 - **Related (normative today):** OQ-017 (raw provider tool loop), AD-020 / §11.8
@@ -127,6 +132,12 @@ accepted: swap the driver, add the `runner.json` harness pin, **re-baseline**
 model-pin swap), and delete/demote `eval_harness.py`.
 
 ## Open questions
+
+*(Resolved 2026-07-14 — all folded into SPEC **OQ-027**: R1 driver = Agent SDK reference host,
+extensible `harness.kind` pin (a); R2 pin shape = `runner.json.harness {kind, version}`, change
+resets baseline (b); R3 Cursor = reference host only (c); R4 raw loop = demoted to non-gating
+smoke (d); R5 adapter = deterministic host→EpisodeResult in `scripts/host_harness.py` (e); R6
+isolation = the four-part contract, environment-enforced (f).)*
 
 - **OQ-R1 — Driver:** `claude -p` (headless Claude Code) vs the Claude Agent SDK.
   Agent SDK favoured for pinnability + a defined tool set; confirm it can install
