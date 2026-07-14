@@ -201,29 +201,49 @@ jobs:
 
           # Run the gate with the base URL pointed at the proxy and only a
           # PLACEHOLDER key in env (satisfies check_evals' key-present guard; the
-          # proxy rewrites it to the real secret on egress). Capture the JSON
-          # report (stdout) separately from progress/RED reasons (stderr), print
-          # both, then propagate check_evals' exit code — 0 green, 1 red gate, 2
-          # config — so the JOB status IS the gate verdict (NFR-010 / AC-008).
-          # The bundled deps import via PYTHONPATH (job env); the CLI is bound
-          # via TRANSON_EVAL_CLI_PATH.
+          # proxy rewrites it to the real secret on egress). Then propagate
+          # check_evals' exit code — 0 green, 1 red gate, 2 config — so the JOB
+          # status IS the gate verdict (NFR-010 / AC-008). The bundled deps
+          # import via PYTHONPATH (job env); the CLI is bound via
+          # TRANSON_EVAL_CLI_PATH.
+          #
+          # Stream progress LIVE (FR-035): `2>&1 > "${REPORT}"` sends stderr — the
+          # per-episode `[i/N] fixture run j/3 -> outcome | steps= cost= | running:`
+          # lines — to the pipe (tee → job log, visible as it happens) while stdout
+          # (the JSON report) still goes to the file. A 50x3 gate runs for tens of
+          # minutes; redirecting both streams to files made it a silent black box
+          # until the very end. PIPESTATUS[0] keeps check_evals' own exit code —
+          # `$?` would be tee's. `-u` defeats any residual stdio buffering.
           set +e
           ANTHROPIC_BASE_URL="http://127.0.0.1:8787" \
           ANTHROPIC_API_KEY="placeholder-not-the-secret" \
-            python3 "${B}/repo/scripts/check_evals.py" --transcripts-dir "${TRANSCRIPTS}" \
-              > "${REPORT}" 2> "${LOG}"
-          CE=$?
+            python3 -u "${B}/repo/scripts/check_evals.py" --transcripts-dir "${TRANSCRIPTS}" \
+              2>&1 > "${REPORT}" | tee "${LOG}"
+          CE=${PIPESTATUS[0]}
           set -e
 
-          cat "${LOG}"
           echo "----- report.json -----"
           cat "${REPORT}" || true
-          # Keep the report with the transcripts so it uploads for diagnosis /
-          # baseline derivation (a build artifact — never committed).
-          mkdir -p "${TRANSCRIPTS}"
-          cp "${REPORT}" "${TRANSCRIPTS}/report.json" 2>/dev/null || true
+          # check_evals itself now writes report.json into the transcripts dir
+          # (FR-035), so the uploaded artifact is self-contained and identical to
+          # a local run's — no manual copy needed.
           echo "check_evals exit: ${CE}"
           exit "${CE}"
+
+      # FR-035 — publish the MEASURED run telemetry to the job summary, read
+      # straight from run_summary.json: the host's real `total_cost_usd`, token
+      # totals + prompt-cache hit rate, the steps-by-category tool histogram, the
+      # per-fixture normalization and the per-episode results. Non-gating
+      # presentation over artifacts that gate nothing (AC-038).
+      - name: Publish measured run summary (FR-035)
+        if: always()
+        run: |
+          set -euo pipefail
+          if ! python3 "${RUNNER_TEMP}/evalbundle/repo/scripts/summarize_run.py" \
+                 "${RUNNER_TEMP}/transcripts" >> "${GITHUB_STEP_SUMMARY}"; then
+            echo "_(no run_summary.json — the gate did not reach the episode phase)_" \
+              >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       # (iv) Secret-scan captured transcripts before any could leave the sandbox
       # — same patterns as the committed-fixture lint (NFR-011). The scanner is

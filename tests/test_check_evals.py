@@ -700,6 +700,11 @@ def verify_failed_result(stage="match"):
     }
 
 
+#: FR-035 — top-level artifacts a --transcripts-dir run writes ALONGSIDE the
+#: scored EpisodeTranscripts. Excluded when asserting the AC-034 transcript set.
+_FR035_SIBLINGS = {"run_summary.json", "report.json"}
+
+
 def corpus_scores(**overrides):
     """Per-fixture score plan for orchestration tests: default all-pass."""
     plan = {fid: "pass" for fid in ALL_FIXTURES}
@@ -1044,12 +1049,13 @@ def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
     model_id = runner["model_id"]
 
     # Exactly one EpisodeTranscript per (fixture, run_index). The FR-035
-    # run_summary.json sibling and the messages/ subdir are additive artifacts
-    # (asserted in test_fr_035_*) and excluded from this AC-034 transcript set.
+    # run_summary.json / report.json siblings and the messages/ subdir are
+    # additive artifacts (asserted in test_fr_035_*) and excluded from this
+    # AC-034 transcript set.
     expected_names = {
         f"{fid}.{i}.json" for fid in ALL_FIXTURES for i in range(runs)
     }
-    written = {p.name for p in transcripts_dir.glob("*.json")} - {"run_summary.json"}
+    written = {p.name for p in transcripts_dir.glob("*.json")} - _FR035_SIBLINGS
     assert written == expected_names
     assert len(written) == len(ALL_FIXTURES) * runs
 
@@ -1221,14 +1227,92 @@ def test_fr_035_ac_038_artifacts_written_and_scoring_parity(
     assert summary["totals"]["steps"] == 2 * n
     assert summary["totals"]["steps_by_category"] == {"Bash": n, "Read": n}
     assert "run_summary" in err  # the stderr one-line telemetry summary
+    # The gate report is kept beside the telemetry so the artifact dir is
+    # self-contained (local runs match the dispatch job's artifacts exactly).
+    assert json.loads(
+        (transcripts_dir / "report.json").read_text(encoding="utf-8")
+    ) == report_with
     # The scored EpisodeTranscript files still exist, one per episode.
-    assert len({p.name for p in transcripts_dir.glob("*.json")} - {"run_summary.json"}) == n
+    assert len({p.name for p in transcripts_dir.glob("*.json")} - _FR035_SIBLINGS) == n
 
     # Parity: the same run WITHOUT --transcripts-dir gives an identical report.
     exit_without = orchestrate(monkeypatch, tmp_repo, scores, episode_for=episode_for)
     report_without, _ = report_from(capsys)
     assert exit_with == exit_without == 0
     assert report_with == report_without
+
+
+def test_fr_035_summarize_run_renders_measured_telemetry():
+    # FR-035 — summarize_run renders the MEASURED run_summary (the host's real
+    # total_cost_usd, never a list-price estimate), the steps-by-category
+    # histogram, the per-fixture normalization and the per-episode intermediate
+    # results. Pure presentation: it gates nothing (AC-038).
+    import summarize_run
+
+    summary = {
+        "schema_version": "1.0",
+        "model_id": "claude-haiku-4-5-20251001",
+        "harness": {"kind": "agent-sdk", "version": "0.2.116"},
+        "runs_per_fixture": 3,
+        "episodes": [
+            {
+                "fixture_id": "fa", "run_index": 0, "outcome": "submitted",
+                "error": None,
+                "tokens": {"input": 10, "output": 500, "cache_read": 900,
+                           "cache_creation": 90, "turns": 1},
+                "cost_usd": 0.0750, "steps": 8,
+                "steps_by_category": {"Bash": 6, "Read": 2},
+            },
+            {
+                "fixture_id": "fa", "run_index": 1, "outcome": "no_submit",
+                "error": "host ended: success; no parseable AuthoringResult",
+                "tokens": {"input": 10, "output": 900, "cache_read": 1100,
+                           "cache_creation": 90, "turns": 2},
+                "cost_usd": 0.2600, "steps": 12,
+                "steps_by_category": {"Bash": 9, "Read": 3},
+            },
+        ],
+        "totals": {
+            "episodes": 2,
+            "tokens": {"input": 20, "output": 1400, "cache_read": 2000,
+                       "cache_creation": 180, "turns": 3},
+            "cost_usd": 0.3350, "steps": 20,
+            "steps_by_category": {"Bash": 15, "Read": 5},
+            "outcomes": {"submitted": 1, "no_submit": 1,
+                         "budget_exceeded": 0, "infra_error": 0},
+            "errors": 1,
+        },
+        "by_fixture": {
+            "fa": {
+                "runs": 2, "fixture_bytes": 5100,
+                "cost_usd_total": 0.3350, "cost_usd_mean": 0.1675,
+                "tokens_mean": {"input": 10, "output": 700, "cache_read": 1000,
+                                "cache_creation": 90, "turns": 1.5},
+                "steps_mean": 10.0, "cache_read_ratio": 0.9091,
+                "cost_usd_per_kb": 0.0672,
+            },
+        },
+    }
+    report = {"fixtures": {"fa": {"majority": "pass"}}, "red": ["some red reason"]}
+
+    out = summarize_run.render(summary, report)
+
+    # Measured cost — the host's total_cost_usd, explicitly not an estimate.
+    assert "$0.3350" in out and "measured" in out.lower()
+    assert "estimate" not in out.lower()
+    # Outcomes, errors, cache hit rate, and the steps-by-category histogram.
+    assert "submitted=1" in out and "no_submit=1" in out and "errors=1" in out
+    assert "`Bash`=15" in out and "`Read`=5" in out
+    assert "prompt cache hit" in out
+    # Per-fixture row carries the majority (folded in from the gate report).
+    assert "`fa`" in out and "pass" in out and "5,100" in out
+    assert "some red reason" in out
+    # Per-episode intermediate results, including the failing episode's error.
+    assert "per-episode results" in out
+    assert "$0.2600" in out and "no parseable AuthoringResult" in out
+
+    # Renders without a report too (no majority/red available).
+    assert "$0.3350" in summarize_run.render(summary)
 
 
 def test_fr_035_only_scopes_provider_run(monkeypatch, tmp_repo, capsys):

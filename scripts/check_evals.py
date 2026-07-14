@@ -1103,6 +1103,7 @@ def run_evals(
     # box, and surfaces prompt-cache effectiveness (cache_read climbing).
     total = len(fixtures)
     run_tokens = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
+    run_cost = 0.0
     for i, fixture in enumerate(fixtures, 1):
         episodes: list[dict[str, Any]] = []
         for j in range(runs_per_fixture):
@@ -1111,10 +1112,20 @@ def run_evals(
             tok = episode.get("tokens") or {}
             for key in run_tokens:
                 run_tokens[key] += int(tok.get(key, 0) or 0)
+            # FR-035 — per-episode telemetry on the live line, so a long run is
+            # diagnosable AS IT RUNS (locally and in the dispatch job log), not
+            # only from the artifacts afterwards.
+            cost = float(episode.get("cost_usd") or 0.0)
+            run_cost += cost
+            steps = len(episode.get("tool_call_log") or [])
+            error = episode.get("error")
             print(
                 f"check-evals: [{i}/{total}] {fixture['id']} "
                 f"run {j + 1}/{runs_per_fixture} -> {episode['outcome']}  "
-                f"| tokens in={run_tokens['input']:,} out={run_tokens['output']:,} "
+                f"| steps={steps} cost=${cost:.4f}"
+                + (f" error={error}" if error else "")
+                + f"  | running: cost=${run_cost:.4f} "
+                f"tokens in={run_tokens['input']:,} out={run_tokens['output']:,} "
                 f"cache_read={run_tokens['cache_read']:,} "
                 f"cache_write={run_tokens['cache_creation']:,}",
                 file=sys.stderr,
@@ -1122,7 +1133,7 @@ def run_evals(
             )
         per_fixture_episodes[fixture["id"]] = episodes
     print(
-        f"check-evals: episodes complete — total tokens "
+        f"check-evals: episodes complete — total cost=${run_cost:.4f} tokens "
         f"in={run_tokens['input']:,} out={run_tokens['output']:,} "
         f"cache_read={run_tokens['cache_read']:,} "
         f"cache_write={run_tokens['cache_creation']:,}",
@@ -1155,6 +1166,15 @@ def run_evals(
 
     report = aggregate(fixtures, per_fixture_episodes, targets, baseline)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    # FR-035 — keep the gate report BESIDE the telemetry so the artifact directory
+    # is self-contained and a local run's artifacts match the dispatch job's
+    # exactly (summarize_run folds majority/red in from here). stdout is unchanged
+    # — this is an additional artifact, never a substitute (AC-034 / AC-038).
+    if transcripts_dir is not None:
+        (transcripts_dir / "report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     for reason in report["red"]:
         print(f"check-evals: RED: {reason}", file=sys.stderr)
     if report["red"]:
