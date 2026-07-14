@@ -438,8 +438,17 @@ No console-script product; no MCP.
   committed `output` (and the captured `writes` for a `writes`-declaring case); (b) **no leakage** —
   the fixture object carries no template/answer field outside its SampleSet `cases` (enforced by the
   closed `eval_fixture.json` schema, `additionalProperties: false`); (c) the SampleSet is
-  `ok_for_verify` (FR-027); and (d) **provenance link** — the seed `source_ref`'s file portion
-  (before any `#`/whitespace) resolves to an existing repo file. Real-world-pack SampleSets SHOULD
+  `ok_for_verify` (FR-027). `source_ref` remains a **required non-empty provenance string** naming
+  the documented API/source the payload was constructed from — the AD-023 "constructed, never
+  captured" audit trail that backs `redacted: false` / no `consent`.
+  *(rev 2026-07-15: the former clause (d) **provenance link** — resolving `source_ref`'s file
+  portion to an existing repo file — is **WITHDRAWN**. It was a repo-integrity check running inside
+  the credential-holding eval gate, which by OQ-027f(i) checks out nothing and runs from a minimal
+  bundle; it made the gate depend on the `docs/` tree and killed the first full dispatch in
+  pre-flight lint. `source_ref` has no consumer in scoring, verify, targets or baseline, and neither
+  the engine-freeze (a) nor the no-leakage (b) guarantee rests on resolving it to a path — so the
+  check is removed rather than the bundle widened. `source_ref` therefore no longer names a repo
+  path.)* Real-world-pack SampleSets SHOULD
   additionally carry edge obligations (empty arrays, missing→`null`) — a review-time authoring
   expectation (§12 maker ≠ checker), not a lint-enforced one. **Enforcement boundary:** the
   engine-freeze gate binds every fixture that **has** a constructed seed, and a real-world-pack
@@ -652,9 +661,12 @@ No console-script product; no MCP.
   does not engine-freeze — some case's committed `output` differs from re-executing the seed
   `template` through the pinned engine on that case's `input` (§11.4 equality) — or when the fixture
   object carries a template/answer field outside its SampleSet `cases` (leakage), or when a
-  constructed-seed fixture's SampleSet is not `ok_for_verify`, or when the seed `source_ref`'s file
-  portion does not resolve to a repo file. A real-world pack whose fixtures, seeds, and pinned engine
-  agree lints **green**. The gate binds only fixtures that carry a constructed seed; a matched
+  constructed-seed fixture's SampleSet is not `ok_for_verify`, or when the seed omits a non-empty
+  `source_ref` provenance string. A real-world pack whose fixtures, seeds, and pinned engine
+  agree lints **green**. *(rev 2026-07-15: the `source_ref`-resolves-to-a-repo-file clause is
+  withdrawn with FR-033(d) — see FR-033. The field is still required and non-empty; only the
+  filesystem resolution is gone, so the lint no longer depends on the `docs/` tree and can run
+  inside the bundle-only eval job.)* The gate binds only fixtures that carry a constructed seed; a matched
   fixture committed without one is treated as hand-authored (trusted via §12 review, not
   engine-frozen), and a genuinely inexpressible transform is authored `expect: "refuse"` with no seed
   (AD-023) — see FR-033's enforcement boundary.

@@ -1,6 +1,6 @@
 {
   "origin": "real-world-pack",
-  "source_ref": "docs/proposals/big-real-world-transform-samples.md §1 — AWS EC2 describe-instances",
+  "source_ref": "AWS EC2 describe-instances response — constructed from the public API reference (AD-023 real-world pack §1)",
   "template": {
     "$": "chain",
     "funcs": [

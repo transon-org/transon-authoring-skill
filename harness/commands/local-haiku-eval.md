@@ -1,19 +1,46 @@
 # Local Haiku eval (non-normative)
 
-Run the committed eval corpus through the **gate model** (`claude-haiku-4-5-20251001`) locally: one
-sandboxed `Agent(model="haiku")` episode per `evals/cases/*.json` fixture, scored with the real
-`check_evals.score_episode` (schema-valid + independent re-verify — AD-004).
+Run the committed eval corpus through the **gate model** (`claude-haiku-4-5-20251001`) locally.
+Two paths, and they are NOT interchangeable — pick by whether you need artifacts.
 
-**This is NOT the §11.8 gate.** The normative NFR-010 gate is the anthropic-SDK harness
-(`scripts/eval_harness.py` + `scripts/check_evals.py`) under `evals/runner.json`, run ×3 with
-credentials in the dispatch workflow. This command is an *indicative* pre-check; its no-repo-read
-sandbox is **instruction-enforced, not a jail**. It does not update `evals/baseline.json` and does
-not close any DoD.
+**This is NOT the §11.8 gate.** The normative NFR-010 gate is the real-host harness
+(`scripts/host_harness.py` — Agent SDK, AD-024/OQ-027 — driven by `scripts/check_evals.py`) under
+`evals/runner.json`, run ×3 with credentials in the dispatch workflow. Neither path below updates
+`evals/baseline.json` or closes a DoD.
 
-The deterministic halves live in `scripts/local_eval.py` (`setup` / `score`); the Haiku fan-out is
-driven by the orchestrating model.
+## Path A — real host (SAME artifacts as CI). **Preferred.**
 
-## Run it (Workflow — recommended)
+`evals/runner.json` already pins `model_id: claude-haiku-4-5-20251001` — the exact gate model — so
+running `check_evals` **locally** IS a local Haiku eval, executed through the same `AgentSDKHost`
+the dispatch uses. It therefore emits the **identical FR-035 artifact set** (SPEC §11.8 / AD-025):
+
+    python scripts/check_evals.py --only <id[,id…]> --transcripts-dir evals/_runs/<stamp> --root .
+    python scripts/summarize_run.py evals/_runs/<stamp>          # measured cost / steps / per-episode
+
+    evals/_runs/<stamp>/<id>.<run>.json                   # EpisodeTranscript (FR-032)
+    evals/_runs/<stamp>/messages/<id>.<run>.messages.json # WHOLE host transcript (FR-035)
+    evals/_runs/<stamp>/run_summary.json                  # tokens, MEASURED cost, steps-by-category
+    evals/_runs/<stamp>/report.json                       # majority + red
+
+Byte-for-byte the layout the dispatch uploads as `eval-transcripts`. `evals/_runs/` is git-ignored.
+Needs a funded `ANTHROPIC_API_KEY`. On Apple silicon the repo `.venv` is x86_64 and the SDK's CLI
+fails under Rosetta — use a native arm64 venv (`uv venv --python 3.11` + `uv pip install -e
+".[evals]"`) and activate it so the model's Bash resolves `python -m transon_authoring`.
+
+Omit `--only` for the whole corpus. A subset that omits a whole bucket makes the aggregate
+red-by-construction — expected: the telemetry, not the verdict, is the point of a probe.
+
+## Path B — subagent fan-out (fast, but produces NO cost/transcripts)
+
+One sandboxed `Agent(model="haiku")` episode per fixture, scored with the real
+`check_evals.score_episode` (schema-valid + independent re-verify — AD-004). Parallel and cheap to
+orchestrate, but the Agent tool exposes **no token usage, no cost, and no message stream** to the
+driver, so this path **cannot** emit the FR-035 whole-transcript / `run_summary.json` artifacts —
+only pass/fail scores. Use it as a quick indicative pre-check; use Path A whenever you need cost,
+transcripts, or CI-comparable numbers. Its no-repo-read sandbox is **instruction-enforced, not a
+jail**. The deterministic halves live in `scripts/local_eval.py` (`setup` / `score`).
+
+## Run Path B (Workflow — recommended)
 
 Pick a fresh empty temp dir `$DIR` outside the repo (e.g. under the session scratchpad), then invoke
 the bundled workflow — it does setup → parallel Haiku fan-out → score in one run, and returns the

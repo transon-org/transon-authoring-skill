@@ -320,23 +320,16 @@ def _lint_constructed_seed(
         )
         return failures
 
-    # (d) provenance link (FR-033d / AC-035): the source_ref's file portion
-    # (before any '#' anchor or trailing whitespace/section label) must resolve
-    # to an existing repo file INSIDE the repo. Fail closed: an empty file part
-    # (anchor-only source_ref) or a path that escapes repo_root (absolute / '..')
-    # is red, never a silent skip.
-    repo_root = cases_dir.parent.parent.resolve()
-    file_part = re.split(r"[#\s]", seed["source_ref"], maxsplit=1)[0]
-    provenance_ok = False
-    if file_part:
-        resolved = (repo_root / file_part).resolve()
-        provenance_ok = resolved.is_relative_to(repo_root) and resolved.is_file()
-    if not provenance_ok:
-        failures.append(
-            f"{path}: source_ref file {file_part!r} does not resolve to a file "
-            "inside the repository (FR-033d provenance link / AC-035)"
-        )
-        return failures
+    # NOTE (rev 2026-07-15, FR-033/AC-035): the former (d) "provenance link" check
+    # — resolving source_ref's file portion to an existing repo file — is
+    # WITHDRAWN. It was a repo-integrity check running inside the eval gate, which
+    # by OQ-027f(i) checks out nothing and runs from a minimal bundle: it made the
+    # gate depend on the docs/ tree and killed the first full dispatch in the
+    # pre-flight lint. source_ref is still REQUIRED and non-empty (shape check
+    # above) as the AD-023 constructed-not-captured provenance trail, but it names
+    # a documented API/source, not a repo path — nothing in scoring, verify,
+    # targets or baseline reads it, and neither engine-freeze (a) nor no-leakage
+    # (b) depends on resolving it.
 
     fixture = fixtures_by_stem.get(path.stem)
     if fixture is None:

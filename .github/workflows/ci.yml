@@ -43,7 +43,10 @@ jobs:
       # runs `check_evals --lint` (OQ-017e). Full eval runs live in a
       # separate credential-holding dispatch workflow (FR-017).
       - run: python3 scripts/check_evals.py --lint
-      - run: python3 -m pytest -q
+      # -v (not -q): name each test as it runs. A CI failure in a dot-stream tells
+      # you nothing; GitHub collapses the step anyway, so verbosity is free.
+      # pyproject's addopts adds -ra + --durations=15 (which test is slow, and why).
+      - run: python3 -m pytest -v
 
   # NFR-003 / AC-020 — offline after install: verify/check/metadata need no
   # network once the pinned engine and package are installed. Install runs

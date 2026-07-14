@@ -57,13 +57,15 @@ def run_check(*args: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
-    """A tmp repo root with the committed evals/ corpus copied in, plus the
-    docs/proposals/ tree the constructed real-world-pack seeds' source_ref
-    pointers resolve to (FR-033d provenance-link check)."""
+    """A tmp repo root with ONLY the committed evals/ corpus copied in.
+
+    Deliberately carries **no `docs/` tree** (rev 2026-07-15): the withdrawn
+    FR-033d provenance-link check used to resolve each constructed seed's
+    `source_ref` to a repo file, which forced this fixture — and, fatally, the
+    bundle-only eval job (OQ-027f(i) checks out nothing) — to carry `docs/`.
+    Linting green from this docs-free root is now the regression guard that the
+    corpus lint runs inside the eval bundle."""
     shutil.copytree(REPO_ROOT / "evals", tmp_path / "evals")
-    shutil.copytree(
-        REPO_ROOT / "docs" / "proposals", tmp_path / "docs" / "proposals"
-    )
     return tmp_path
 
 
@@ -452,17 +454,12 @@ def mint_constructed_into(root: Path) -> tuple[Path, Path]:
     }
     seed = {
         "origin": "real-world-pack",
-        "source_ref": "docs/proposals/big-real-world-transform-samples.md#project-items",
+        # rev 2026-07-15 (FR-033/AC-035): a PROVENANCE string naming the
+        # documented source — no longer a repo path, and no longer resolved.
+        "source_ref": "GitHub project items API — public API reference",
         "template": copy.deepcopy(CONSTRUCTED_TEMPLATE),
         "notes": "Missing name defaults to null; empty items list yields an empty list.",
     }
-    # FR-033d: the seed source_ref's file portion must resolve under the lint
-    # root; the tmp_repo fixture already copies docs/proposals/, but guard for
-    # callers passing a bare root (create the referenced doc if it is absent).
-    doc = root / "docs" / "proposals" / "big-real-world-transform-samples.md"
-    if not doc.is_file():
-        doc.parent.mkdir(parents=True, exist_ok=True)
-        doc.write_text("stub provenance doc for the constructed-seed test\n", encoding="utf-8")
     seeds_dir = root / "evals" / "seeds"
     seeds_dir.mkdir(parents=True, exist_ok=True)
     fixture_path = root / "evals" / "cases" / f"{CONSTRUCTED_ID}.json"
@@ -558,34 +555,44 @@ def test_ac_035_non_ok_for_verify_red(tmp_repo: Path):
     ), failures
 
 
-def test_ac_035_bad_source_ref_file_red(tmp_repo: Path):
-    # AC-035 / FR-033d (provenance link) — a constructed seed whose source_ref
-    # file portion does not resolve to a repo file is red, even when the anchor
-    # is stripped.
+def test_ac_035_source_ref_is_provenance_not_a_repo_path(tmp_repo: Path):
+    """AC-035 / FR-033 (rev 2026-07-15) — `source_ref` is a REQUIRED non-empty
+    PROVENANCE string naming the documented API the payload was constructed from
+    (the AD-023 constructed-never-captured trail backing `redacted: false`), and
+    is NO LONGER resolved to a repo file.
+
+    The withdrawn FR-033d link check was a repo-integrity check running inside
+    the credential-holding eval gate, which by OQ-027f(i) checks out nothing and
+    runs from a minimal bundle — it made the gate depend on the `docs/` tree and
+    killed the full gate's first dispatch in pre-flight lint (15 failures, $0
+    spend). Nothing in scoring, verify, targets or baseline reads `source_ref`,
+    and neither engine-freeze nor no-leakage depends on resolving it."""
     _fixture_path, seed_path = mint_constructed_into(tmp_repo)
-    seed = json.loads(seed_path.read_text(encoding="utf-8"))
-    seed["source_ref"] = "docs/proposals/does-not-exist.md#anchor"
-    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    # The coupling is gone: the lint root carries NO docs/ tree — exactly the
+    # shape of the eval bundle (scripts + evals + SKILL.md).
+    assert not (tmp_repo / "docs").exists()
+
+    def set_ref(value):
+        seed = json.loads(seed_path.read_text(encoding="utf-8"))
+        seed["source_ref"] = value
+        seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+
+    # Exactly two lint_evals() calls: each re-lints the whole 50-fixture corpus
+    # (engine-freeze spawns an AD-017 sandbox worker per case, ~10s a call), so
+    # this test asserts the contract with the minimum number of full lints.
+
+    # A source_ref that still LOOKS like a repo path but does NOT exist lints
+    # GREEN — the single strongest proof the resolution check is withdrawn.
+    set_ref("docs/proposals/does-not-exist.md#anchor")
+    assert lint_evals(tmp_repo) == [], "source_ref must no longer be resolved to a repo file"
+
+    # ...but the field is still REQUIRED and non-empty (FR-033 shape check).
+    # (Non-string / missing values are covered by the shape test, which deletes it.)
+    set_ref("")
     failures = lint_evals(tmp_repo)
     assert any(
-        str(seed_path) in f and "source_ref" in f and "does not resolve" in f
-        for f in failures
-    ), failures
-
-
-def test_ac_035_source_ref_fails_closed_red(tmp_repo: Path):
-    # AC-035 / FR-033d — the provenance-link check fails CLOSED: an anchor-only
-    # source_ref (empty file portion) and a path escaping the repo (absolute or
-    # `..`) are both red, never a silent skip.
-    _fixture_path, seed_path = mint_constructed_into(tmp_repo)
-    for bad_ref in ("#anchor-only", "../../etc/passwd", "/etc/passwd"):
-        seed = json.loads(seed_path.read_text(encoding="utf-8"))
-        seed["source_ref"] = bad_ref
-        seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
-        failures = lint_evals(tmp_repo)
-        assert any(
-            str(seed_path) in f and "source_ref" in f for f in failures
-        ), f"{bad_ref!r} did not fail closed: {failures}"
+        str(seed_path) in f and "source_ref" in f for f in failures
+    ), f"empty source_ref must still be red (required non-empty): {failures}"
 
 
 def test_fr_033_synthetic_and_constructed_seeds_coexist(tmp_repo: Path):
