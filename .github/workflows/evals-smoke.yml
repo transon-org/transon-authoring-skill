@@ -113,16 +113,6 @@ jobs:
     # Bound wall-clock (and therefore provider spend) — 3 Haiku episodes take a
     # few minutes; anything approaching this is a hang, not a real run.
     timeout-minutes: 30
-    env:
-      # The bundle contents live under RUNNER_TEMP after unpack (below). These
-      # make every step import the bundled deps + drive the bundled CLI. The
-      # provider key is NOT here — it is bound step-locally on the eval run only.
-      PYTHONPATH: ${{ runner.temp }}/evalbundle/pydeps
-      TRANSON_EVAL_CLI_PATH: ${{ runner.temp }}/evalbundle/npmglobal/bin/claude
-      # OQ-027f(iii): keep the Claude Code CLI's egress to the essential model
-      # call only (no telemetry / statsig / autoupdate), so under the block its
-      # sole upstream is the loopback key proxy. Also deterministic (NFR-002).
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     steps:
       # ── OQ-027f(iii): deny egress except the API + GitHub infra ────────────
       # harden-runner's block is active from job start (Pre hook). This job
@@ -159,12 +149,24 @@ jobs:
         run: |
           set -euo pipefail
           tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/evalbundle.tgz"
+          PYDEPS="${RUNNER_TEMP}/evalbundle/pydeps"
+          CLI="${RUNNER_TEMP}/evalbundle/npmglobal/bin/claude"
+          # Publish the bundle bindings to the rest of the job. (runner.temp is
+          # not available in job-level env:, so export them here via GITHUB_ENV.)
+          {
+            echo "PYTHONPATH=${PYDEPS}"
+            echo "TRANSON_EVAL_CLI_PATH=${CLI}"
+            # OQ-027f(iii): keep the CLI's egress to the essential model call only
+            # (no telemetry / statsig / autoupdate) — under the block its sole
+            # upstream is the loopback key proxy. Also deterministic (NFR-002).
+            echo "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+          } >> "${GITHUB_ENV}"
           echo "python: $(python3 --version)"
           # The relocated deps must import, and the relocated CLI must launch —
           # if the bundle didn't survive the job hop, fail HERE (no provider
           # spend), not opaquely mid-episode.
-          python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
-          "${TRANSON_EVAL_CLI_PATH}" --version
+          PYTHONPATH="${PYDEPS}" python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
+          "${CLI}" --version
 
       # ONE seedless matched fixture + empty seeds/ => the seed lint treats it as
       # hand-authored (no provenance/regen check); the empty throwaway baseline
