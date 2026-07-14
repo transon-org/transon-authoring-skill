@@ -1256,7 +1256,14 @@ EvalFixture = {
   host's skill path and lets the host **auto-activate** it under its own system prompt (OQ-027a
   faithful engagement — no injection, no preamble), runs one
   episode per `runs_per_fixture` with the host's rich tool suite over a per-episode ephemeral
-  workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied), and
+  workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied). Each
+  episode is driven as a **stateful session** so the driver can answer the shipped skill's §6
+  interactive review (FR-030): when the first turn presents the matched template for approval and
+  emits no `AuthoringResult`, the driver supplies the review's **approve** exit ONCE — as the
+  reviewing user — and reads the follow-up turn, so a single autonomous eval measures the real
+  present→approve→emit path *without altering the shipped skill*. The follow-up is bounded to one
+  approval and never overrides a genuine authoring or refusal envelope, nor an infra/budget fault
+  (`host_harness._needs_review_followup`, unit-tested). The driver then
   maps the host's returned `AuthoringResult` + execution status to the §11.8 EpisodeResult via the
   **deterministic host→EpisodeResult adapter** (OQ-027e status→outcome mapping). `check_evals`
   selects the driver by `harness.kind` (config error, exit 2, on an unimplemented kind). The

@@ -339,6 +339,52 @@ def _classify_terminal(
     )
 
 
+#: OQ-027 — the SKILL.md §6 interactive-review "approve" exit, spoken by the
+#: driver AS the reviewing user. The shipped skill (FR-030) presents a matched
+#: template and waits for approval BEFORE emitting the AuthoringResult; a single
+#: autonomous turn never delivers that approval, so the model strands the
+#: presented template as its final message. The driver supplies the approval
+#: ONCE (see AgentSDKHost) so the eval measures the real present→approve→emit
+#: path, leaving the shipped skill unchanged.
+_REVIEW_APPROVAL = (
+    "Approved — the template is correct. Please emit the final AuthoringResult "
+    "now (the section 7 result envelope) as your response."
+)
+
+
+def _needs_review_followup(outcome: HostOutcome) -> bool:
+    """OQ-027 — did the first turn end WITHOUT an AuthoringResult, in a way the
+    §6 review "approve" exit would resolve? True only when the turn ended
+    cleanly but produced no envelope: ``STATUS_NO_RESULT`` (presented for review
+    / no parseable result), or ``STATUS_RESULT`` whose payload is not
+    envelope-shaped (a bare transon template — no ``ok`` / ``status`` /
+    ``schema_version``). NEVER true for an infra/budget failure (a real fault,
+    not a review stall) nor for a payload that already looks like an
+    AuthoringResult — including a refusal (``ok: false``): those are the model's
+    real answer and must not be overridden by an approval. Pure/total."""
+    if outcome.status == STATUS_NO_RESULT:
+        return True
+    if outcome.status == STATUS_RESULT:
+        result = outcome.result
+        return not (
+            isinstance(result, dict)
+            and any(k in result for k in ("ok", "status", "schema_version"))
+        )
+    return False
+
+
+def _add_tokens(
+    a: Optional[dict[str, int]], b: Optional[dict[str, int]]
+) -> Optional[dict[str, int]]:
+    """Sum two additive token telemetry dicts across a multi-turn episode
+    (never scored, AC-034). None is the additive identity."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return {key: int(a.get(key, 0)) + int(b.get(key, 0)) for key in set(a) | set(b)}
+
+
 class AgentSDKHost:
     """Claude Agent SDK reference host (OQ-027a). **Live-unverified**: exercised
     only in the credential-holding dispatch workflow under the OQ-027f isolation
@@ -385,7 +431,11 @@ class AgentSDKHost:
     async def _run_episode_async(
         self, *, prompt: str, workspace: Path
     ) -> HostOutcome:  # pragma: no cover - live SDK path, dispatch-only
-        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+        from claude_agent_sdk import (
+            ClaudeAgentOptions,
+            ClaudeSDKClient,
+            ResultMessage,
+        )
 
         cfg = self._runner_cfg
         options = ClaudeAgentOptions(
@@ -413,23 +463,44 @@ class AgentSDKHost:
             # STATUS_BUDGET below.
             max_turns=cfg["tool_budget"],
         )
-        # Only the TERMINAL ResultMessage classifies the episode — intermediate
+        # Drive the host as a stateful session (ClaudeSDKClient) so the driver
+        # can answer the skill's §6 interactive review. Only the TERMINAL
+        # ResultMessage of each turn classifies it (OQ-027e) — intermediate
         # System/Assistant/User/Stream messages (which may also carry a
-        # ``subtype``, e.g. init/thinking) must be ignored, else a mid-episode
-        # message is mistaken for the outcome.
-        # Only the terminal ResultMessage classifies the episode (OQ-027e).
-        # The skill emits the §11.5 AuthoringResult as its final answer; the SDK
-        # exposes it as structured_output (when a schema is set) or as result
-        # text (the shipped skill's natural output) — the classifier recovers it
-        # either way, and the scorer re-validates it (AD-004), so a schema-invalid
-        # payload still counts as a submission (OQ-016b / OQ-027e).
-        terminal = None
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, ResultMessage):
-                terminal = message
-        return _classify_terminal(
-            getattr(terminal, "subtype", None),
-            getattr(terminal, "structured_output", None),
-            getattr(terminal, "result", None),
-            _sdk_usage(getattr(terminal, "usage", None)),
-        )
+        # ``subtype``, e.g. init/thinking) are ignored, else a mid-turn message
+        # is mistaken for the outcome. The skill emits the §11.5 AuthoringResult
+        # as its final answer; the SDK exposes it as structured_output (when a
+        # schema is set) or as result text (the shipped skill's natural output) —
+        # the classifier recovers it either way and the scorer re-validates it
+        # (AD-004), so a schema-invalid payload still counts as a submission
+        # (OQ-016b / OQ-027e).
+        async def _turn_outcome() -> HostOutcome:
+            terminal = None
+            async for message in client.receive_response():
+                if isinstance(message, ResultMessage):
+                    terminal = message
+            return _classify_terminal(
+                getattr(terminal, "subtype", None),
+                getattr(terminal, "structured_output", None),
+                getattr(terminal, "result", None),
+                _sdk_usage(getattr(terminal, "usage", None)),
+            )
+
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(prompt)
+            outcome = await _turn_outcome()
+            # OQ-027 — the shipped skill (FR-030) presents a matched template and
+            # WAITS for the reviewing user's approval before emitting the
+            # AuthoringResult. This eval is one autonomous turn, so a run that
+            # ends by presenting for review has produced no envelope yet. Answer
+            # the §6 "approve" exit ONCE, as the user would, then read the
+            # follow-up turn — measuring the real present→approve→emit path
+            # without altering the skill. Bounded to a single approval: a genuine
+            # authoring/refusal answer, or an infra/budget fault, is never
+            # overridden (see _needs_review_followup).
+            if _needs_review_followup(outcome):
+                await client.query(_REVIEW_APPROVAL)
+                followup = await _turn_outcome()
+                followup.tokens = _add_tokens(outcome.tokens, followup.tokens)
+                outcome = followup
+            return outcome

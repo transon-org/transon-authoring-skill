@@ -298,3 +298,31 @@ def test_oq_027_classify_terminal_maps_subtypes():
     assert cl("error_during_execution", None, None).status == host_harness.STATUS_INFRA
     assert cl(None, None, None).status == host_harness.STATUS_INFRA
     assert all(s in STATUS for s in (cl("success", env, None).status,))
+
+
+def test_oq_027_needs_review_followup_only_on_clean_no_envelope():
+    """OQ-027 — the driver answers the §6 review 'approve' exit ONLY when the
+    first turn ended cleanly with no AuthoringResult (presented the template for
+    approval and stopped). A real authoring/refusal envelope, and any
+    infra/budget fault, are the model's real outcome and are never overridden."""
+    needs = host_harness._needs_review_followup
+    HO = host_harness.HostOutcome
+    RES, NO, BUDGET, INFRA = (
+        host_harness.STATUS_RESULT, host_harness.STATUS_NO_RESULT,
+        host_harness.STATUS_BUDGET, host_harness.STATUS_INFRA,
+    )
+    # Presented for review / no parseable result → follow up.
+    assert needs(HO(status=NO)) is True
+    # A bare transon template (no ok/status/schema_version) → follow up.
+    assert needs(HO(status=RES, result={"$": "map", "funcs": []})) is True
+    # A real success envelope → NO follow-up (the model already answered).
+    assert needs(HO(status=RES, result={"ok": True, "status": "matched"})) is False
+    # A refusal envelope (ok:false) → NO follow-up — never approve a refusal.
+    assert needs(HO(status=RES, result={"ok": False, "status": "aborted"})) is False
+    # Even a schema-invalid but envelope-SHAPED payload is the model's answer.
+    assert needs(HO(status=RES, result={"schema_version": "1.0"})) is False
+    # infra / budget faults are real failures, never a review stall.
+    assert needs(HO(status=INFRA, error="boom")) is False
+    assert needs(HO(status=BUDGET)) is False
+    # A non-dict result payload is not envelope-shaped → follow up.
+    assert needs(HO(status=RES, result="oops")) is True
