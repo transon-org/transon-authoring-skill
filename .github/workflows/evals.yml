@@ -88,9 +88,13 @@ jobs:
       # gate identity (AD-024 / NFR-002). Pinned to the CLI the driver was
       # validated against; keep it tracking the SDK/harness pin (an eval-policy
       # concern — confirm compatibility + bump on the first dispatch). Node is
-      # preinstalled on ubuntu-latest.
+      # preinstalled on ubuntu-latest. TRANSON_EVAL_CLI_PATH binds this exact
+      # binary into the driver (AgentSDKHost passes it as ClaudeAgentOptions
+      # cli_path) so the SDK doesn't fall back to PATH resolution order.
       - name: Install Claude Code CLI (real host, OQ-027a)
-        run: npm install -g @anthropic-ai/claude-code@2.1.207
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.207
+          echo "TRANSON_EVAL_CLI_PATH=$(command -v claude)" >> "${GITHUB_ENV}"
 
       - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
         # Bind the secret via env: (not `${{ }}` interpolation in the script body,
@@ -115,11 +119,16 @@ jobs:
           unset PROXY_UPSTREAM_KEY
           trap 'kill "${PROXY_PID}" 2>/dev/null || true' EXIT
 
-          # Wait for the proxy to accept connections.
+          # Wait for the proxy to accept connections — fail fast (don't fall
+          # through to opaque connection errors from the gate) if it never comes up.
           for _ in $(seq 1 50); do
             if curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then break; fi
             sleep 0.2
           done
+          if ! curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then
+            echo "eval_key_proxy.py did not become ready on 127.0.0.1:8787" >&2
+            exit 1
+          fi
 
           # Run the gate with the base URL pointed at the proxy and only a
           # PLACEHOLDER key in env (satisfies check_evals' key-present guard; the

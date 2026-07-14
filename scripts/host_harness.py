@@ -32,6 +32,7 @@ unit-testable offline, OQ-027e):
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -401,6 +402,12 @@ class AgentSDKHost:
             allowed_tools=_AGENT_SDK_ALLOWED_TOOLS,
             permission_mode="dontAsk",  # headless: deny anything not pre-approved
             model=cfg["model_id"],
+            # Bind the exact pinned Claude Code CLI the SDK drives (gate identity,
+            # AD-024 / NFR-002) rather than relying on PATH resolution order. The
+            # dispatch workflow sets TRANSON_EVAL_CLI_PATH to the installed
+            # binary; unset → None → the SDK's default PATH lookup (as validated
+            # locally).
+            cli_path=os.environ.get("TRANSON_EVAL_CLI_PATH") or None,
             # tool_budget is the pinned step budget (OQ-017c); max_turns is the
             # SDK's closest bound. Exceeding it → subtype error_max_turns →
             # STATUS_BUDGET below.
