@@ -227,9 +227,16 @@ review step.
 
 <!-- result envelope: FR-008 / AC-012 / AC-026 / AC-027 -->
 
-Emit exactly ONE `AuthoringResult` object per answer. `ok: true` if and only if
-`status: "matched"`. Include `template` only on success. Failures always set `ok: false`, use a
-status from the table below, and never present a template as success.
+Your FINAL message MUST be exactly ONE `AuthoringResult` JSON object — the envelope defined here —
+and nothing else. NEVER answer with the bare template: the template you drafted and verified is
+only ever a value nested under the envelope's `template` field. A reply that is itself a raw
+transon template (its top-level keys are template keys like `$` / `funcs` / `items` rather than the
+envelope fields below) is WRONG even when that template verifies matched — it scores as a failure.
+So after the verify and review steps, do not hand back the template you were holding; put it inside
+`template` and emit the whole envelope around it.
+
+`ok: true` if and only if `status: "matched"`. Include `template` only on success. Failures always
+set `ok: false`, use a status from the table below, and never present a template as success.
 
 Every `AuthoringResult` MUST carry these four fields, always:
 
