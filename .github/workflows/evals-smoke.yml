@@ -1,0 +1,253 @@
+name: Evals smoke (1 fixture)
+
+# Smallest CI probe of the real-host eval gate, run BEFORE the full 50-fixture
+# dispatch (evals.yml). It validates the whole driver + partial isolation stack
+# end-to-end against ONE seedless matched fixture, at ~1/50th the cost.
+#
+# What this proves (all in CI, live against Anthropic):
+#   - the Agent SDK real-host driver (host_harness.AgentSDKHost) round-trips to
+#     the API and returns an AuthoringResult (AD-024 / OQ-027a)
+#   - OQ-027f(ii): the provider key is withheld from the tool sandbox (key proxy)
+#   - OQ-027f(iv): the transcript secret-scan runs
+#   - the installed SKILL.md auto-activates from its frontmatter (no injection)
+#   - the OQ-016 scorer runs end-to-end (schema-valid + independent re-verify)
+#   - the ×3 majority path (runs_per_fixture=3) executes
+# What this does NOT prove: OQ-027f(iii) egress-deny (STAGED in evals.yml) — so
+# this smoke is a driver/scoring/withholding check, NOT a trusted-baseline run.
+# A baseline is only ever minted from evals.yml with (iii) in force (OQ-027f).
+#
+# It builds a THROWAWAY 1-fixture eval root in-step (ONE seedless matched
+# fixture, empty seeds/, an empty throwaway baseline) and runs
+# `check_evals.py --root <tmp>`. NO --update-baseline; the committed corpus,
+# baseline, real gate population, and check_evals itself are untouched.
+#
+# The aggregate gate is RED BY CONSTRUCTION: with only a matched fixture, the
+# adversarial (refuse) bucket has zero fixtures, which check_evals reports as a
+# hard red ("no fixtures in the adversarial bucket"). So the smoke's pass
+# criterion is NOT check_evals' exit code — it is the per-fixture majority,
+# asserted in the "Assert the fixture passed" step, with the only tolerated red
+# being that expected empty-bucket one.
+#
+# Cost (Haiku pin, 1 matched episode ≈ $0.19 observed): 1 fixture ×3 ≈ $0.6.
+
+on:
+  workflow_dispatch:
+
+# Own concurrency group (distinct from evals.yml) so a smoke dispatch neither
+# blocks nor queues behind the full gate.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# Read-only everywhere: the smoke never writes to the repo or uses the token.
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Eval smoke (1 matched fixture, real host)
+    runs-on: ubuntu-latest
+    # Bound wall-clock (and therefore provider spend) — 3 Haiku episodes take a
+    # few minutes; anything approaching this is a hang, not a real run.
+    timeout-minutes: 30
+    steps:
+      # NOTE: OQ-027f(iii) egress-deny (harden-runner) is intentionally absent
+      # here — it is STAGED in evals.yml and validated on the real gate, not on
+      # this smoke. See the workflow header.
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      # Installs the pinned engine (transon==0.1.7, AD-007) plus the optional
+      # eval SDKs ([evals] extra, OQ-017d/AD-024 — never a runtime dependency).
+      - run: python3 -m pip install -e ".[evals]"
+
+      # Pin the Agent SDK to the exact runner.json harness.version so the driver
+      # matches gate identity (AD-024 / OQ-027b).
+      - name: Pin Agent SDK to runner.json harness.version
+        run: |
+          V=$(python3 -c "import json;print(json.load(open('evals/runner.json'))['harness']['version'])")
+          echo "pinning claude-agent-sdk==${V}"
+          python3 -m pip install "claude-agent-sdk==${V}"
+
+      # The Agent SDK drives the Claude Code CLI as a subprocess — the actual
+      # host that executes every tool call, so its version is part of gate
+      # identity (AD-024 / NFR-002). Same pin as evals.yml so the smoke exercises
+      # the identical host. TRANSON_EVAL_CLI_PATH binds this exact binary into
+      # the driver (OQ-027a) rather than PATH resolution order.
+      - name: Install Claude Code CLI (real host, OQ-027a)
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.207
+          echo "TRANSON_EVAL_CLI_PATH=$(command -v claude)" >> "${GITHUB_ENV}"
+
+      # Build the throwaway 1-fixture eval root. host_harness.run_fixture reads
+      # SKILL.md from repo_root (= --root), so the root carries SKILL.md too.
+      # ONE seedless matched fixture + empty seeds/ => the seed lint treats it as
+      # hand-authored (no provenance/regen check); the empty throwaway baseline
+      # means nothing normative is ever touched.
+      - name: Build throwaway 1-fixture eval root
+        id: root
+        run: |
+          set -euo pipefail
+          ROOT="${RUNNER_TEMP}/smoke-root"
+          FIXTURE="seed-matched-flatten-orders"
+          mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds"
+          cp SKILL.md "${ROOT}/SKILL.md"
+          cp evals/runner.json evals/targets.json "${ROOT}/evals/"
+          printf '%s\n' '{ "schema_version": "1.0", "passing": [] }' > "${ROOT}/evals/baseline.json"
+          cp "evals/cases/${FIXTURE}.json" "${ROOT}/evals/cases/"
+          echo "Throwaway eval root:"
+          find "${ROOT}" -type f | sort
+          echo "root=${ROOT}" >> "${GITHUB_OUTPUT}"
+          echo "fixture=${FIXTURE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run smoke gate (key withheld from tool sandbox — OQ-027f(ii))
+        # Bind the secret via env: (not `${{ }}` interpolation in the script
+        # body, which would place the literal secret in the on-disk step script)
+        # and UNSET it below before the gate runs — the eval process and the
+        # model's Bash never inherit it. Same pattern as evals.yml.
+        env:
+          PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          ROOT="${{ steps.root.outputs.root }}"
+          TRANSCRIPTS="${RUNNER_TEMP}/transcripts"
+          REPORT="${RUNNER_TEMP}/report.json"
+          LOG="${RUNNER_TEMP}/gate.log"
+
+          # (ii) Start the key-scoped proxy with the REAL provider key in its OWN
+          # environment only (inline assignment → the proxy process's env, not
+          # this shell). Then unset it so check_evals and the model's Bash never
+          # inherit it.
+          ANTHROPIC_API_KEY="${PROXY_UPSTREAM_KEY}" \
+            python3 scripts/eval_key_proxy.py --host 127.0.0.1 --port 8787 &
+          PROXY_PID=$!
+          unset PROXY_UPSTREAM_KEY
+          trap 'kill "${PROXY_PID}" 2>/dev/null || true' EXIT
+
+          # Wait for the proxy to accept connections — fail fast if it never
+          # comes up rather than falling through to opaque gate errors.
+          for _ in $(seq 1 50); do
+            if curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then break; fi
+            sleep 0.2
+          done
+          if ! curl -fsS -I "http://127.0.0.1:8787/" >/dev/null 2>&1; then
+            echo "eval_key_proxy.py did not become ready on 127.0.0.1:8787" >&2
+            exit 1
+          fi
+
+          # Run the gate against the throwaway root with the base URL pointed at
+          # the proxy and only a PLACEHOLDER key in env (satisfies check_evals'
+          # key-present guard; the proxy rewrites it to the real secret on
+          # egress). The aggregate gate is RED by construction (empty adversarial
+          # bucket), so DON'T let its exit code fail the job — capture the JSON
+          # report (stdout) + progress/token totals (stderr) and assert on the
+          # per-fixture majority in the next step.
+          set +e
+          ANTHROPIC_BASE_URL="http://127.0.0.1:8787" \
+          ANTHROPIC_API_KEY="placeholder-not-the-secret" \
+            python3 scripts/check_evals.py --root "${ROOT}" \
+              --transcripts-dir "${TRANSCRIPTS}" \
+              > "${REPORT}" 2> "${LOG}"
+          CE=$?
+          set -e
+
+          echo "check_evals exit code: ${CE} (RED-by-construction expected: empty adversarial bucket)"
+          echo "----- token / cost totals (from gate stderr) -----"
+          grep -E "episodes complete" "${LOG}" || echo "(token totals line not found in gate log)"
+
+      # The real smoke gate: parse the report, confirm the ONE fixture passed its
+      # majority, and confirm the ONLY red is the expected empty-adversarial one
+      # (any other red — authoring-rate, infra-cap, baseline regression — fails).
+      # Also surface the token totals + an estimated Haiku-list-price cost.
+      - name: Assert the fixture passed (smoke criterion)
+        if: always()
+        run: |
+          python3 - "${RUNNER_TEMP}/report.json" "${RUNNER_TEMP}/gate.log" "${{ steps.root.outputs.fixture }}" <<'PY'
+          import json, re, sys
+
+          report_path, log_path, fid = sys.argv[1], sys.argv[2], sys.argv[3]
+
+          try:
+              report = json.load(open(report_path, encoding="utf-8"))
+          except (OSError, ValueError) as exc:
+              print(f"SMOKE FAIL: could not read/parse report {report_path}: {exc}")
+              sys.exit(1)
+
+          fixtures = report.get("fixtures", {})
+          entry = fixtures.get(fid)
+          reds = report.get("red", [])
+
+          lines = []
+          lines.append(f"### Eval smoke — `{fid}`")
+          if entry is None:
+              print(f"SMOKE FAIL: fixture {fid!r} absent from report.fixtures")
+              print(json.dumps(report, indent=2))
+              sys.exit(1)
+
+          majority = entry.get("majority")
+          episodes = entry.get("episodes", [])
+          lines.append("")
+          lines.append(f"- **majority:** `{majority}`")
+          lines.append(f"- **episodes (×{len(episodes)}):** "
+                       + ", ".join(f"{e.get('outcome')}→{e.get('score')}" for e in episodes))
+          lines.append(f"- **authoring rate:** {report.get('rates', {}).get('authoring')}")
+
+          # The only tolerated red is the empty-adversarial-bucket one (the smoke
+          # corpus deliberately has no refuse fixture). Any red NOT mentioning the
+          # adversarial bucket is a genuine failure of this fixture/driver.
+          unexpected = [r for r in reds if "adversarial bucket" not in r]
+          lines.append(f"- **red (all):** {reds if reds else 'none'}")
+
+          # Token / cost readout parsed from the gate stderr (check_evals prints
+          # accumulated tokens; the report JSON carries none). Estimate at Haiku
+          # 4.5 list price: in $1.00/1M, out $5.00/1M, cache_read $0.10/1M,
+          # cache_write(5m ephemeral) $1.25/1M — indicative, not billed.
+          try:
+              log = open(log_path, encoding="utf-8").read()
+          except OSError:
+              log = ""
+          m = re.search(r"episodes complete.*?in=([\d,]+) out=([\d,]+) "
+                        r"cache_read=([\d,]+) cache_write=([\d,]+)", log)
+          if m:
+              tin, tout, cr, cw = (int(x.replace(",", "")) for x in m.groups())
+              cost = tin/1e6*1.00 + tout/1e6*5.00 + cr/1e6*0.10 + cw/1e6*1.25
+              lines.append(f"- **tokens:** in={tin:,} out={tout:,} "
+                           f"cache_read={cr:,} cache_write={cw:,}")
+              lines.append(f"- **estimated cost (Haiku list price, ×3):** ~${cost:.4f}")
+          else:
+              lines.append("- **tokens:** (totals line not found in gate log)")
+
+          summary = "\n".join(lines) + "\n"
+          print(summary)
+          import os
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with open(step_summary, "a", encoding="utf-8") as fh:
+                  fh.write(summary)
+
+          ok = True
+          if majority != "pass":
+              print(f"SMOKE FAIL: fixture majority is {majority!r}, expected 'pass' "
+                    "(roundtrip / skill-activation / scoring did not yield a passing episode)")
+              ok = False
+          if unexpected:
+              print("SMOKE FAIL: unexpected red reason(s) beyond the empty "
+                    f"adversarial bucket: {unexpected}")
+              ok = False
+          if ok:
+              print("SMOKE PASS: the matched fixture round-tripped to Anthropic, "
+                    "auto-activated the skill, and scored pass under the OQ-016 scorer.")
+          sys.exit(0 if ok else 1)
+          PY
+
+      # (iv) Secret-scan the captured transcripts — same patterns as the
+      # committed-fixture lint (NFR-011). Runs even if the assertion failed.
+      - name: Secret-scan transcripts (OQ-027f(iv) / NFR-011)
+        if: always()
+        run: python3 scripts/scan_transcripts.py "${RUNNER_TEMP}/transcripts"
