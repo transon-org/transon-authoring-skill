@@ -218,8 +218,12 @@ ever presented; this review is ADDITIONAL to, never a substitute for, the verify
 unbounded until exactly one of the three exits below happens; never auto-approve; never treat
 silence as approval.
 
-- **approve** — the user accepts the template. Continue to section 7 and emit the success envelope
-  with `status: "matched"`.
+- **approve** — the user accepts the template. Emit the final success envelope (`status: "matched"`)
+  by running the section 7 `result` command NOW — `python -m transon_authoring result --template
+  <template-path> --samples <samples-path>` — and returning its stdout **verbatim**. Do NOT retype
+  or reconstruct the envelope you presented for review: re-typing a template by hand (especially a
+  large one) corrupts the JSON, whereas `result` re-verifies and machine-builds a well-formed
+  envelope every time — including now, on this later turn after approval.
 - **revise** — the user supplies feedback. Two kinds, handled differently:
   - NL-only feedback that rewords or restructures the SAME input/output behavior: draft a new
     candidate under the section 4 grounding rules and re-run section 5 verify with a **fresh
@@ -250,6 +254,9 @@ machine-builds the complete matched envelope (`ok: true`, `status: "matched"`, t
 `verdict`, `repair_count`), so it is always well-formed. Do NOT reconstruct it yourself, do NOT wrap
 it in prose or a code fence, and NEVER answer with the bare template — a reply whose top-level keys
 are template keys like `$` / `funcs` / `items` scores as a failure even when the template verifies.
+This holds equally when you emit **after a section 6 approval on a later turn**: re-run `result` and
+return its fresh stdout — never paste or re-type the envelope from memory (hand-re-typing a large
+envelope corrupts the JSON).
 
 For a refusal or a failure that has NO matched template — you refused in section 2, the sample loop
 or review ended in defer/abort, or repairs exhausted — there is no `result` call to make: emit the

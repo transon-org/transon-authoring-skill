@@ -322,7 +322,11 @@ No console-script product; no MCP.
   interactive sessions, after `verify` yields `ok: true` and `assurance: "matched"`, the skill
   presents the matched template together with its Verdict to the user before emitting the final
   `AuthoringResult`. Exactly three exits:
-  - **approve** — the user accepts; the skill emits the success envelope (`status: "matched"`).
+  - **approve** — the user accepts; the skill emits the success envelope (`status: "matched"`)
+    *(rev 2026-07-14: via the §7 `result` command, returning its stdout **verbatim** — never
+    re-typed. The real-host eval showed the AD-021 small model, prompted to emit after approval on
+    a later turn, re-types large envelopes by hand and corrupts the JSON; running `result` again
+    machine-builds a well-formed envelope — FR-034/AC-037).*
   - **revise** — the user supplies feedback. NL-only feedback → draft a new candidate under the
     FR-001 grounding rules and re-run `verify`, with a **fresh `repair_attempts` budget** for
     that revision round (each round independently bounded per FR-007/NFR-006). Feedback that

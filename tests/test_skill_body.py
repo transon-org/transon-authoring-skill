@@ -732,8 +732,19 @@ def test_fr_030_ac_031_review_loop():
     # approve -> matched success envelope — scoped to the approve bullet itself,
     # so an earlier `auto-approve` mention plus a later branch's
     # `status: "matched"` cannot satisfy it.
-    assert _has(r"status:\s*\"matched\"", _bounded_bullet(section, "approve")), (
+    approve = _bounded_bullet(section, "approve")
+    assert _has(r"status:\s*\"matched\"", approve), (
         "approve exit does not emit status matched"
+    )
+    # FR-030 rev 2026-07-14 / FR-034: approve emits via the §7 `result` command
+    # returning stdout VERBATIM, and forbids re-typing/reconstructing the presented
+    # envelope — the real-host eval showed the small model corrupts a hand-re-typed
+    # large envelope on the post-approval turn (100% of failures in the probe).
+    assert _has(r"result\b.{0,240}?verbatim", approve), (
+        "approve exit does not mandate returning the `result` command stdout verbatim"
+    )
+    assert _has(r"(do not|don't|never).{0,60}?(retype|reconstruct)", approve), (
+        "approve exit does not forbid re-typing/reconstructing the presented envelope"
     )
 
     # NL-only revise -> fresh repair_attempts budget + re-verify + re-present

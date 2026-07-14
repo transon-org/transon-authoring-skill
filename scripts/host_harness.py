@@ -370,8 +370,10 @@ def _classify_terminal(
 #: ONCE (see AgentSDKHost) so the eval measures the real present→approve→emit
 #: path, leaving the shipped skill unchanged.
 _REVIEW_APPROVAL = (
-    "Approved — the template is correct. Please emit the final AuthoringResult "
-    "now (the section 7 result envelope) as your response."
+    "Approved — the template is correct. Emit the final AuthoringResult now by running the "
+    "section 7 result command (`python -m transon_authoring result --template <path> "
+    "--samples samples.json`) and returning its stdout verbatim as your entire response. Do NOT "
+    "retype or reconstruct the envelope by hand — re-typing a large envelope corrupts the JSON."
 )
 
 

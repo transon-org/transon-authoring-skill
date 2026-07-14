@@ -9,6 +9,7 @@ score-equivalent to the demoted raw loop for the engine-free outcome classes.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -454,6 +455,22 @@ def test_fr_035_to_episode_result_carries_cost_and_messages():
     # Defaults when the host exposes no cost/message telemetry.
     bare = to_episode_result(HostOutcome(status=STATUS_NO_RESULT))
     assert bare["cost_usd"] is None and bare["messages"] == []
+
+
+def test_fr_030_review_approval_prompt_mandates_result_verbatim():
+    """FR-030 (rev 2026-07-14) / FR-034 — the driver's review-approval message
+    tells the model to emit by RUNNING the `result` command and returning its
+    stdout verbatim, and forbids hand-re-typing the envelope. The real-host probe
+    showed a bare 'emit the envelope as your response' prompt makes the small
+    model re-type (and corrupt) large envelopes on the post-approval turn."""
+    prompt = host_harness._REVIEW_APPROVAL.lower()
+    assert "transon_authoring result" in prompt, (
+        "approval prompt does not tell the model to run the `result` command"
+    )
+    assert "verbatim" in prompt, "approval prompt does not require verbatim stdout"
+    assert re.search(r"(do not|don't|never)\b[^.]*\b(retype|reconstruct|by hand)", prompt), (
+        "approval prompt does not forbid hand-re-typing the envelope"
+    )
 
 
 def test_fr_035_add_cost_is_none_identity():
