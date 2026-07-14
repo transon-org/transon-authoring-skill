@@ -14,9 +14,10 @@ name: Evals smoke (1 fixture)
 #     uploads one artifact. Registries are reachable ONLY here.
 #   - `smoke`: egress BLOCKED (harden-runner, from job start). It checks out
 #     nothing and installs nothing — it only downloads the bundle and runs. Its
-#     entire egress surface is api.anthropic.com (the model call, via the
-#     loopback key proxy) plus the GitHub endpoints setup-python + the artifact
-#     up/download need. No registries, no general egress.
+#     egress surface is Anthropic-owned hosts only (*.anthropic.com — the model
+#     call via the loopback key proxy plus the CLI's statsig/telemetry, so it
+#     runs as a shipped session) plus the GitHub endpoints setup-python + the
+#     artifact up/download need. No registries, no third-party egress.
 #
 # What this proves (all in CI, live against Anthropic) — the FULL OQ-027f
 # isolation contract, cheaply, BEFORE the full gate:
@@ -114,20 +115,23 @@ jobs:
     # few minutes; anything approaching this is a hang, not a real run.
     timeout-minutes: 30
     steps:
-      # ── OQ-027f(iii): deny egress except the API + GitHub infra ────────────
+      # ── OQ-027f(iii): deny egress except Anthropic + GitHub infra ──────────
       # harden-runner's block is active from job start (Pre hook). This job
-      # installs nothing and checks out nothing, so the only egress it needs is:
-      # api.anthropic.com (the model call, via the loopback proxy), the GitHub
-      # endpoints setup-python resolves the interpreter from, and the artifact
-      # download/upload endpoints. No package registries, no general egress —
-      # a determined model reading the key from /proc has nowhere to send it.
-      # Kept in sync with evals.yml; harden-runner annotates any blocked host.
-      - name: Deny egress except the Anthropic API (OQ-027f(iii))
+      # installs nothing and checks out nothing. Its egress is confined to:
+      #   - Anthropic-owned hosts (*.anthropic.com) — the model call via the
+      #     loopback proxy AND the Claude Code CLI's own statsig/telemetry, so the
+      #     CLI behaves as a shipped online session (faithful — denying its feature
+      #     flags was shown to degrade authoring discipline).
+      #   - the GitHub endpoints setup-python + the artifact up/download need.
+      # NO package registries, NO third-party or arbitrary egress. Kept in sync
+      # with evals.yml; harden-runner annotates any blocked host.
+      - name: Deny egress except Anthropic + GitHub infra (OQ-027f(iii))
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
             api.anthropic.com:443
+            *.anthropic.com:443
             api.github.com:443
             objects.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
@@ -153,13 +157,12 @@ jobs:
           CLI="${RUNNER_TEMP}/evalbundle/npmglobal/bin/claude"
           # Publish the bundle bindings to the rest of the job. (runner.temp is
           # not available in job-level env:, so export them here via GITHUB_ENV.)
+          # The Claude Code CLI runs with its normal traffic (statsig/telemetry)
+          # so it behaves as a shipped session — faithful; the egress block above
+          # already confines that traffic to Anthropic-owned hosts.
           {
             echo "PYTHONPATH=${PYDEPS}"
             echo "TRANSON_EVAL_CLI_PATH=${CLI}"
-            # OQ-027f(iii): keep the CLI's egress to the essential model call only
-            # (no telemetry / statsig / autoupdate) — under the block its sole
-            # upstream is the loopback key proxy. Also deterministic (NFR-002).
-            echo "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
           } >> "${GITHUB_ENV}"
           echo "python: $(python3 --version)"
           # The relocated deps must import, and the relocated CLI must launch —
