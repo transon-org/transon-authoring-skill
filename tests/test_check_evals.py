@@ -59,19 +59,10 @@ def run_check(*args: str) -> subprocess.CompletedProcess:
 def tmp_repo(tmp_path: Path) -> Path:
     """A tmp repo root with ONLY the committed evals/ corpus copied in.
 
-    Deliberately carries **no `docs/` tree**: the withdrawn
-    FR-033d provenance-link check used to resolve each constructed seed's
-    `source_ref` to a repo file, which forced this fixture — and, fatally, the
-    bundle-only eval job (OQ-027f(i) checks out nothing) — to carry `docs/`.
-    Linting green from this docs-free root is now the regression guard that the
-    corpus lint runs inside the eval bundle.
-
-    The baseline is reset to EMPTY here so scoring/aggregation unit tests are
-    isolated from the production `evals/baseline.json` (now populated by the first
-    accepted green gate, 2026-07-15 — a fixture failing its majority would
-    otherwise add a spurious OQ-016f baseline-regression red). Tests exercising
-    the ratchet write their own `passing` list into this copy; the committed
-    baseline's correctness is covered by test_eval_artifacts."""
+    Deliberately carries no `docs/` tree — the eval bundle lint path must stay
+    green without repository docs. Baseline is emptied so scoring unit tests
+    are isolated from the committed `evals/baseline.json`.
+    """
     shutil.copytree(REPO_ROOT / "evals", tmp_path / "evals")
     (tmp_path / "evals" / "baseline.json").write_text(
         json.dumps({"schema_version": "1.0", "passing": []}) + "\n",
@@ -566,17 +557,10 @@ def test_ac_035_non_ok_for_verify_red(tmp_repo: Path):
 
 
 def test_ac_035_source_ref_is_provenance_not_a_repo_path(tmp_repo: Path):
-    """AC-035 / FR-033 — `source_ref` is a REQUIRED non-empty
-    PROVENANCE string naming the documented API the payload was constructed from
-    (the AD-023 constructed-never-captured trail backing `redacted: false`), and
-    is NO LONGER resolved to a repo file.
-
-    The withdrawn FR-033d link check was a repo-integrity check running inside
-    the credential-holding eval gate, which by OQ-027f(i) checks out nothing and
-    runs from a minimal bundle — it made the gate depend on the `docs/` tree and
-    killed the full gate's first dispatch in pre-flight lint (15 failures, $0
-    spend). Nothing in scoring, verify, targets or baseline reads `source_ref`,
-    and neither engine-freeze nor no-leakage depends on resolving it."""
+    """AC-035 / FR-033 — `source_ref` is required non-empty provenance text
+    naming the documented API the payload was constructed from; it is not
+    resolved against repository paths. The lint root carries no `docs/` tree.
+    """
     _fixture_path, seed_path = mint_constructed_into(tmp_repo)
     # The coupling is gone: the lint root carries NO docs/ tree — exactly the
     # shape of the eval bundle (scripts + evals + SKILL.md).

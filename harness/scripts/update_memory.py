@@ -44,7 +44,7 @@ WATCHED_PREFIXES = (
 
 STATE_BEGIN = (
     "<!-- BEGIN generated: at-a-glance · "
-    "python harness/scripts/update_memory.py --state -->"
+    "python3 harness/scripts/update_memory.py --state -->"
 )
 STATE_END = "<!-- END generated: at-a-glance -->"
 
@@ -110,14 +110,13 @@ STATE_TEMPLATE = """# Current state — working handoff
 > **Non-authoritative working memory.** A session-to-session handoff, not part of the
 > contract. Where this and the contract docs (`SPEC.md`, `traceability.md`, `AGENTS.md`)
 > disagree, **they win**. Update the narrative below at the end of a work session;
-> regenerate the header with `python harness/scripts/update_memory.py --state`.
+> regenerate the header with `python3 harness/scripts/update_memory.py --state`.
 
 {block}
 
 ## Last action
 
-_Working-memory sink landed: `docs/current-state.md` + `harness/scripts/update_memory.py --state`.
-Session status and closure narratives go here — not into SPEC or traceability cells._
+_(Record what landed in this session.)_
 
 ## Status by milestone
 
@@ -127,8 +126,7 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Next steps (ordered)
 
-1. Continue the hygiene-culture rollout (revision protocol, hygiene rule, review awareness).
-2. De-noise SPEC / traceability / code under the new culture (aspect-by-aspect slices).
+1. _(Record the next concrete step.)_
 
 ## Open blockers / waiting-on
 
@@ -173,7 +171,7 @@ def handoff_nudge() -> Optional[str]:
     return (
         "You changed tracked files but didn't update the working handoff. Before finishing, "
         "refresh `docs/current-state.md` so the next session resumes cleanly: run "
-        "`python harness/scripts/update_memory.py --state` for the header, then update "
+        "`python3 harness/scripts/update_memory.py --state` for the header, then update "
         "**Last action** and **Next steps**. (Non-blocking; skip if this was a throwaway edit.)"
     )
 

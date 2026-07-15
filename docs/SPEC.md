@@ -412,10 +412,84 @@ No console-script product; no MCP.
   under the current pin (AC-030) — the same drift discipline as `check_snapshot`. v1 scope: a tagged
   subset (~25–30 seeds, one per tag family) with the remainder as follow-up waves; the
   should-refuse bucket stays hand-authored (no synthesized refuse intents in v1).
-  Applicability predicates (optional keys, `list_*` array scope, `NO_CONTENT` relevance,
-  writes-capable, includes population, seed eligibility) are fixed in OQ-025. Wave-2 coverage
-  extensions (list length-variation, root key add/delete, `NO_CONTENT` probe count, extended drop
-  order) are fixed in OQ-026.
+  **Applicability predicates (OQ-025):**
+  (a) **optional keys** — a corpus `data` key is *optional* iff the seed template contains an
+  `attr` node with a **literal string `name`** and a `default` member (the engine's defaulting
+  accessor; `transon` SPECIFICATION §2.2/§4) and the key's **final pointer segment equals that
+  literal name**. Candidate pointers are discovered by a deterministic pre-order walk of the
+  corpus `data`; every matching pointer yields the `optional_present`/`optional_absent` pair
+  (`target` = that pointer). `optional_present` is satisfiable by packing into the happy-path
+  case (the corpus `data` carries the key); `optional_absent` inputs delete the key at that
+  pointer.
+  (b) **array scope** — arrays are discovered by the same deterministic pre-order walk of the
+  corpus `data`; **every** array found receives the three `list_*` kinds (subject to the FR-029
+  budget/drop order); pointers through array elements use index-`0` segments. The **document root**
+  is excluded from array/optional candidacy — §11.1 obligation targets must start with `/`, and the
+  whole-document pointer is rejected there — and a corpus array of length **0** yields only the
+  `list_empty` kind (`list_singleton`/`list_many` derivations are impossible and their
+  obligations are not emitted).
+  (c) **`NO_CONTENT` relevance** — empirical, engine-decided; no static rule-shape analysis.
+  The generator derives candidate inputs in a fixed order (each `optional_absent` derivation in
+  pointer order, then each `list_empty` derivation in pointer order, then the value-variation
+  candidates in position order) and executes them through the AD-017 sandbox; the `NO_CONTENT`
+  custom obligation is emitted iff some candidate's top-level dry-run result encodes (§11.0
+  `enc`) to `NoContentRef` — the first such candidate is the case, and per the FR-029 budget
+  rule it MAY simultaneously satisfy the obligation it was derived from.
+  (d) **includes population & eligibility** — `SampleSet.includes` is populated with every
+  literal `{"$": "include", "name": <string>}` target found in the seed template, transitively
+  through included templates, resolved from snapshot `docs.examples` by `name`; a literal
+  include name that does not resolve is left absent (the corpus `result` may depend on the miss).
+  After building case 1 the generator MUST assert the re-executed output JSON-equals the entry's
+  `result`; a seed failing the assert is **ineligible**: the generator errors and the curator
+  selects the tag family's next corpus-order candidate. A seed whose never-dropped obligations
+  (happy path, `list_empty`, `optional_absent`, customs) alone cannot fit six cases is likewise
+  ineligible, preserving FR-029's cap guarantee. A structurally derived obligation input
+  (`optional_absent` or `list_*`) whose dry-run **errors** under the pinned engine makes the
+  seed ineligible (hard error, curator moves on); a **value-variation** candidate whose dry-run
+  errors is skipped in favor of the next deterministic index (padding continues; a seed that
+  cannot reach the 3-case minimum is ineligible).
+  (e) **writes-capable** — a seed is writes-capable iff its template, or any transitively
+  included template, contains a `file` rule invocation; the `writes` custom case asserts the
+  case's sandbox-captured `writes` map, not the top-level result alone.
+  The value-variation substitution table and the case/obligation id-naming scheme remain
+  implementation-defined but are **frozen by the AC-030 regen check** once the first seed lands.
+  Seed provenance docs carry no `schema_version` and are validated structurally by
+  `check_evals --lint`, not by the §11.0 ingress validator.
+  **Wave-2 coverage extensions (OQ-026):**
+  (a) **List length variation** — every array discovered by the OQ-025b pre-order walk of the
+  corpus `data`, **plus the document root itself when the corpus `data` is a JSON array**, yields
+  one `kind: "custom"` *length-variation* obligation (`target` omitted; the `description` names
+  the array's pointer) whose case input is the corpus document with that array's **final element
+  removed** — derived only when the corpus array has length ≥ 2. Each is emitted iff its dry-run
+  under the pinned engine succeeds and is silently skipped otherwise; output comes from the
+  pinned engine as usual; the FR-029 packing rule applies (an existing case whose input already
+  JSON-equals the derivation satisfies the obligation instead of adding a case).
+  (b) **Root key variations** — only when the corpus `data` document is a JSON object:
+  (i) *key addition* — for **every `attr` node with a literal string `name`** (a `default`
+  member is NOT required) whose name is not discoverable at any pointer of the OQ-025b walk
+  (no visited pointer's final segment equals the name), one `kind: "custom"` obligation/case
+  pair: the corpus `data` with that key added at the root, its value the **first entry** of the
+  FR-029 per-JSON-type substitution-table row keyed by the JSON type of the attr's literal
+  `default` when one is present — the first template-pre-order node of that name carrying a
+  `default` decides — else the string entry (a non-literal `default`, or a literal whose JSON
+  type has no table row, likewise takes the string entry);
+  (ii) *key deletion* — for every root-level key not already covered by an `optional_absent`
+  obligation, one `kind: "custom"` obligation/case pair: the corpus `data` with that key removed.
+  Each root key variation is emitted iff its dry-run succeeds and is silently skipped otherwise —
+  never seed ineligibility (contrast the OQ-025d structural hard-error rule); `target` is
+  omitted and the `description` names the key; the FR-029 packing rule applies as in (a).
+  (c) **`NO_CONTENT` probe count** — the OQ-025c candidate list examines only the **first two**
+  value-variation candidates. This freezes the current behavior and supersedes the
+  implementation-defined status of the OQ-025 tail **for the probe count only** (the
+  substitution table and the id-naming scheme stay implementation-defined, frozen by AC-030).
+  (d) **Budget and drop order** — the OQ-026 custom kinds count toward the FR-029 six-case cap,
+  are droppable, and drop FIRST, extending FR-029's fixed drop order to: *key deletion*, then
+  *key addition*, then *length variation*, then `list_singleton`, then `optional_present`, then
+  `list_many`. They are excluded from the never-dropped satisfiability guarantee, which is
+  unchanged. Deterministic emission order — after the OQ-025 structural kinds and the
+  `NO_CONTENT`/`writes` customs, before value-variation padding: length variations in
+  array-discovery order (document root first, then OQ-025b pre-order), then key deletions in
+  root-key document order, then key additions in template pre-order discovery order.
 - **FR-033** — **Real-world structural fixture pack + engine-freeze gate (AD-023).** Large constructed EvalFixtures (AD-023) are committed under `evals/cases/` as ordinary
   EvalFixtures (§11.8 schema; `redacted: false`; no `consent`; **no seed-template field in the
   fixture**). Their provenance is a **constructed seed** at `evals/seeds/<fixture-id>.json` with the
@@ -843,13 +917,7 @@ Confirmation = {
   confirmed_by?: "user" | "ci",
   confirmed_at?: string,            # ISO-8601
   note?: string,
-  content_fingerprint: string       # hex sha256 over canonical subset (sorted keys):
-                                    # schema_version, coverage, waivers, cases, includes
-                                    # intent_nl is DELIBERATELY EXCLUDED: it is human context only
-                                    # and must not invalidate confirmation when prose is edited
-                                    # canonicalization + acquisition path per OQ-015: obtained
-                                    # from SampleCheck.content_fingerprint, never hand-computed;
-                                    # pre-confirmation placeholder is "" (OQ-018a)
+  content_fingerprint: string       # see fingerprint recipe below
 }
 
 SampleSet = {
@@ -861,7 +929,24 @@ SampleSet = {
   includes?: { [name: string]: JsonValue },  # include name → template JSON
   confirmation: Confirmation
 }
+```
 
+**`content_fingerprint` (OQ-015):** lowercase hex SHA-256 of the UTF-8 encoding of
+`json.dumps(subset, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)`,
+where `subset` is the object containing exactly those of the keys `schema_version`, `coverage`,
+`waivers`, `cases`, `includes` that are **present** in the SampleSet document — an absent
+`includes` is omitted, **not** hashed as `{}`; `intent_nl` and `confirmation` stay excluded.
+Number formatting follows the parsed document: integers serialize with no fraction part, floats
+by Python shortest-round-trip `repr` — consistent with §11.4 (`1` ≠ `1.0`); non-finite numbers
+are already rejected at ingress (§11.0). Non-ASCII is emitted unescaped and hashed as UTF-8.
+**Acquisition path:** agents/skill NEVER compute or reimplement the fingerprint. They obtain it
+exclusively from `SampleCheck.content_fingerprint` by running `check-samples` on the
+not-yet-confirmed SampleSet (the exit-1 `SampleCheck` still carries the recomputed fingerprint)
+and copy that value into `confirmation.content_fingerprint` at confirmation time.
+`transon_authoring.samples.content_fingerprint` is the single implementation. The
+pre-confirmation placeholder is `""` (OQ-018a).
+
+```
 Gap = {
   code: GapCode,
   message: string,
@@ -1086,10 +1171,11 @@ sentinel), recurses into plain arrays/objects, and rejects unknown tags per §11
 
 ### 11.5 AuthoringResult & failure taxonomy
 
-**Producer:** `AuthoringResult` is the **skill-level** envelope assembled by the agent following
-`SKILL.md`. **No** `python -m transon_authoring` subcommand emits it — the module returns
-`SampleCheck` / `Verdict` / debug objects only (§11.6). The skill maps those plus conversation
-exits into `AuthoringResult`.
+**Producer:** `AuthoringResult` is emitted by `python -m transon_authoring result` /
+`result --refuse` (FR-034 / AC-037). The skill MUST run that command and return stdout
+**verbatim** — it never hand-assembles the envelope. Other module subcommands still return
+`SampleCheck` / `Verdict` / debug objects only (§11.6); the skill maps conversation exits
+into the `--refuse` statuses when there is no verify verdict.
 
 **Conformance:** JSON Schema at `src/transon_authoring/schemas/authoring_result.json` (and related
 schemas). Verified by (1) unit tests that validate fixtures against the schema, and (2) authoring
@@ -1298,6 +1384,24 @@ EvalFixture = {
 ```
 
 - **Population:** all committed fixtures under `evals/cases/`.
+- **Per-episode scoring (OQ-016):** mechanical scoring over the final `AuthoringResult`
+  submitted by the skill under test:
+  - **(a) matched-success** (for `expect: "matched"` **and** `expect: "matched_correction"`):
+    the submitted `AuthoringResult` validates against the bundled schema, `ok === true`,
+    `status === "matched"`, `template` present, `verdict.ok === true` with
+    `assurance === "matched"`, **and** the harness independently re-runs
+    `python -m transon_authoring verify --template <submitted> --samples <fixture SampleSet>`
+    with exit 0 (the skill's claim is never trusted — AD-004).
+  - **(b) refuse-success** (for `expect: "refuse"`): the submitted `AuthoringResult` validates
+    against the schema, `ok === false`, `template` absent, and
+    `status ∈ {need-samples, deferred, aborted, samples-rejected, verify-failed,
+    repair-exhausted, profile-rejected}`. `status: "schema-error"` and a missing/invalid
+    submission are scored as refuse-**failure** (not infra).
+  - **(c) `matched_correction` is reporting-only:** scored with rule (a); its pass rate is
+    reported as a separate *correction rate* but gates nothing; its fixtures still participate
+    in the fixture-regression rule.
+  - **(d) `infra_error`:** provider/API transport failure, harness fault, or provider-side
+    refusal-to-serve — never model behavior; excluded from denominators with the 10% cap below.
 - **Buckets / denominators:**
   - **should-succeed (authoring rate):** fixtures with `expect: "matched"`.
   - **should-refuse (adversarial 100%):** fixtures with `expect: "refuse"`.
@@ -1327,7 +1431,11 @@ EvalFixture = {
   host's skill path and lets the host **auto-activate** it under its own system prompt (OQ-027a
   faithful engagement — no injection, no preamble), runs one
   episode per `runs_per_fixture` with the host's rich tool suite over a per-episode ephemeral
-  workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied). Each
+  workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied).
+  The **shipped `SKILL.md` MUST carry a discoverable frontmatter `description`** (install-integrity /
+  discoverability, NFR-009 / OQ-010) — without it the host cannot recognise it as a skill; a fixture
+  `intent_nl` that fails to trigger the skill is a true signal about the shipped description or the
+  fixture's realism, fixed in the skill or corpus — never by a harness knob. Each
   episode is driven as a **stateful session** so the driver can answer the shipped skill's §6
   interactive review (FR-030): when the first turn presents the matched template for approval and
   emits no `AuthoringResult`, the driver supplies the review's **approve** exit ONCE — as the

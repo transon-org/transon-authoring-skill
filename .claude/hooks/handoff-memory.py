@@ -15,9 +15,10 @@ sys.path.insert(0, str(ROOT / "harness" / "scripts"))
 
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
+        loaded = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
-        payload = {}
+        loaded = {}
+    payload = loaded if isinstance(loaded, dict) else {}
 
     if payload.get("stop_hook_active"):
         print("{}")
@@ -27,7 +28,8 @@ def main() -> int:
         from update_memory import handoff_nudge
 
         msg = handoff_nudge()
-    except Exception:
+    except Exception as exc:  # fail-open: never block the agent on hook faults
+        print(f"handoff-memory: {exc}", file=sys.stderr)
         print("{}")
         return 0
 

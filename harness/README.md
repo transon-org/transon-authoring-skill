@@ -9,8 +9,8 @@ the CI (GitHub mandates the root).
 - `commands/` — command procedures (`run-milestone` · `implement-requirement` ·
   `propose-spec-change`)
 - `skills/` — tool-neutral skill / always-on rule bodies (`hygiene`)
-- `scripts/` — deterministic harness gates (`check_traceability` · `check_append_only_ids` ·
-  `update_memory`)
+- `scripts/` — deterministic harness gates (`check_traceability` · `check_append_only_ids`)
+  and harness utilities (`update_memory`)
 - `githooks/` — binding git hooks (`pre-commit` · `commit-msg`); enable with
   `git config core.hooksPath harness/githooks`
 
@@ -37,5 +37,5 @@ behavior still goes SPEC-first (SPEC §12). Ported from the `transon-blockly` ha
 4. **Docs split by role.** `AGENTS.md` + `harness/` + the adapters *operate*; `docs/SPEC.md` +
    `docs/traceability.md` + `docs/id-ledger.json` *contract*; `docs/current-state.md` is
    **non-authoritative working memory** (session handoff — regenerate its header with
-   `python harness/scripts/update_memory.py --state`). Adapters reference the operating
+   `python3 harness/scripts/update_memory.py --state`). Adapters reference the operating
    contract, never restate it.
