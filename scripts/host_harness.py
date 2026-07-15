@@ -311,17 +311,23 @@ def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
     return tokens
 
 
-#: OQ-016d — substrings that mark a provider/credential/transport fault the host
-#: may report as ordinary assistant text. Lowercased comparison.
+#: OQ-016d — substrings that mark a provider/credential fault the host may report
+#: as ordinary assistant text (the captured case: an invalid key surfaced as the
+#: assistant text "Invalid API key · Fix external API key"). Lowercased compare.
+#:
+#: DELIBERATELY NARROW: only unambiguous CLI/API fault strings that a model
+#: authoring JSON transforms would never legitimately emit. Generic capacity words
+#: ("quota", "rate limit", "overloaded") and financial phrases ("credit balance
+#: …") were REMOVED — they match ordinary assistant prose (e.g. a transform that
+#: mentions a rate-limit or quota field), which would wrongly exclude a genuine
+#: token-consuming MODEL failure from the denominator (OQ-016d honesty). Those
+#: faults prevent the turn from running and so are caught by the zero-token signal
+#: in _infra_hint (a real model turn always burns input tokens) — the robust
+#: catch-all; these markers are only belt-and-suspenders for the auth case.
 _INFRA_MARKERS = (
     "invalid api key",
     "fix external api key",
     "authentication_error",
-    "credit balance is too low",
-    "insufficient credit",
-    "quota",
-    "rate limit",
-    "overloaded",
 )
 
 

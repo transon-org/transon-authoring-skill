@@ -37,6 +37,14 @@ def _fmt_usd(value: Any) -> str:
         return "n/a"
 
 
+def _cell(value: Any) -> str:
+    """Escape a value for a GitHub-Flavored-Markdown table cell: a literal `|`
+    would otherwise be read as a column delimiter and misalign every following
+    row. Engine error text is passed through verbatim (SPEC §11.5) and can carry
+    `|`, so any interpolated string value must go through this."""
+    return str(value).replace("|", "\\|")
+
+
 def _histogram(mapping: dict[str, int]) -> str:
     if not mapping:
         return "—"
@@ -97,7 +105,7 @@ def render(summary: dict[str, Any], report: dict[str, Any] | None = None) -> str
     ):
         majority = (fixtures_report.get(fid) or {}).get("majority", "—")
         lines.append(
-            f"| `{fid}` | {fx['fixture_bytes']:,} | {majority} | "
+            f"| `{_cell(fid)}` | {fx['fixture_bytes']:,} | {_cell(majority)} | "
             f"{_fmt_usd(fx['cost_usd_total'])} | {_fmt_usd(fx['cost_usd_mean'])} | "
             f"{fx['steps_mean']:.1f} | {fx['cache_read_ratio'] * 100:.1f}% |"
         )
@@ -113,9 +121,9 @@ def render(summary: dict[str, Any], report: dict[str, Any] | None = None) -> str
         if len(error) > 60:
             error = error[:57] + "…"
         lines.append(
-            f"| `{ep['fixture_id']}` | {ep['run_index']} | {ep['outcome']} | "
+            f"| `{_cell(ep['fixture_id'])}` | {ep['run_index']} | {_cell(ep['outcome'])} | "
             f"{_fmt_usd(ep['cost_usd'])} | {ep['steps']} | "
-            f"{ep['tokens']['output']:,} | {error} |"
+            f"{ep['tokens']['output']:,} | {_cell(error)} |"
         )
     lines.append("")
     lines.append("</details>")

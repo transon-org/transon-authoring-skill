@@ -37,10 +37,12 @@ Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (s
 <!-- config: FR-022 / AC-014 -->
 
 **If a samples path was given to you** — a `--samples` value or a provided samples file, as in CI or
-a headless/single-turn run — that path IS your SampleSet: **skip this entire section.** Do NOT stat
-or read `.transon-authoring.json`, and do NOT run `init-config` — go straight to section 2. The
-config-discovery steps below apply ONLY when no samples path was given and you must find where
-SampleSet files live.
+a headless/single-turn run — that path IS your SampleSet: **skip the samples-LOCATION discovery
+below**, and do NOT run `init-config`, prompt, or create a config. Its `layout` is irrelevant when
+the path is explicit. But if `.transon-authoring.json` already exists at the repo root, read it ONCE
+for its `repair_attempts` budget only (used by the section 5.1 repair loop, FR-007/NFR-006) — never
+create or prompt for one. Then go straight to section 2. The location-discovery steps below apply
+ONLY when no samples path was given and you must find where SampleSet files live.
 
 1. Look for `.transon-authoring.json` at the repo root and read it if present. It gives the
    samples `layout` (where SampleSet files live) and the `repair_attempts` budget.
@@ -252,10 +254,11 @@ review step.
 <!-- result envelope: FR-008 / AC-012 / AC-026 / AC-027 -->
 
 Emit your `AuthoringResult` by running the module — NEVER by hand-writing the envelope. On a matched
-success (you hold a template that verified at `assurance: "matched"`), run:
+success (you hold a template that verified at `assurance: "matched"`), run — passing `<N>`, the
+number of repairs consumed by the section 5.1 loop (0 if your first candidate verified matched):
 
 ```
-python -m transon_authoring result --template <template-path> --samples <samples-path>
+python -m transon_authoring result --template <template-path> --samples <samples-path> --repair-count <N>
 ```
 
 and return its stdout **verbatim** as your final message. That command re-verifies and
@@ -277,9 +280,10 @@ python -m transon_authoring result --refuse --status <STATUS> --explanation "<wh
 ```
 
 where `<STATUS>` is the matching status from the table below — one of `aborted` (refused /
-abandoned), `deferred` (stop for now), `need-samples` (sample loop unconfirmed), or
-`repair-exhausted`. (`samples-rejected` / `verify-failed` come from the plain `result --template
---samples` above; `schema-error` / `profile-rejected` are CLI errors, not something you emit.)
+abandoned), `deferred` (stop for now), `need-samples` (sample loop unconfirmed), `repair-exhausted`,
+or `profile-rejected` (the request demanded a non-default marker/transformer — a skill-level
+out-of-profile stop). (`samples-rejected` / `verify-failed` come from the plain `result --template
+--samples` above; `schema-error` is a CLI ingress error, never a skill `AuthoringResult`.)
 
 `ok: true` if and only if `status: "matched"`. Include `template` only on success. Failures always
 set `ok: false`, use a status from the table below, and never present a template as success.

@@ -465,7 +465,9 @@ No console-script product; no MCP.
   --samples <path>`: it re-runs the §11.4 `verify` of the template against the SampleSet and emits
   the COMPLETE §11.5 `AuthoringResult` envelope on stdout — **machine-generated, never hand-written.**
   A matched verdict emits the success envelope (`ok: true`, `status: "matched"`, the verified
-  `template`, the verify `verdict`, `repair_count: 0`); a non-matched verdict emits the failure
+  `template`, the verify `verdict`, and `repair_count` = the `--repair-count N` the skill passes —
+  the §11.5 repairs-consumed count from its §11.9 repair loop, `0` when omitted / a first-try
+  success, `N >= 0`); a non-matched verdict emits the failure
   envelope (`ok: false`, no `template`, the verify-derived §11.5 `status` — `samples-rejected` when
   the SampleSet stage failed, otherwise `verify-failed` — with the `verdict` diagnostic); malformed
   ingress is the §11.6 `schema-error` CliError, as for every subcommand. `SKILL.md` §7's result step
@@ -477,9 +479,13 @@ No console-script product; no MCP.
   **refusal** envelope — `python -m transon_authoring result --refuse --status <STATUS>
   --explanation <TEXT>` emits `{schema_version, ok: false, status, explanation}` (exit 1) for the
   §11.5 statuses the skill emits DIRECTLY with no verify verdict: `aborted`, `deferred`,
-  `need-samples`, `repair-exhausted`. A bad combination — a status outside that set, an empty
-  `--explanation`, or a stray `--template`/`--samples` — is the §11.6 `schema-error` CliError
-  (exit 2). `profile-rejected` stays a CLI-level `CliError`, not a skill refusal. This closes the
+  `need-samples`, `repair-exhausted`, and `profile-rejected` (the skill-level out-of-profile stop —
+  §11.5: the skill stops WITHOUT calling verify when the request demands a non-default
+  marker/transformer). A bad combination — a status outside that set, an empty `--explanation`, a
+  stray `--template`/`--samples`, or `--repair-count` (a matched-success field) — is the §11.6
+  `schema-error` CliError (exit 2). The CLI's OWN reserved-knob rejection (`--marker`/`--transformer`,
+  AC-027) remains a `CliError` (exit 2), distinct from this skill-level `profile-rejected`
+  AuthoringResult; `schema-error` is a CLI ingress error only. This closes the
   same hand-writing failure mode on the refusal path that the verify path already closed: the
   real-host gate saw the AD-021 model refuse CORRECTLY but hand-write a schema-invalid envelope —
   missing `schema_version`/`explanation`, inventing `error`/`reason`/`detail` keys — failing OQ-016b
@@ -696,14 +702,16 @@ No console-script product; no MCP.
   matching the verify outcome; `SKILL.md` §7 mandates it.** (a) `python -m transon_authoring result
   --template T --samples S` writes exactly one `AuthoringResult` (§11.5 schema) to stdout: when
   `verify(T, S)` returns `ok` with `assurance: "matched"`, the success envelope (`ok: true`,
-  `status: "matched"`, `template` = T, `verdict` = the Verdict, `repair_count: 0`), exit 0; otherwise
+  `status: "matched"`, `template` = T, `verdict` = the Verdict, `repair_count` = `--repair-count N`
+  (default 0, `N >= 0`)), exit 0; otherwise
   a failure envelope (`ok: false`, no `template`, `status: "samples-rejected"` if the samples stage
   failed else `"verify-failed"`, carrying the `verdict`), exit 1; malformed ingress → §11.6
   `schema-error` CliError, exit 2. *(rev 2026-07-15: `result --refuse --status <STATUS>
   --explanation <TEXT>` machine-builds the template-less refusal envelope `{schema_version, ok:
   false, status, explanation}` (exit 1) for `status ∈ {aborted, deferred, need-samples,
-  repair-exhausted}`; a status outside that set, an empty `--explanation`, or a stray
-  `--template`/`--samples` → `schema-error` CliError, exit 2.)* (b) `SKILL.md` §2/§7 instruct the
+  repair-exhausted, profile-rejected}`; a status outside that set, an empty `--explanation`, a stray
+  `--template`/`--samples`, `--repair-count` with `--refuse`, or a negative `--repair-count` →
+  `schema-error` CliError, exit 2.)* (b) `SKILL.md` §2/§7 instruct the
   model to emit its `AuthoringResult` by running `result` (verify-derived) or `result --refuse`
   (refusal) and returning its stdout verbatim, and forbid hand-writing the envelope (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
   scorer to a correct hand-written one — the scorer's independent re-verify (AD-004) is unaffected.
@@ -1171,7 +1179,7 @@ primary machine result on stderr.
 | `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
-| `result` | `--template PATH --samples PATH` **or** `--refuse --status STATUS --explanation TEXT` | complete §11.5 `AuthoringResult`, machine-built (FR-034): verify-derived from the template, or a template-less refusal (`STATUS ∈ {aborted, deferred, need-samples, repair-exhausted}`) | 0 if matched, 1 on any failure/refusal envelope, 2 on bad args |
+| `result` | `--template PATH --samples PATH [--repair-count N]` **or** `--refuse --status STATUS --explanation TEXT` | complete §11.5 `AuthoringResult`, machine-built (FR-034): verify-derived from the template (`repair_count = N`, default 0), or a template-less refusal (`STATUS ∈ {aborted, deferred, need-samples, repair-exhausted, profile-rejected}`) | 0 if matched, 1 on any failure/refusal envelope, 2 on bad args |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
 | `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (rev 2026-07-11: flags aligned with §11.9) | `ProjectConfig` | 0/2 |

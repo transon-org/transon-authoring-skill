@@ -244,7 +244,23 @@ def test_fr_034_ac_037_result_command_builds_authoring_result_envelope(tmp_path)
     assert env["ok"] is True and env["status"] == "matched"
     assert env["template"] == ATTR_X
     assert env["verdict"] == verify(ATTR_X, ss)   # the exact library Verdict
-    assert env["repair_count"] == 0
+    assert env["repair_count"] == 0   # no --repair-count → first-try success
+
+    # --repair-count N is carried into the envelope verbatim (§11.5 repair_count =
+    # repairs consumed; the skill passes its tracked count so a REPAIRED success
+    # reports the truth, not a hard-coded 0).
+    r = run_cli("result", "--template", write_json(tmp_path, "t3.json", ATTR_X),
+                "--samples", samples_path, "--repair-count", "3")
+    assert r.returncode == 0
+    env = one_json_document(r)
+    assert env["status"] == "matched" and env["repair_count"] == 3
+    assert schema_violations(env, "authoring_result.json") == []
+
+    # A negative --repair-count is a usage error → §11.6 schema-error, exit 2.
+    r = run_cli("result", "--template", write_json(tmp_path, "t4.json", ATTR_X),
+                "--samples", samples_path, "--repair-count", "-1")
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
 
     # valid template that does not match → verify-failed, NO template (AC-004).
     r = run_cli("result", "--template", write_json(tmp_path, "b.json", BAD_TEMPLATE),
@@ -281,7 +297,11 @@ def test_fr_034_ac_037_result_refuse_builds_refusal_envelope(tmp_path):
     schema_version/explanation, inventing error/reason keys) — invalid_submission
     on every adversarial episode."""
     # Each template-less refusal status → a schema-valid envelope, exit 1.
-    for status in ("aborted", "deferred", "need-samples", "repair-exhausted"):
+    # profile-rejected is INCLUDED: §11.5 makes it a skill-level out-of-profile
+    # stop (distinct from the CLI's reserved-knob CliError), so it needs a machine
+    # path too (it was reported failing invalid_submission when hand-written).
+    for status in ("aborted", "deferred", "need-samples", "repair-exhausted",
+                   "profile-rejected"):
         r = run_cli("result", "--refuse", "--status", status,
                     "--explanation", "No such operator 'frobnicate' in the pinned engine.")
         assert r.returncode == 1, status
@@ -294,12 +314,18 @@ def test_fr_034_ac_037_result_refuse_builds_refusal_envelope(tmp_path):
         assert "template" not in env and "verdict" not in env  # AC-004
 
     # A status OUTSIDE the template-less refusal set (verify-derived / matched /
-    # CLI-level) is a usage error, not a silently-built envelope → exit 2.
+    # CLI ingress error) is a usage error, not a silently-built envelope → exit 2.
     for bad_status in ("matched", "verify-failed", "samples-rejected",
-                       "schema-error", "profile-rejected", "bogus"):
+                       "schema-error", "bogus"):
         r = run_cli("result", "--refuse", "--status", bad_status, "--explanation", "x")
         assert r.returncode == 2, bad_status
         assert one_json_document(r)["status"] == "schema-error"
+
+    # --repair-count applies to a matched success, not a refusal → exit 2.
+    r = run_cli("result", "--refuse", "--status", "aborted", "--explanation", "x",
+                "--repair-count", "2")
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
 
     # Empty / whitespace explanation → exit 2 (a refusal must explain itself).
     r = run_cli("result", "--refuse", "--status", "aborted", "--explanation", "   ")

@@ -1139,23 +1139,36 @@ def run_evals(
     # the scored EpisodeTranscript (FR-032), the whole-episode message transcript
     # and the run-summary telemetry roll-up (FR-035). All additive — a run
     # without --transcripts-dir scores byte-identically (AC-034 / AC-038).
+    # These artifacts are ADDITIVE and non-gating (AC-034 / AC-038): a
+    # filesystem / serialization failure while writing them must never change the
+    # scored verdict or the 0/1/2 exit code. Catch and report diagnostically, then
+    # fall through to scoring exactly as a run without --transcripts-dir would.
     if transcripts_dir is not None:
-        write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
-        write_episode_messages(
-            transcripts_dir, fixtures, per_fixture_episodes, runner_cfg
-        )
-        summary = build_run_summary(
-            fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
-        )
-        write_run_summary(transcripts_dir, summary)
-        print(
-            f"check-evals: run_summary — cost=${summary['totals']['cost_usd']:.4f} "
-            f"steps={summary['totals']['steps']} "
-            f"outcomes={summary['totals']['outcomes']} "
-            f"-> {transcripts_dir}/run_summary.json",
-            file=sys.stderr,
-            flush=True,
-        )
+        try:
+            write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
+            write_episode_messages(
+                transcripts_dir, fixtures, per_fixture_episodes, runner_cfg
+            )
+            summary = build_run_summary(
+                fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
+            )
+            write_run_summary(transcripts_dir, summary)
+            print(
+                f"check-evals: run_summary — cost=${summary['totals']['cost_usd']:.4f} "
+                f"steps={summary['totals']['steps']} "
+                f"outcomes={summary['totals']['outcomes']} "
+                f"-> {transcripts_dir}/run_summary.json",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — additive artifacts never gate
+            print(
+                f"check-evals: WARNING: failed to write FR-035 run artifacts "
+                f"({type(exc).__name__}: {exc}); continuing — artifacts are "
+                "additive/non-gating (AC-034/AC-038), scoring is unaffected",
+                file=sys.stderr,
+                flush=True,
+            )
 
     report = aggregate(fixtures, per_fixture_episodes, targets, baseline)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -1164,10 +1177,17 @@ def run_evals(
     # exactly (summarize_run folds majority/red in from here). stdout is unchanged
     # — this is an additional artifact, never a substitute (AC-034 / AC-038).
     if transcripts_dir is not None:
-        (transcripts_dir / "report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        try:
+            (transcripts_dir / "report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:  # additive artifact — never gate (AC-038)
+            print(
+                f"check-evals: WARNING: failed to write report.json ({exc}); "
+                "the report on stdout is authoritative",
+                file=sys.stderr,
+            )
     for reason in report["red"]:
         print(f"check-evals: RED: {reason}", file=sys.stderr)
     if report["red"]:
@@ -1257,11 +1277,30 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.lint:
-        only = (
-            [fid.strip() for fid in args.only.split(",") if fid.strip()]
-            if args.only
-            else None
-        )
+        only = None
+        if args.only is not None:
+            only = [fid.strip() for fid in args.only.split(",") if fid.strip()]
+            # A given-but-empty selector (`--only ,` / `--only ""`) must NOT
+            # silently fall through to an unrestricted full run — that would run
+            # the whole (paid) corpus by accident. Fail closed (exit 2) before any
+            # credential/provider work, like every other config error.
+            if not only:
+                print(
+                    "check-evals: config error: --only was given but names no "
+                    "fixture ids (FR-035: --only takes comma-separated ids)",
+                    file=sys.stderr,
+                )
+                return 2
+            # A subset probe must never mint the baseline: the OQ-016f baseline is
+            # the accepted-passers of a FULL-corpus green gate, not of a probe.
+            if args.update_baseline:
+                print(
+                    "check-evals: config error: --only (a subset probe) cannot be "
+                    "combined with --update-baseline — the baseline is minted only "
+                    "from a full-corpus run (OQ-016f / §11.8)",
+                    file=sys.stderr,
+                )
+                return 2
         return run_evals(
             args.root.resolve(),
             update_baseline=args.update_baseline,

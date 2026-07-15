@@ -535,6 +535,32 @@ def test_oq_016d_real_model_turn_without_envelope_stays_no_submit():
     ).status == STATUS_RESULT
 
 
+def test_oq_016d_prose_mentioning_capacity_words_is_not_infra():
+    """OQ-016d — a token-consuming model turn whose prose merely MENTIONS generic
+    capacity/finance terms ("rate limit", "quota", "overloaded", "credit balance")
+    must stay a model result, never infra_error. Those words were removed from
+    the fault markers precisely so ordinary transform prose can't be laundered out
+    of the denominator; real capacity faults produce NO tokens and are caught by
+    the zero-token signal instead."""
+    tokens = {"input": 90, "output": 700, "cache_read": 3000,
+              "cache_creation": 0, "turns": 1}
+    for phrase in (
+        "The payload has a rate limit field and a quota field.",
+        "This maps the account's credit balance; the server was overloaded once.",
+    ):
+        messages = [
+            {"type": "AssistantMessage", "subtype": None,
+             "content": [{"type": "text", "text": phrase}]},
+            {"type": "ResultMessage", "subtype": "success", "content": None},
+        ]
+        assert host_harness._infra_hint(messages, tokens) is None, phrase
+        outcome = host_harness._classify_terminal(
+            "success", None, phrase, tokens, 0.02,
+            host_harness._infra_hint(messages, tokens),
+        )
+        assert outcome.status == STATUS_NO_RESULT, phrase
+
+
 def test_fr_030_review_approval_prompt_mandates_result_verbatim():
     """FR-030 (rev 2026-07-14) / FR-034 — the driver's review-approval message
     tells the model to emit by RUNNING the `result` command and returning its

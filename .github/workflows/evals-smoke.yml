@@ -341,14 +341,17 @@ jobs:
       # scanner is in the bundle; it imports check_evals (SECRET_PATTERNS) via
       # the bundled scripts dir + PYTHONPATH.
       - name: Secret-scan transcripts (OQ-027f(iv) / NFR-011)
+        id: scan
         if: always()
         run: python3 "${RUNNER_TEMP}/evalbundle/repo/scripts/scan_transcripts.py" "${RUNNER_TEMP}/transcripts"
 
       # (iv) Upload the transcripts as a build artifact (never committed) — same
       # as evals.yml, so the smoke also validates that the upload works UNDER the
-      # egress block (its GitHub endpoints are allow-listed above).
+      # egress block (its GitHub endpoints are allow-listed above). GATED on the
+      # scan's success (OQ-027f(iv)): always() so a failed assertion still uploads
+      # diagnostics, but a secret-scan hit blocks publication.
       - name: Upload episode transcripts (build artifact, never committed)
-        if: always()
+        if: always() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: eval-smoke-transcripts

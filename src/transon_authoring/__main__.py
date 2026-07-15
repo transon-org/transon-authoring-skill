@@ -64,12 +64,15 @@ _RESERVED_KNOBS = (("marker", "--marker"), ("transformer", "--transformer"))
 #: FR-034 (rev 2026-07-15) — the §11.5 failure statuses `result --refuse` will
 #: machine-build. These are the ones the skill emits DIRECTLY, with no template
 #: and no verify verdict: a §2 refusal (`aborted`), a review/sample-loop stop
-#: (`deferred`/`aborted`), a still-unconfirmed sample loop (`need-samples`), or
-#: repair exhaustion (`repair-exhausted`). `matched`/`samples-rejected`/
-#: `verify-failed` are verify-derived (--template/--samples); `schema-error`/
-#: `profile-rejected` are CLI-level CliErrors, never a skill refusal decision.
+#: (`deferred`/`aborted`), a still-unconfirmed sample loop (`need-samples`),
+#: repair exhaustion (`repair-exhausted`), or a skill-level out-of-profile stop
+#: (`profile-rejected` — §11.5: the skill stops WITHOUT calling verify when the
+#: request demands a non-default marker/transformer; distinct from the CLI's own
+#: reserved-knob rejection, which is a CliError, exit 2, AC-027). `matched` /
+#: `samples-rejected` / `verify-failed` are verify-derived (--template/--samples);
+#: `schema-error` is a CLI ingress error, never a skill AuthoringResult.
 _REFUSAL_STATUSES = frozenset(
-    {"aborted", "deferred", "need-samples", "repair-exhausted"}
+    {"aborted", "deferred", "need-samples", "repair-exhausted", "profile-rejected"}
 )
 
 
@@ -183,6 +186,13 @@ def _cmd_result(args: argparse.Namespace) -> int:
         raise IngressError(
             [preflight_error("result needs --template and --samples (or --refuse)")]
         )
+    # §11.5 repair_count = repairs consumed by the skill loop. The skill tracks it
+    # (SKILL.md §5.1) and passes it through so a REPAIRED success reports the true
+    # count, not a hard-coded 0. Absent → 0 (a first-try success); negative is a
+    # usage error (schema-error, exit 2) like every other bad ingress.
+    repair_count = 0 if args.repair_count is None else args.repair_count
+    if repair_count < 0:
+        raise IngressError([preflight_error("--repair-count must be an integer >= 0")])
     template = load_json_file(args.template)
     sample_set = load_document(args.samples, "sample_set.json")
     verdict = verify(template, sample_set)
@@ -195,7 +205,7 @@ def _cmd_result(args: argparse.Namespace) -> int:
                 "explanation": "Template verified at assurance matched.",
                 "template": template,
                 "verdict": verdict,
-                "repair_count": 0,
+                "repair_count": repair_count,
             }
         )
         return 0
@@ -236,6 +246,10 @@ def _cmd_result_refuse(args: argparse.Namespace) -> int:
     if args.template is not None or args.samples is not None:
         errors.append(
             preflight_error("--refuse takes no --template/--samples (no verify)")
+        )
+    if args.repair_count is not None:
+        errors.append(
+            preflight_error("--repair-count applies to a matched success, not --refuse")
         )
     if args.status not in _REFUSAL_STATUSES:
         errors.append(
@@ -542,6 +556,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--explanation",
         metavar="TEXT",
         help="human-readable refusal explanation (with --refuse)",
+    )
+    result_parser.add_argument(
+        "--repair-count",
+        type=int,
+        default=None,
+        metavar="N",
+        help="repairs consumed by the skill loop before a matched success "
+        "(§11.5 repair_count; verify mode only, >= 0; default 0)",
     )
     _add_reserved_knobs(result_parser)
     result_parser.set_defaults(handler=_cmd_result)

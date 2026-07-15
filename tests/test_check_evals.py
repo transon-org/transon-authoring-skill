@@ -1332,6 +1332,14 @@ def test_fr_035_summarize_run_renders_measured_telemetry():
     # Renders without a report too (no majority/red available).
     assert "$0.3350" in summarize_run.render(summary)
 
+    # A literal `|` in verbatim engine error text is escaped so it can't corrupt
+    # the Markdown table (GFM cell delimiter).
+    piped = json.loads(json.dumps(summary))  # deep copy
+    piped["episodes"][1]["error"] = "dry_run failed: a|b mismatch"
+    out2 = summarize_run.render(piped)
+    assert "a\\|b mismatch" in out2
+    assert "| a|b mismatch |" not in out2  # never a raw unescaped pipe in a cell
+
 
 def test_fr_035_only_scopes_provider_run(monkeypatch, tmp_repo, capsys):
     # FR-035 — --only restricts the provider run (and thus the report) to the
@@ -1358,6 +1366,28 @@ def test_fr_035_only_unknown_id_is_config_error(monkeypatch, tmp_repo, capsys):
     )
     assert exit_code == 2
     assert "unknown fixture id" in capsys.readouterr().err
+
+
+def test_fr_035_empty_only_is_config_error_not_full_run(tmp_repo, capsys):
+    # FR-035 — a given-but-empty --only (`--only ,` / `--only ""`) must NOT fall
+    # through to an unrestricted (paid) full run; it exits 2 before any provider
+    # work, with the reason on stderr. Checked in main() before run_evals, so no
+    # credentials or host stub are needed.
+    for empty in (",", "", " , "):
+        rc = check_evals.main(["--only", empty, "--root", str(tmp_repo)])
+        assert rc == 2, repr(empty)
+        assert "names no fixture ids" in capsys.readouterr().err
+
+
+def test_fr_035_only_with_update_baseline_is_config_error(tmp_repo, capsys):
+    # FR-035 / OQ-016f — a subset probe must never mint the baseline; combining
+    # --only with --update-baseline is rejected (exit 2) before any run.
+    rc = check_evals.main(
+        ["--only", "seed-matched-flatten-orders", "--update-baseline",
+         "--root", str(tmp_repo)]
+    )
+    assert rc == 2
+    assert "cannot be combined with --update-baseline" in capsys.readouterr().err
 
 
 def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
