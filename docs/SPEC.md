@@ -1626,431 +1626,70 @@ the OQ-027f isolation contract is in force.)*
 
 ## 15. Open questions
 
-- **OQ-001** — **Resolved (2026-07-09; rev 2026-07-10):** pinned local engine package only; no
-  HTTP/WASM/MCP. Dry-run may use local worker subprocesses for timeout (AD-012/017).
+- **OQ-001** — **Resolved (2026-07-09):** pinned local engine package only; no HTTP/WASM/MCP.
+  Dry-run may use local worker subprocesses for timeout (AD-012/017).
 - **OQ-002** — **Resolved (2026-07-09):** standalone repo (AD-001).
-- **OQ-003** — **Resolved (2026-07-09; rev 2026-07-10):** authoritative example JSON =
-  snapshot `docs.examples`; NL intents in sidecar by `name`; no editor codec corpus duplication
-  (FR-010).
+- **OQ-003** — **Resolved (2026-07-09):** authoritative example JSON = snapshot `docs.examples`;
+  NL intents in sidecar by `name`; no editor codec corpus duplication (FR-010).
 - **OQ-004** — **Resolved (2026-07-09):** manual sync + drift now; scheduled PR bot later.
-- **OQ-005** — **Resolved (2026-07-09; rev 2026-07-10):** no in-surface gate/disclosure (AD-013).
+- **OQ-005** — **Resolved (2026-07-09):** no in-surface gate/disclosure (AD-013).
 - **OQ-006** — **Resolved (2026-07-09):** authoring ≥80%→95%; adversarial refuse =100%.
-- **OQ-007** — **Resolved (2026-07-09; rev 2026-07-10):** plain skill then plugin; no MCP.
+- **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP.
 - **OQ-008** — **Resolved (2026-07-10):** Cursor = structural + runtime smoke; no ingest claim.
 - **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
 - **OQ-010** — *(open; A4 only)* Claude Code headless skill listing. Until resolved, CI asserts
   **install integrity** only for Claude (FR-019 / AC-009). Does **not** block A0–A3.
-- **OQ-011** — **Resolved (2026-07-11):** Per-case attribution: `EngineError` gains optional
-  `case_id` (present when the error is attributable to a single `SampleCase`; absent for
-  `validate`, preflight, and profile errors); `DiffEntry` gains **required** `case_id`.
-  Reporting policy: stages stay fail-fast **between** stages; **within** `dry_run` and `match`
-  every case is processed sequentially in `cases[]` document order and **every** failure is
-  reported — one `EngineError` per failing dry-run case, all `DiffEntry`s per mismatching case.
-  This maximizes verbatim-error yield per repair round (FR-007) at bounded cost (≤ 5 s × case
-  count). Root-level `Verdict.writes` is **never emitted** in v1 (a single map is unattributable
-  across cases; per-case writes are visible via the `dry-run` debug verb); the field stays in the
-  schema as optional/reserved. §11.2 amended.
-- **OQ-012** — **Resolved (2026-07-11):** Library outputs echo raw engine values through the
-  normative **engine-value encoding `enc`** added to §11.0: the `NO_CONTENT` sentinel encodes as
-  `NoContentRef`; arrays/objects encode recursively; any object containing the key
-  `"$transon_authoring"` is wrapped as `LitRef` (member values encoded); scalars pass through.
-  `enc` is injective, so in encoded output a bare `NoContentRef` always denotes the sentinel and
-  never literal data. Applies to the `dry-run` envelope `result` and `writes` values and to
-  `DiffEntry.actual` (root `Verdict.writes` is not emitted — OQ-011). §11.0's "SampleSet
-  expectation encoding only" sentence is replaced, and expected-value decoding is clarified to
-  apply **recursively at every nesting level** (nested sentinels are reachable in pinned-engine
-  results: plain list/dict template nodes pass `NO_CONTENT` through). Engine values that are not
-  JSON-representable (non-string object keys — reachable via `map` key mode; non-finite
-  numbers — reachable via `call float`; non-JSON Python types) fail that case at `dry_run` with a
-  stable library-text `EngineError`; such values are equally inexpressible as expectations, so
-  nothing representable is lost. §11.4 matching is defined over the encoded domain (equivalent to
-  raw-domain matching by injectivity).
-- **OQ-013** — **Resolved (2026-07-11):** No order-insensitivity carve-out. `gaps[]`, `errors[]`,
-  and `diff[]` get a **defined emission order** (document-order primary; §11.1/§11.2 amended),
-  and AC-018 equality is plain structural equality — arrays ordered, object key order
-  insignificant (§11.0). Orders: **gaps** follow the §11.1 algorithm steps (see §11.1 "Gap
-  order"); **errors**: `validate` emits exactly one; `dry_run` emits one per failing case in
-  `cases[]` order; preflight/profile envelopes carry a single error; **diff**: cases in `cases[]`
-  order; within a case, output entries first (deterministic recursive walk defined in §11.2),
-  then the single `writes_mismatch` entry if any.
-- **OQ-014** — **Resolved (2026-07-11):**
-  (a) **Exit 3** emits a best-effort `CliError` envelope on stdout —
-  `{"schema_version":"1.0","ok":false,"status":"internal-error","explanation":"<ExceptionClass>: <message>","errors":[]}` —
-  as a single write, with the traceback on stderr only. The CLI error envelope is formalized as
-  the **`CliError`** document, `status ∈ {"schema-error","profile-rejected","internal-error"}`,
-  added to the §11.0 schema-version list; `"internal-error"` is CLI-level only and is **not**
-  added to `AuthoringResult.status`.
-  (b) **`schema_version` on all envelopes:** `examples search` →
-  `{"schema_version":"1.0","hits":[…]}`; `validate` → `{"schema_version":"1.0","ok":…,"errors":[…]}`;
-  `dry-run` → `{"schema_version":"1.0","ok":…,"result"?,"writes"?,"errors":[…]}` — on success
-  `result` and `writes` are both present (values per §11.0 `enc`; `writes` may be `{}`), on
-  failure both omitted and `errors` non-empty. The `metadata` subcommand is exempt: it emits the
-  pinned snapshot document verbatim (an engine document with its own `metadata_version`), not a
-  library envelope.
-  (c) **`PreflightError` kept and defined:** the `EngineError.type` for ingress failures detected
-  before any engine construction — JSON parse failure, duplicate object keys or non-finite
-  numbers (§11.0 ingress), JSON-Schema validation failure, unsupported `schema_version`,
-  unreadable input file. Message is stable library text; `engine_type` omitted; it appears only
-  in `CliError` envelopes with `status:"schema-error"` (exit 2). `ProfileError` remains the type
-  for reserved-knob rejection (`status:"profile-rejected"`, exit 2). **`EngineError.type`
-  closure:** an exception raised during dry-run execution that is neither `DefinitionError` nor
-  `TransformationError` (the pinned engine leaks e.g. `ValueError` from `call int`,
-  `ZeroDivisionError` from `expr /`) is reported as `type:"TransformationError"` — the engine
-  SPECIFICATION §2.4 class "template valid, data incompatible" — with `engine_type` = the actual
-  Python exception class name and `message` = verbatim `str(exc)`.
-  (d) **`--includes` file schema:** exactly the `SampleSet.includes` map shape — a bare JSON
-  object `{ [name: string]: JsonValue }` (include name → template JSON), no `schema_version`
-  wrapper; any other JSON value → exit 2 `schema-error`.
-  (e) **JSON Schema draft:** all documents under `src/transon_authoring/schemas/` are authored in
-  **draft 2020-12** (each declares `$schema`); runtime validation uses the `jsonschema` Python
-  package (new runtime dependency, `jsonschema>=4.18`); `schema_invalid`
-  gap/`PreflightError` messages derive from validator errors sorted by (JSON instance path,
-  message) for determinism (OQ-013).
-- **OQ-015** — **Resolved (2026-07-11, A2 standup):** The A1 provisional canonicalization is
-  adopted **unchanged** as normative (committed fixtures need no regeneration).
-  `content_fingerprint` = lowercase hex SHA-256 of the UTF-8 encoding of
-  `json.dumps(subset, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)`,
-  where `subset` is the object containing exactly those of the keys `schema_version`, `coverage`,
-  `waivers`, `cases`, `includes` that are **present** in the SampleSet document — an absent
-  `includes` is omitted, **not** hashed as `{}`; `intent_nl` and `confirmation` stay excluded
-  (§11.1). Number formatting follows the parsed document: integers serialize with no fraction
-  part, floats by Python shortest-round-trip `repr` — consistent with §11.4 (`1` ≠ `1.0`);
-  non-finite numbers are already rejected at ingress (§11.0). Non-ASCII is emitted unescaped and
-  hashed as UTF-8. **Acquisition path (normative):** agents/skill NEVER compute or reimplement
-  the fingerprint. They obtain it exclusively from `SampleCheck.content_fingerprint` by running
-  `check-samples` on the not-yet-confirmed SampleSet (the exit-1 `SampleCheck` still carries the
-  recomputed fingerprint) and copy that value into `confirmation.content_fingerprint` at
-  confirmation time. `transon_authoring.samples.content_fingerprint` is the single
-  implementation; its "provisional-internal" marker is removed.
-- **OQ-016** — **Resolved (2026-07-11, A2 standup):** Mechanical scoring per run, over the final
-  `AuthoringResult` submitted by the skill under test (§11.8 harness, OQ-017):
-  (a) **matched-success** (for `expect: "matched"` **and** `expect: "matched_correction"`): the
-  submitted `AuthoringResult` validates against the bundled schema, `ok === true`,
-  `status === "matched"`, `template` present, `verdict.ok === true` with
-  `assurance === "matched"`, **and** the harness independently re-runs
-  `python -m transon_authoring verify --template <submitted> --samples <fixture SampleSet>` with
-  exit 0 (the skill's claim is never trusted — AD-004).
-  (b) **refuse-success** (for `expect: "refuse"`): the submitted `AuthoringResult` validates
-  against the schema, `ok === false`, `template` absent, and `status` ∈ {`need-samples`,
-  `deferred`, `aborted`, `samples-rejected`, `verify-failed`, `repair-exhausted`,
-  `profile-rejected`}. `status: "schema-error"` and a missing/invalid submission are scored as
-  refuse-**failure** (not infra). The §11.5 `aborted` row is reworded to include skill-initiated
-  refusal (AC-003).
-  (c) **`matched_correction` is reporting-only:** scored with rule (a); its pass rate is reported
-  as a separate *correction rate* but gates nothing (per §11.8 buckets); its fixtures still
-  participate in the fixture-regression rule.
-  (d) **`infra_error`:** provider/API transport failure, harness fault, or provider-side
-  refusal-to-serve — never model behavior; excluded from denominators per §11.8 with the 10% cap.
-  (e) **`evals/targets.json` (normative shape; §11.8):** `{ "schema_version": "1.0",
-  "authoring_target": number (initial 0.80), "adversarial_target": 1.0 }` — the ratchet edits
-  `authoring_target` by explicit commit; `adversarial_target` is constant 1.0.
-  (f) **Fixture-regression baseline (normative; §11.8):** committed `evals/baseline.json` —
-  `{ "schema_version": "1.0", "passing": [fixture ids…] }`, the set of fixture ids that have
-  achieved majority-pass in a previously accepted gate run. `check_evals` fails if any baseline
-  id fails its majority, regardless of aggregate rates; ids are added only via explicit
-  `check_evals --update-baseline` commits (append-only in practice; removals require deleting the
-  fixture).
-- **OQ-017** — **Resolved (2026-07-11, A2 standup); harness shape *revised* 2026-07-14 by OQ-027 /
-  AD-024 (absorbs RFC-002).** The gate harness is no longer the raw loop below — it is the **real
-  host** (Claude Agent SDK reference host, pinned in `runner.json.harness`), feeding the unchanged
-  OQ-016 scorer through the OQ-027e adapter. The raw loop described here is **demoted to a
-  non-gating offline smoke fixture** (OQ-027d), retained and fake-provider-tested but never the
-  gate. The rest of this resolution (prompting bytes, workspace confinement, budget/infra
-  distinctions, the `[evals]` extra, the dispatch-vs-PR CI split) stands as the description of that
-  smoke fixture and the shared conventions the real host inherits. Original A2-standup resolution
-  follows.
-  The runner *was* a **raw API tool loop** owned
-  by this repo (no headless coding-agent dependency, no MCP): `scripts/eval_harness.py`, driven
-  by `scripts/check_evals.py`.
-  (a) **Prompting:** the system prompt is the verbatim bytes of the repo-root `SKILL.md` plus a
-  fixed harness preamble (workspace rules, tool descriptions, "finish by calling `submit_result`
-  exactly once"). The user message carries the fixture's `intent_nl` and, when the fixture
-  supplies `samples`, the workspace-relative path where the harness wrote it (`samples.json`).
-  (b) **Tools (exactly three, provider tool-use API):** `write_file(path, content)` — write a
-  UTF-8 file at a relative path confined to the per-run temp workspace;
-  `transon_authoring(argv: string[])` — run `python -m transon_authoring <argv…>` with
-  cwd = workspace, returning `{exit_code, stdout, stderr}` (stdout/stderr truncated at a fixed
-  byte cap); `submit_result(result: AuthoringResult)` — ends the episode. No shell tool, no
-  network tool, no absolute paths.
-  (c) **Budget & pinning:** `evals/runner.json` (AD-020) pins provider/model/settings;
-  `tool_budget` caps total tool calls per run — exceeding it, or ending without `submit_result`,
-  scores the run as bucket-failure (not infra). No sampling parameters are sent (rev 2026-07-12:
-  the pinned model rejects non-default `temperature`/`top_p`/`top_k` with a 400); `seed` passed
-  through when the provider supports it.
-  (d) **Provider client:** selected by `runner.json.provider`; v1 implements `"anthropic"` via
-  the `anthropic` SDK, declared as the optional extra `transon-authoring[evals]` — never a
-  runtime dependency (NFR-003 is unaffected: evals are inherently online and are not part of the
-  offline surface).
-  (e) **CI shape:** full `check_evals` runs in a separate manually-dispatched (and later
-  scheduled) workflow holding the provider secret — never in per-PR CI. Per-PR CI runs the
-  credential-free parts: `check_evals --lint` (fixture/runner/targets/baseline structural checks,
-  NFR-011) and the scoring/harness unit tests, which use an injected fake provider
-  (NFR-002-style determinism for the gate logic itself).
-  (f) **Initial committed `runner.json` values (gate identity per AD-020):**
-  `provider: "anthropic"`, `model_id: "claude-sonnet-5"`,
-  `max_output_tokens: 8192`, `tool_budget: 32`, `runs_per_fixture: 3`,
-  `pass_rule: "majority"`, `seed: null` (rev 2026-07-12: `temperature` pin dropped — see §11.8).
-  Changing any is an explicit eval-policy commit. *(rev 2026-07-12, OQ-024/AD-021: the
-  `model_id` above is the A2-standup **initial** value and is superseded by the §11.8 gate-model
-  policy — `claude-haiku-4-5-20251001` becomes the pin effective from the ordered eval-policy
-  commit that swaps `runner.json` and resets the baseline; until that commit lands, these
-  committed values remain the in-force gate identity.)* *(rev 2026-07-14, OQ-027/AD-024: the shape
-  gains a `harness` block, added to the committed `runner.json` as `{ kind: "agent-sdk", version:
-  <pinned claude-agent-sdk version> }`; it is gate identity and a change to it is an eval-policy
-  commit that resets the baseline, §11.8.)*
-- **OQ-018** — **Resolved (2026-07-11, A2 standup):** all edges resolved to the A1-implemented
-  behavior, now normative in §11.1 ("Edge semantics"):
-  (a) **Placeholder:** `Confirmation.content_fingerprint` is required; the normative
-  pre-confirmation placeholder is the empty string `""`.
-  (b) `fingerprint_mismatch` **is** emitted alongside `unconfirmed` whenever the recorded
-  fingerprint differs from the recomputed one, including when `confirmed === false`
-  (deterministic; harmless because `confirmed` is already false). Order per §11.1 gap order:
-  `unconfirmed` then `fingerprint_mismatch`.
-  (c) `confirmed: true` with missing or invalid `confirmed_by` → gap **`unconfirmed`** (message
-  names `confirmed_by`); no new gap code.
-  (d) A waiver referencing a **rejected** obligation is **not** `waiver_invalid`: any
-  `coverage[].id` is a valid reference; the clear simply has no effect (rejected obligations are
-  ignored at step 3).
-  (e) `proposed`/`rejected` waivers never clear obligations and emit no gap by themselves;
-  `waiver_invalid` is per dangling reference (any acceptance), and the remaining valid refs of an
-  **accepted** waiver still clear.
-  (f) `target` on `happy_path` / `mode_choice` / `custom` is **ignored, never validated** —
-  `target_required`/`target_invalid` apply only to the five pointer kinds; bundled-schema typing
-  still applies.
-  (g) An invalid template inside `includes` fails at **`dry_run`** stage (include-load error on
-  the including case), never at `samples`: `check_samples` is engine-free and checks the artifact
-  only (AD-016 / NFR-002); §11.1 step 1 validates `includes` values only as `JsonValue`s.
-- **OQ-019** — **Resolved (2026-07-11):** Python floor is **`>=3.10`** in `pyproject.toml`. The
-  pinned engine's actual marker is `>=3.9` (checked in the `transon==0.1.7` checkout), so any
-  floor ≥3.9 is dependency-compatible; 3.10 is chosen because 3.9 is past end-of-life
-  (Oct 2025) and the AGENTS.md stack contract already states ≥3.10. Note `tomllib` is 3.11+:
-  repo scripts that read the pin from `pyproject.toml` must not import `tomllib` (parse the pin
-  line textually).
+- **OQ-011** — **Resolved (2026-07-11):** Per-case attribution on `EngineError`/`DiffEntry`;
+  fail-fast between stages, report every failure within `dry_run`/`match`; root `Verdict.writes`
+  never emitted in v1. Normative in §11.2.
+- **OQ-012** — **Resolved (2026-07-11):** Library outputs use normative engine-value encoding
+  `enc` (`NoContentRef` / `LitRef` / recursive); non-JSON-representable engine values fail the
+  case at `dry_run`. Normative in §11.0 / §11.4.
+- **OQ-013** — **Resolved (2026-07-11):** Defined emission order for `gaps[]`/`errors[]`/`diff[]`;
+  AC-018 equality is plain structural equality. Normative in §11.0–§11.2.
+- **OQ-014** — **Resolved (2026-07-11):** Exit-3 `CliError` envelope; `schema_version` on all
+  library envelopes; `PreflightError` / `EngineError.type` closure; bare `--includes` map;
+  JSON Schema draft 2020-12 via `jsonschema`. Normative in §11.0 / §11.6.
+- **OQ-015** — **Resolved (2026-07-11):** `content_fingerprint` = SHA-256 of the canonical
+  hashed subset; agents obtain it only from `SampleCheck.content_fingerprint` via
+  `check-samples`. Normative in §11.1.
+- **OQ-016** — **Resolved (2026-07-11):** Mechanical scoring rules for matched / refuse /
+  matched_correction (reporting-only) / infra_error; `evals/targets.json` and fixture-regression
+  baseline shapes. Normative in §11.8.
+- **OQ-017** — **Resolved (2026-07-11; harness shape revised 2026-07-14 by OQ-027 / AD-024):**
+  Gate harness is the real host (Claude Agent SDK), not a raw API tool loop. The raw loop is a
+  non-gating offline smoke fixture. Shared conventions (prompting/tools/budget/CI split) are
+  normative in AD-020 / AD-024 / §11.8.
+- **OQ-018** — **Resolved (2026-07-11):** SampleSet edge semantics (placeholder fingerprint,
+  gap emission, waiver refs, ignored `target` on some kinds, invalid includes fail at
+  `dry_run`). Normative in §11.1.
+- **OQ-019** — **Resolved (2026-07-11):** Python floor `>=3.10` in `pyproject.toml`; pin-reading
+  scripts must not import `tomllib`.
 - **OQ-020** — *(open; A4)* Distribution channel for the Python package itself (PyPI name
   `transon-authoring` vs private index). §11.9 covers skill-file install only; UC-004's install
   story depends on this. Does **not** block A0–A3.
-- **OQ-021** — **Resolved (2026-07-11):** Sidecar consistency is part of `check_snapshot` (no
-  separate gate). Normative checks: (a) `resources/nl-intents.json` parses, has
-  `schema_version: "1.0"` and an `intents` object per FR-010; (b) every key of `intents` MUST be
-  the `name` of an example in the bundled snapshot's `docs.examples` — any dangling key is a
-  **failure** (gate red, exit 1, dangling names listed on stderr); (c) snapshot examples
-  **without** a sidecar entry are **allowed** — the gate stays green but MUST report the count of
-  uncovered examples on stderr (full sorted name list under `--verbose`), so a pin bump never
-  *silently* strands missing entries; (d) the sidecar's SHA-256 recorded in the provenance file
-  (FR-010) MUST match the current sidecar bytes — mismatch is a failure until `sync-metadata` is
-  re-run.
-- **OQ-022** — **Resolved (2026-07-11):** Minimal normative
-  `search_examples(query: str, *, limit: int = 10) -> list` contract: (a) **exact-name
-  guarantee** — if `query` equals an example `name` (case-sensitive), that example MUST be in the
-  results, ranked first; (b) **bound** — at most `limit` results (`limit ≥ 1`; default 10);
-  (c) **determinism** — results are a pure function of (query, snapshot, sidecar); ties and all
-  ranking below the exact-name hit are ordered by the example's index in snapshot `docs.examples`
-  (corpus order); (d) **payload** — each hit is the snapshot example object verbatim, plus an
-  optional `"nl"` string copied from the sidecar when present; retrieval MAY match over `name`,
-  `tags`, `doc`, and sidecar NL text (FR-010), but hit *content* other than `nl` comes only from
-  the snapshot (this is what AC-022's "sidecar enriches display only" means). Ranking beyond
-  (a)–(c) is unspecified.
-- **OQ-023** — **Resolved (2026-07-11, A2 standup):** AC-011 is split. New **AC-029** (schema
-  half, A2, FR-021): persisting a SampleSet per FR-021/§11.1 and setting `confirmation` with
-  `confirmed: true`, a valid `confirmed_by`, and the `content_fingerprint` obtained via the
-  OQ-015 acquisition path yields `check_samples` → `confirmed: true`; any subsequent edit to the
-  hashed content subset flips it back via `fingerprint_mismatch`. **AC-011** is reworded to the
-  conversational half only ("conversational confirm (skill body) writes `confirmation` and binds
-  `content_fingerprint` via the OQ-015 acquisition path") and remains mapped to FR-024 at A3.
-  §17: FR-021 row → `AC-029, AC-017`; FR-024 row unchanged (`AC-010, AC-011`).
-- **OQ-024** — **Resolved (2026-07-12; absorbs RFC-001,
-  `docs/proposals/rfc-001-synthetic-eval-corpus-for-small-models.md`):** synthetic eval corpus
-  from `docs.examples` and small-model primary gate. Author decisions, normative in AD-021 /
-  FR-029 / §11.8:
-  (a) **gate model** — `claude-haiku-4-5-20251001` replaces `claude-sonnet-5` as the NFR-010
-  pin (dated ID, same provider, no harness change);
-  (b) **stratification budget** — 3–6 cases per fixture, driven by which §11.1 coverage kinds
-  apply to the seed's input shape, not a flat count;
-  (c) **v1 scope** — a tagged subset of ~25–30 seeds (one per tag family), remainder as
-  follow-up waves; all-121 coverage is not a v1 requirement;
-  (d) **corpus pair** — every fixture's case 1 is the example's own `data`/`result` re-executed
-  through the pinned engine; corpus-only single-case fixtures are forbidden (leakage);
-  (e) **refuse bucket** — hand-authored seeds only in v1; no synthesized refuse intents (near-miss
-  fakes risk colliding with legitimate `matched_correction` mapping);
-  (f) **provenance/regen** — seeds at `evals/seeds/<fixture-id>.json`
-  (`{source_example, template, generator:{version, notes?}}`); `check_evals --lint` proves
-  bit-identical regeneration under the current pin (AC-030);
-  (g) **baseline on gate-model swap** — `evals/baseline.json` resets to an empty `passing` list
-  in the same eval-policy commit; `authoring_target` stays 0.80 (ratchet untouched at its floor).
-- **OQ-025** — **Resolved (2026-07-12, A3 design):** FR-029 generator applicability predicates,
-  fixed so the AC-030 bit-identical regeneration is well-defined. Normative in FR-029:
-  (a) **optional keys** — a corpus `data` key is *optional* iff the seed template contains an
-  `attr` node with a **literal string `name`** and a `default` member (the engine's defaulting
-  accessor; `transon` SPECIFICATION §2.2/§4) and the key's **final pointer segment equals that
-  literal name**. Candidate pointers are discovered by a deterministic pre-order walk of the
-  corpus `data`; every matching pointer yields the `optional_present`/`optional_absent` pair
-  (`target` = that pointer). `optional_present` is satisfiable by packing into the happy-path
-  case (the corpus `data` carries the key); `optional_absent` inputs delete the key at that
-  pointer.
-  (b) **array scope** — arrays are discovered by the same deterministic pre-order walk of the
-  corpus `data`; **every** array found receives the three `list_*` kinds (subject to the FR-029
-  budget/drop order); pointers through array elements use index-`0` segments. Two boundary rules
-  (rev 2026-07-12, from implementation against the pinned engine): the **document root** is
-  excluded from array/optional candidacy — §11.1 obligation targets must start with `/`, and the
-  whole-document pointer is rejected there — and a corpus array of length **0** yields only the
-  `list_empty` kind (`list_singleton`/`list_many` derivations are impossible and their
-  obligations are not emitted).
-  (c) **`NO_CONTENT` relevance** — empirical, engine-decided; no static rule-shape analysis.
-  The generator derives candidate inputs in a fixed order (each `optional_absent` derivation in
-  pointer order, then each `list_empty` derivation in pointer order, then the value-variation
-  candidates in position order) and executes them through the AD-017 sandbox; the `NO_CONTENT`
-  custom obligation is emitted iff some candidate's top-level dry-run result encodes (§11.0
-  `enc`) to `NoContentRef` — the first such candidate is the case, and per the FR-029 budget
-  rule it MAY simultaneously satisfy the obligation it was derived from.
-  (d) **includes population & eligibility** — `SampleSet.includes` is populated with every
-  literal `{"$": "include", "name": <string>}` target found in the seed template, transitively
-  through included templates, resolved from snapshot `docs.examples` by `name`; a literal
-  include name that does not resolve is left absent (the corpus `result` may depend on the miss).
-  After building case 1 the generator MUST assert the re-executed output JSON-equals the entry's
-  `result`; a seed failing the assert is **ineligible**: the generator errors and the curator
-  selects the tag family's next corpus-order candidate. *(rev 2026-07-12: the original
-  parenthetical citing `IncludeWithDefault` as an assert casualty was empirically wrong — under
-  the pinned engine, `include` `default` also applies when the resolved include yields
-  `NO_CONTENT`, so its corpus pair re-executes equal; that seed is instead ineligible via the
-  3-case padding rule, its `data: {}` having no substitutable leaf scalars.)*
-  A seed whose never-dropped obligations (happy path, `list_empty`, `optional_absent`, customs)
-  alone cannot fit six cases is likewise ineligible, preserving FR-029's cap guarantee. Further
-  ineligibility/skip rules (rev 2026-07-12): a structurally derived obligation input
-  (`optional_absent` or `list_*`) whose dry-run **errors** under the pinned engine makes the
-  seed ineligible (hard error, curator moves on); a **value-variation** candidate whose dry-run
-  errors is skipped in favor of the next deterministic index (padding continues; a seed that
-  cannot reach the 3-case minimum is ineligible).
-  (e) **writes-capable** — a seed is writes-capable iff its template, or any transitively
-  included template, contains a `file` rule invocation; the `writes` custom case asserts the
-  case's sandbox-captured `writes` map, not the top-level result alone.
-  The value-variation substitution table and the case/obligation id-naming scheme remain
-  implementation-defined but are **frozen by the AC-030 regen check** once the first seed lands.
-  Seed provenance docs carry no `schema_version` and are validated structurally by
-  `check_evals --lint`, not by the §11.0 ingress validator.
-- **OQ-026** — **Resolved (2026-07-12, A3 wave-2 design):** FR-029 generator coverage extensions,
-  closing honest gaps the OQ-025 derivations cannot express (even-length boundaries for arrays —
-  including root arrays, which OQ-025b excludes from `list_*` candidacy; present branches for
-  accessor keys absent from the corpus `data`; default-insertion branches driven by
-  rule semantics rather than a defaulting `attr`). Normative in FR-029:
-  (a) **List length variation** — every array discovered by the OQ-025b pre-order walk of the
-  corpus `data`, **plus the document root itself when the corpus `data` is a JSON array**, yields
-  one `kind: "custom"` *length-variation* obligation (`target` omitted; the `description` names
-  the array's pointer) whose case input is the corpus document with that array's **final element
-  removed** — derived only when the corpus array has length ≥ 2. Each is emitted iff its dry-run
-  under the pinned engine succeeds and is silently skipped otherwise; output comes from the
-  pinned engine as usual; the FR-029 packing rule applies (an existing case whose input already
-  JSON-equals the derivation satisfies the obligation instead of adding a case).
-  (b) **Root key variations** — only when the corpus `data` document is a JSON object:
-  (i) *key addition* — for **every `attr` node with a literal string `name`** (a `default`
-  member is NOT required) whose name is not discoverable at any pointer of the OQ-025b walk
-  (no visited pointer's final segment equals the name), one `kind: "custom"` obligation/case
-  pair: the corpus `data` with that key added at the root, its value the **first entry** of the
-  FR-029 per-JSON-type substitution-table row keyed by the JSON type of the attr's literal
-  `default` when one is present — the first template-pre-order node of that name carrying a
-  `default` decides — else the string entry (a non-literal `default`, or a literal whose JSON
-  type has no table row, likewise takes the string entry). *(rev 2026-07-12: the original
-  predicate reused the OQ-025a node set — `attr` with a `default` member — which was empirically
-  wrong against the pinned corpus: `FormatWithDefault`'s `label` accessor carries no `default`
-  (the pinned engine absorbs the missing key to `NO_CONTENT` and the enclosing `format` rule
-  does the defaulting), so the motivating label-present branch derived nothing; the OQ-025a
-  optional-key predicate itself is unchanged. **Residual, tracked here:** even under the widened
-  set that branch stays uncovered — the engine formats the pattern against the computed *value*,
-  so `'{label}'` needs a dict-shaped addition the fixed substitution table cannot produce; the
-  candidate is derived and engine-rejected (silently skipped per (b)). Covering it would take
-  shape-aware addition values — a candidate wave-3 design decision, non-gating per §14.)*;
-  (ii) *key deletion* — for every root-level key not already covered by an `optional_absent`
-  obligation, one `kind: "custom"` obligation/case pair: the corpus `data` with that key removed.
-  Each root key variation is emitted iff its dry-run succeeds and is silently skipped otherwise —
-  never seed ineligibility (contrast the OQ-025d structural hard-error rule); `target` is
-  omitted and the `description` names the key; the FR-029 packing rule applies as in (a).
-  (c) **`NO_CONTENT` probe count** — the OQ-025c candidate list examines only the **first two**
-  value-variation candidates. This freezes the current behavior and supersedes the
-  implementation-defined status of the OQ-025 tail **for the probe count only** (the
-  substitution table and the id-naming scheme stay implementation-defined, frozen by AC-030).
-  (d) **Budget and drop order** — the OQ-026 custom kinds count toward the FR-029 six-case cap,
-  are droppable, and drop FIRST, extending FR-029's fixed drop order to: *key deletion*, then
-  *key addition*, then *length variation*, then `list_singleton`, then `optional_present`, then
-  `list_many`. They are excluded from the never-dropped satisfiability guarantee, which is
-  unchanged. Deterministic emission order — after the OQ-025 structural kinds and the
-  `NO_CONTENT`/`writes` customs, before value-variation padding: length variations in
-  array-discovery order (document root first, then OQ-025b pre-order), then key deletions in
-  root-key document order, then key additions in template pre-order discovery order.
-- **OQ-027** — **Resolved (2026-07-14; absorbs RFC-002,
-  `docs/proposals/rfc-002-real-host-eval-harness.md`):** the NFR-010 gate runs the skill in the
-  **real host agent harness** it ships into — not the bespoke raw tool loop. This reopens the
-  OQ-017 *harness shape* decision only (OQ-016 scoring, the SampleSet schema, `verify`,
-  `check_samples`, and every §11.8 rate/ratchet/baseline rule are untouched). Author decisions,
-  normative in AD-024 / §11.8 and revising OQ-017:
-  (a) **Driver / reference host (R1)** — the gate harness is a **real host** pinned in
-  `evals/runner.json`. `runner.json.harness = { "kind": "agent-sdk" | "claude-code", "version":
-  string }` is a gate-identity field. v1 **implements `agent-sdk`** (the Claude Agent SDK) as the
-  **reference host**, mirroring how `provider` is a string yet only `"anthropic"` is built; a
-  `"claude-code"` (headless `claude -p`) lane is admitted by the shape but unimplemented in v1.
-  The Agent SDK is favoured for the same reason the model is pinnable: a real tool suite behind a
-  version-pinned package. **Skill engagement (faithful — no injection):** the driver installs
-  `SKILL.md` **exactly as the product ships it** into the host's skill path
-  (`<workspace>/.claude/skills/transon-authoring/SKILL.md`) and lets the host **auto-activate** it —
-  the host runs under **its own (Claude Code) system prompt**, and the skill fires by its frontmatter
-  `description` exactly as in a real session. The driver **does not** inject `SKILL.md` as the system
-  prompt and adds **no** engagement preamble — those would test a configuration that never ships. A
-  consequence, made normative here: the **shipped `SKILL.md` MUST carry a discoverable frontmatter
-  `description`** (an install-integrity / discoverability property, NFR-009 / OQ-010) — without it the
-  host cannot recognise it as a skill. If a given fixture `intent_nl` does not trigger the skill, that
-  is a **true signal** about the shipped `description` (or the fixture's realism), fixed in the skill
-  or the corpus — never by a harness knob. *(rev 2026-07-14: supersedes the initial absorption's
-  system-prompt-injection + engagement-preamble mechanism, which an indicative run exposed as
-  measuring a non-shipped configuration — see the risks note.)*
-  (b) **Harness pin shape + upgrade (R2)** — the `harness` block sits beside the model pin in
-  `runner.json`. A change to `harness.kind` **or** `harness.version` is an **eval-policy commit**
-  that MUST reset `evals/baseline.json` to `{ "schema_version": "1.0", "passing": [] }` in the
-  same commit — identical discipline to the gate-model swap (§11.8 / OQ-024g): majority results
-  under one harness are not transferable to another. `evals/targets.json` is **not** reset (the
-  ratchet never lowers); an expected sub-target rate under a new harness is a red gate fixed by
-  improving `SKILL.md`, never by lowering targets.
-  (c) **Cursor parity (R3)** — v1 names the reference host **only** (no second per-host gate lane).
-  Cursor/Claude adapter equivalence remains the AD-005 / NFR-007 parity concern, measured by
-  `check_parity`, not by a second eval gate.
-  (d) **Retired raw loop (R4)** — `scripts/eval_harness.py` (the OQ-017 3-tool `messages.create`
-  loop) is **demoted to a non-gating offline smoke fixture**: retained and importable, exercised
-  by its fake-provider unit tests, but **never selected by the gate**. It is no longer the NFR-010
-  harness; the real host is.
-  (e) **Host→EpisodeResult adapter (R5)** — the driver includes a **deterministic adapter** from
-  the host's returned `AuthoringResult` **and** its execution status to the §11.8 EpisodeResult
-  shape (`{submitted, outcome, tool_calls, error, tool_call_log, tokens}`), so the unchanged
-  `check_evals.score_episode` (OQ-016) scores it exactly as before. Status→outcome mapping,
-  covering every §11.8 outcome:
-  - host returned a well-formed `AuthoringResult` → `outcome: "submitted"`, `submitted` = that
-    object verbatim (a schema-invalid payload still maps to `submitted` with the raw payload
-    retained, scored `invalid_submission` by OQ-016b — unchanged);
-  - host ended without returning one → `outcome: "no_submit"`;
-  - host exceeded the pinned step/turn/token budget → `outcome: "budget_exceeded"`;
-  - host / transport / credential fault → `outcome: "infra_error"` (OQ-016d).
-  The adapter lives in the driver module (`scripts/host_harness.py`), feeding the untouched
-  scorer; `tool_calls`/`tool_call_log` are populated from the host's reported step record when it
-  exposes one and are otherwise empty (additive telemetry — never scored, AC-034). This adapter is
-  the real substitute for the deleted raw loop.
-  (f) **Isolation contract (R6; blocker before adoption)** — swapping three sandboxed tools for a
-  full Read/Write/Edit/**Bash** host inside the credential-holding dispatch workflow widens the
-  trust boundary: a fixture's `intent_nl`/SampleSet is untrusted input and the model executes
-  shell, so a prompt-injected or adversarial fixture could otherwise read the provider key, reach
-  the network, or modify/exfiltrate repo data. The reference-host run MUST therefore be pinned to:
-  (i) an **ephemeral, per-episode workspace** — a throwaway temp dir with no repo checkout
-  mounted: only the installed skill (`SKILL.md`) and the fixture's `samples.json` live inside it.
-  The pinned `transon_authoring` engine is reached through the **ambient package install** (e.g.
-  site-packages, exactly as the raw loop's `python -m transon_authoring` already did), never copied
-  into or resolved from a repo checkout. The workspace is destroyed after scoring and the host's
-  working directory (`cwd`) is confined to it;
-  (ii) **no credentials in the tool-execution sandbox** — the provider key stays in the workflow
-  environment that *calls* the model API and is never exported into the environment the model's
-  Bash sees;
-  (iii) **network egress denied** by default after the pinned engine install (mirrors NFR-003), so
-  host tools cannot exfiltrate or fetch;
-  (iv) **artifact controls** — only the `AuthoringResult` (and, opt-in, the FR-032 transcript)
-  leave the sandbox; nothing is committed; the NFR-011 secret scan covers captured text.
-  Mechanisms (ii)–(iii) are enforced by the **dispatch-workflow environment** (the harness cannot
-  self-attest an egress deny it runs inside); the driver enforces (i) and (iv) and MUST NOT export
-  the provider key into the host tool environment. This is the single biggest new risk the change
-  introduces and gates adoption of the live real-host run.
+- **OQ-021** — **Resolved (2026-07-11):** Sidecar consistency is part of `check_snapshot`
+  (dangling keys fail; uncovered examples allowed with count report). Normative in FR-010 /
+  NFR-004.
+- **OQ-022** — **Resolved (2026-07-11):** Minimal `search_examples` contract (exact-name first,
+  bound, deterministic corpus order, snapshot-verbatim hits + optional sidecar `nl`).
+  Normative in FR-010 / AC-022.
+- **OQ-023** — **Resolved (2026-07-11):** AC-011 split — AC-029 schema half (A2, FR-021);
+  AC-011 conversational half only (A3, FR-024).
+- **OQ-024** — **Resolved (2026-07-12; absorbs RFC-001):** Synthetic eval corpus from
+  `docs.examples` and small-model primary gate (`claude-haiku-4-5-20251001`); stratification
+  budget, corpus-pair rule, seed provenance/regen, baseline reset on gate-model swap.
+  Normative in AD-021 / FR-029 / §11.8.
+- **OQ-025** — **Resolved (2026-07-12):** FR-029 generator applicability predicates (optional
+  keys, array scope, empirical `NO_CONTENT`, includes population/eligibility, writes-capable).
+  Normative in FR-029.
+- **OQ-026** — **Resolved (2026-07-12):** FR-029 coverage extensions (list length variation,
+  root key add/delete, `NO_CONTENT` probe count, budget/drop order). Normative in FR-029.
+- **OQ-027** — **Resolved (2026-07-14; absorbs RFC-002):** NFR-010 gate runs the skill in the
+  real host agent harness (`runner.json.harness`, reference host = Claude Agent SDK);
+  skill auto-activates from shipped `SKILL.md`; raw loop demoted to non-gating smoke;
+  host→EpisodeResult adapter; isolation contract (ephemeral workspace, no credentials in
+  tool sandbox, network egress denied, artifact controls). Normative in AD-024 / §11.8.
 
 ---
 
