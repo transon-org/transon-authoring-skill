@@ -167,3 +167,34 @@ def test_nfr_004_repo_root_is_green():
     # NFR-004 / AC-006 — A0 DoD: check_snapshot green on the real repo root.
     result = run_check(REPO_ROOT)
     assert result.returncode == 0, result.stderr
+
+
+def test_nfr_004_unreadable_pyproject_is_gate_failure_not_crash(tmp_path: Path):
+    # NFR-004 / §11.7 — read_pin must return a descriptive failure when
+    # pyproject.toml exists but cannot be decoded, so check_snapshot reports
+    # a gate failure (exit 1) instead of crashing with a traceback.
+    (tmp_path / "pyproject.toml").write_bytes(b"\xff\xfe not utf-8")
+    result = run_check(tmp_path)
+    assert result.returncode == 1
+    assert "cannot read" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_read_pin_returns_error_on_undecodable_or_missing(tmp_path: Path):
+    # Unit: read_pin (NFR-004) — missing file, bad UTF-8, and no-pin cases.
+    from transon_authoring._snapshot import read_pin
+
+    pin, err = read_pin(tmp_path)
+    assert pin is None
+    assert err is not None and "no pyproject.toml" in err
+
+    bad = tmp_path / "pyproject.toml"
+    bad.write_bytes(b"\xff\xfe")
+    pin, err = read_pin(tmp_path)
+    assert pin is None
+    assert err is not None and "cannot read" in err
+
+    bad.write_text("[project]\ndependencies = []\n", encoding="utf-8")
+    pin, err = read_pin(tmp_path)
+    assert pin is None
+    assert err is not None and "transon==" in err

@@ -42,14 +42,19 @@ def read_pin(root: Path) -> tuple[str | None, str | None]:
 
     Returns ``(pin, error_detail)``. On success *error_detail* is ``None`` and
     *pin* is the version string; on failure *pin* is ``None`` and *error_detail*
-    names the problem (missing file, or no pin found). Callers format their own
-    stderr messages — the installed-engine comparison stays at the call site.
+    names the problem (missing file, unreadable/undecodable file, or no pin
+    found). Callers format their own stderr messages — the installed-engine
+    comparison stays at the call site.
     """
     root = Path(root)
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
         return None, f"no pyproject.toml under {root}"
-    pin = extract_pin(pyproject.read_text(encoding="utf-8"))
+    try:
+        text = pyproject.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, f"cannot read {pyproject}: {exc}"
+    pin = extract_pin(text)
     if pin is None:
         return None, f"no 'transon==<version>' pin found in {pyproject}"
     return pin, None
