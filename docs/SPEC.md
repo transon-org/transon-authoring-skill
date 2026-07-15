@@ -1584,43 +1584,35 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
   NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
 - **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses;
-  interactive review loop per FR-030 (rev 2026-07-12); observability per FR-031/FR-032 —
-  `trace` schema field + eval transcripts/attribution (rev 2026-07-12, AD-022); plus the
-  AD-021/FR-029 improvement-loop deliverables (rev 2026-07-12): synthetic-fixture generator +
-  `evals/seeds/` provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted
-  synthetic fixtures); the §11.8 eval-policy commit swapping `evals/runner.json` to the
-  small-model pin with the baseline reset. *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011).
-  *DoD:* FR-029 landed (AC-030 green); **authoring target met under the small-model pin**
-  (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave;
-  AC-003/004/010–014/017/019/025/026/031/033/034 green (AC-031's conversational half by
-  skill-body tests + UC-001 walkthrough — the non-interactive eval harness cannot exercise it;
-  AC-025 is the FR-018a lint invariant, satisfied vacuously — real-use corpus growth (FR-018b)
-  is ongoing and gates nothing, per the 2026-07-13 split).
-  *(rev 2026-07-14, AD-024 / OQ-027: the authoring-target run is measured under the **real-host
-  harness** pinned in `runner.json.harness` — the raw loop is retired as the gate. The
-  harness pin is set by the same eval-policy commit discipline as the model pin; because no gate
-  run has been accepted yet, its baseline reset is vacuous. AC-036 (harness pin + adapter, offline
-  deterministic) joins the A3 green list; the live authoring-target run remains the sole
-  behavioral-closure item and depends on the OQ-027f isolation contract being in force in the
-  dispatch workflow.)*
+  interactive review loop per FR-030; observability per FR-031/FR-032 (`trace` schema field +
+  eval transcripts/attribution); AD-021/FR-029 synthetic-fixture generator + `evals/seeds/`
+  provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted synthetic fixtures);
+  the §11.8 eval-policy commit swapping `evals/runner.json` to the small-model pin with the
+  baseline reset; the eval-policy commit pinning `runner.json.harness` to the real host (Claude
+  Agent SDK) with baseline reset discipline; AC-036 (harness pin + adapter, offline
+  deterministic). *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011). *DoD:* FR-029 landed
+  (AC-030 green); **authoring target met under the small-model pin**
+  (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave, measured under the
+  **real-host harness** pinned in `runner.json.harness`; AC-003/004/010–014/017/019/025/026/031/
+  033/034/036 green (AC-031's conversational half by skill-body tests + UC-001 walkthrough — the
+  non-interactive eval harness cannot exercise it; AC-025 is the FR-018a lint invariant,
+  satisfied vacuously — real-use corpus growth (FR-018b) is ongoing and gates nothing). The live
+  authoring-target run depends on the OQ-027f isolation contract being in force in the dispatch
+  workflow.
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
   OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
-  (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint; the `SKILL.md`-side
-  reference cleanup landed with the 2026-07-12 spec change).
+  (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
 - **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
 
-*Improvement-loop note (AD-021 / FR-029, rev 2026-07-12):* synthetic corpus growth and the
-small-model gate swap are **A3 deliverables** (folded into the A3 DoD above) — the harness they
-rely on is the A2 deliverable, and the work proceeds in parallel with the skill body. Ordering
-within A3: SPEC (this edit) → generator + seeds + regen lint (FR-029) → v1 fixture wave with
-human-accepted intents → the eval-policy commit that swaps `evals/runner.json` to the small
-model and resets `evals/baseline.json` (§11.8) → iterate `SKILL.md` until the authoring target
-is met under that pin. Later fixture waves beyond the v1 subset remain ongoing improvement-loop
-work and do not gate any milestone. *(rev 2026-07-14, AD-024 / OQ-027: the eval-policy commit that
-pins `runner.json.harness` to the real host (Claude Agent SDK) is folded into this ordering
-alongside the model pin — the deterministic parts (schema, adapter, driver seam, raw-loop
-demotion) land offline; the live authoring-target run then executes under that pinned host once
-the OQ-027f isolation contract is in force.)*
+*Improvement-loop note (AD-021 / FR-029):* synthetic corpus growth and the small-model gate swap
+are **A3 deliverables** (folded into the A3 DoD above) — the harness they rely on is the A2
+deliverable, and the work proceeds in parallel with the skill body. Ordering within A3: SPEC →
+generator + seeds + regen lint (FR-029) → v1 fixture wave with human-accepted intents → the
+eval-policy commit that swaps `evals/runner.json` to the small model and resets
+`evals/baseline.json` (§11.8) → the eval-policy commit that pins `runner.json.harness` to the
+real host (deterministic parts offline; live authoring-target run once OQ-027f isolation is in
+force) → iterate `SKILL.md` until the authoring target is met under that pin. Later fixture waves
+beyond the v1 subset remain ongoing improvement-loop work and do not gate any milestone.
 
 ---
 
