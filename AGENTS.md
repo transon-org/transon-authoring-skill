@@ -52,6 +52,8 @@ in SPEC §17.
 ## Where things live
 
 - Contract: `docs/SPEC.md` · matrix: `docs/traceability.md` · ID ledger: `docs/id-ledger.json`.
+- Working handoff (non-authoritative): `docs/current-state.md` — regenerate header with
+  `python3 harness/scripts/update_memory.py --state`.
 - Product code (SPEC §10): `src/transon_authoring/`, `resources/`, `scripts/`, `evals/`,
   `adapters/`, `install/` — built across milestones A0–A5.
 - AI-dev harness — **single-source, multi-tool**:
@@ -77,5 +79,11 @@ in SPEC §17.
 6. Run the gates: `python3 harness/scripts/check_traceability.py` and
    `python3 harness/scripts/check_append_only_ids.py`. A red gate is a STOP: fix it, never weaken
    or bypass it.
+
+**Working memory (end of session).** When a session changed code/docs, refresh the handoff so the
+next session resumes cleanly: run `python3 harness/scripts/update_memory.py --state` to regenerate
+the [`docs/current-state.md`](docs/current-state.md) header, then update its **Last action** /
+**Next steps** narrative. Session status and closure notes go there — not into `SPEC.md` or
+`traceability.md` cells. A stop hook nudges this for you.
 
 Enable the binding hooks once per clone: `git config core.hooksPath harness/githooks`.
