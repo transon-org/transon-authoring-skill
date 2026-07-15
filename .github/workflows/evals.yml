@@ -36,6 +36,17 @@ name: Evals
 
 on:
   workflow_dispatch:
+    inputs:
+      fixtures:
+        description: >-
+          Optional comma-separated fixture id(s) to scope the provider run to
+          (check_evals --only) — a cheap targeted probe (e.g. the 5 refuse
+          fixtures) at a fraction of the full-corpus cost. Blank = the whole
+          corpus (the real gate). A subset that omits a bucket makes the
+          aggregate red-by-construction; read per-fixture majorities from the
+          uploaded report.json / run_summary.json, not the job's red/green.
+        required: false
+        default: ""
 
 # One eval run at a time: duplicate manual dispatches queue instead of
 # spending provider budget concurrently.
@@ -181,6 +192,9 @@ jobs:
         # inherit, defeating OQ-027f(ii).
         env:
           PROXY_UPSTREAM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Bound via env: (never interpolated into the script body) so a fixture
+          # id can't inject shell. Consumed as an argv element below.
+          EVAL_FIXTURES: ${{ inputs.fixtures }}
         run: |
           set -euo pipefail
           B="${RUNNER_TEMP}/evalbundle"
@@ -225,10 +239,18 @@ jobs:
           # minutes; redirecting both streams to files made it a silent black box
           # until the very end. PIPESTATUS[0] keeps check_evals' own exit code —
           # `$?` would be tee's. `-u` defeats any residual stdio buffering.
+          # Optional targeted probe: workflow_dispatch `fixtures` -> --only (a
+          # cheap subset run; blank = the whole corpus, the real gate).
+          ONLY=()
+          if [ -n "${EVAL_FIXTURES:-}" ]; then
+            ONLY=(--only "${EVAL_FIXTURES}")
+            echo "check-evals: --only ${EVAL_FIXTURES} (targeted probe — not the full gate)"
+          fi
           set +e
           ANTHROPIC_BASE_URL="http://127.0.0.1:8787" \
           ANTHROPIC_API_KEY="placeholder-not-the-secret" \
             python3 -u "${B}/repo/scripts/check_evals.py" --transcripts-dir "${TRANSCRIPTS}" \
+              "${ONLY[@]}" \
               2>&1 > "${REPORT}" | tee "${LOG}"
           CE=${PIPESTATUS[0]}
           set -e

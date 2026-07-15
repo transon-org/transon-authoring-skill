@@ -448,11 +448,28 @@ def _classify_terminal(
 #: presented template as its final message. The driver supplies the approval
 #: ONCE (see AgentSDKHost) so the eval measures the real present→approve→emit
 #: path, leaving the shipped skill unchanged.
+#: OQ-027 — the driver speaks this ONCE, as the reviewing user, when turn 1 ended
+#: with no AuthoringResult (see _needs_review_followup). It must NOT assert that a
+#: correct template exists: turn 1 may have PRESENTED a matched template for review
+#: (FR-030 — then it should emit it), but it may equally have produced nothing
+#: emittable because the request is not groundable (then it should REFUSE, §2).
+#: An earlier version said "Approved — the template is correct, run `result`", which
+#: fabricated approval of a non-existent template on refuse fixtures: the model
+#: then hunted for template/samples files that never existed and asked for them
+#: (no_submit), scoring the adversarial bucket 0.000. This message is therefore
+#: neutral about whether a template exists, tells the model the session is
+#: non-interactive, and offers BOTH exits — keeping the matched-emit path (run
+#: `result`, return stdout verbatim) that drives the authoring bucket.
 _REVIEW_APPROVAL = (
-    "Approved — the template is correct. Emit the final AuthoringResult now by running the "
-    "section 7 result command (`python -m transon_authoring result --template <path> "
-    "--samples samples.json`) and returning its stdout verbatim as your entire response. Do NOT "
-    "retype or reconstruct the envelope by hand — re-typing a large envelope corrupts the JSON."
+    "This is a non-interactive session: produce your FINAL answer now as a single "
+    "AuthoringResult — I cannot answer questions, approve anything further, or provide "
+    "files, and there is no earlier session to recover. If you have a template that "
+    "verified `matched`, emit it by running the section 7 result command "
+    "(`python -m transon_authoring result --template <path> --samples <path>`) and "
+    "returning its stdout verbatim — never retype or reconstruct the envelope by hand. "
+    "If instead the request needs a capability the pinned engine cannot ground (section "
+    "2), emit the refusal AuthoringResult directly (`ok: false`, `status: \"aborted\"`, "
+    "naming the missing capability). Do not ask me for files or assume prior work."
 )
 
 

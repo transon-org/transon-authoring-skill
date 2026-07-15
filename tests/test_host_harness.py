@@ -551,6 +551,31 @@ def test_fr_030_review_approval_prompt_mandates_result_verbatim():
     )
 
 
+def test_oq_027_review_followup_is_neutral_and_allows_refusal():
+    """OQ-027 — the review-follow-up must NOT fabricate approval of a template that
+    was never presented. On the full-gate the old 'Approved — the template is
+    correct, run `result`' derailed EVERY refuse fixture: turn 1 produced no
+    envelope, so the driver 'approved' a non-existent template and the model went
+    hunting for template/samples files it could not find (no_submit → adversarial
+    rate 0.000). The message must instead be neutral about a template existing,
+    state the session is non-interactive, and offer the REFUSAL exit (§2) as well
+    as the matched-emit exit — without asking for files."""
+    prompt = host_harness._REVIEW_APPROVAL.lower()
+    # No fabricated approval of a correct template.
+    assert "the template is correct" not in prompt
+    assert "approved" not in prompt
+    # Non-interactive framing that counters the observed "ask for the files / prior
+    # session" derailment.
+    assert "non-interactive" in prompt
+    assert re.search(r"do not ask.*files|assume prior", prompt), (
+        "follow-up does not forbid asking for files / assuming prior work"
+    )
+    # BOTH exits are offered: matched-emit (protects the authoring bucket) AND
+    # refusal (fixes the adversarial bucket).
+    assert "transon_authoring result" in prompt and "verbatim" in prompt
+    assert "refusal" in prompt and 'status: "aborted"' in host_harness._REVIEW_APPROVAL
+
+
 def test_fr_035_add_cost_is_none_identity():
     """FR-035 — multi-turn episode cost sums across turns with None as the
     additive identity (an all-None episode stays None, not 0.0)."""
