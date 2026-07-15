@@ -1,5 +1,9 @@
 # Big Real-World JSON Transform Samples
 
+> **Historical (superseded by SPEC).** Normative policy for constructed / real-world-pack
+> fixtures lives in `docs/SPEC.md` (AD-023 / FR-033 / §11.8). This file is brainstorm /
+> sample-pack rationale only; on conflict the SPEC wins.
+
 Full-size `input → transform → output` triples using the kind of nested API
 payloads you actually mediate in production — not one-liners. Each input is a
 realistic, complete payload (multiple items, nested arrays, the incidental
@@ -11,8 +15,8 @@ fields real APIs include). IDs and values are representative, but the
 > section at the bottom links the authoritative sources and shows how to capture
 > your own live samples.
 >
-> **Reconciliation with AD-023 (added 2026-07-13).** This doc is the original
-> brainstorm; the **normative** policy is AD-023 / FR-033 / §11.8 in
+> **Reconciliation with AD-023.** This doc is the original brainstorm; the
+> **normative** policy is AD-023 / FR-033 / §11.8 in
 > `docs/SPEC.md`. Two consequences for anything committed from it:
 > (1) The pinned `transon==0.1.7` is a **structural** transformer — four
 > operations sketched below are **not engine-expressible** and ship as
