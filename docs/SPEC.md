@@ -1535,6 +1535,11 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 - Single-source adapters (NFR-007).
 - Measurement before skill body (AD-011).
 - Traceability matrix (§17) updated in the same change as FR/NFR/AC edits after A0.
+- **Normative text is current-state only.** A revision replaces the requirement/decision text in
+  place (ID kept). Do not stack dated revision parentheticals or retain superseded designs beside
+  the new text — history lives in git. Deprecated IDs remain as one-line stubs. Resolved OQs keep
+  a one/two-line decision; superseded narratives are deleted. Session status goes to
+  `docs/current-state.md`, not into the SPEC or traceability cells.
 
 ---
 
