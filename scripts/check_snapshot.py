@@ -41,21 +41,15 @@ import sys
 from importlib.metadata import version as installed_version
 from pathlib import Path
 
-try:
-    from transon_authoring._snapshot import (
-        canonical_bytes,
-        extract_pin,
-        parse_provenance,
-        sha256_hex,
-    )
-except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring._snapshot import (
-        canonical_bytes,
-        extract_pin,
-        parse_provenance,
-        sha256_hex,
-    )
+from _shared import ensure_src, report_failures
+
+ensure_src()
+from transon_authoring._snapshot import (  # noqa: E402
+    canonical_bytes,
+    parse_provenance,
+    read_pin,
+    sha256_hex,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,14 +79,9 @@ def main(argv: list[str] | None = None) -> int:
         failures.append(message)
 
     # --- Check 1: installed engine == pyproject pin (NFR-004). -------------
-    pin: str | None = None
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
-        fail(f"no pyproject.toml under {root}")
-    else:
-        pin = extract_pin(pyproject.read_text(encoding="utf-8"))
-        if pin is None:
-            fail(f"no 'transon==<version>' pin found in {pyproject}")
+    pin, pin_error = read_pin(root)
+    if pin_error is not None:
+        fail(pin_error)
 
     live_bytes: bytes | None = None
     installed: str | None = None
@@ -235,12 +224,7 @@ def main(argv: list[str] | None = None) -> int:
                 for name in uncovered:
                     print(f"check-snapshot:   uncovered: {name}", file=sys.stderr)
 
-    for message in failures:
-        print(f"check-snapshot: FAIL: {message}", file=sys.stderr)
-    if failures:
-        print(f"check-snapshot: {len(failures)} check(s) failed", file=sys.stderr)
-        return 1
-    return 0
+    return report_failures("check-snapshot", failures, "check(s) failed")
 
 
 if __name__ == "__main__":

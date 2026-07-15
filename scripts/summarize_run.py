@@ -26,8 +26,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Ensure sibling ``_shared`` resolves when this file is invoked by path
+# (dispatch workflows run ``python3 …/scripts/summarize_run.py``).
+_scripts = str(Path(__file__).resolve().parent)
+if _scripts not in sys.path:
+    sys.path.insert(0, _scripts)
+
+from _shared import OUTCOME_KEYS, cache_ratio  # noqa: E402
+
 #: The four §11.8 harness outcome classes, in report order.
-_OUTCOMES = ("submitted", "no_submit", "budget_exceeded", "infra_error")
+_OUTCOMES = OUTCOME_KEYS
 
 
 def _fmt_usd(value: Any) -> str:
@@ -59,10 +67,8 @@ def render(summary: dict[str, Any], report: dict[str, Any] | None = None) -> str
     totals = summary["totals"]
     tokens = totals["tokens"]
     harness = summary.get("harness") or {}
-    prompt_tokens = (
-        tokens["input"] + tokens["cache_read"] + tokens["cache_creation"]
-    )
-    cache_pct = (tokens["cache_read"] / prompt_tokens * 100) if prompt_tokens else 0.0
+    _prompt_tokens, cache_ratio_val = cache_ratio(tokens)
+    cache_pct = cache_ratio_val * 100
 
     lines: list[str] = []
     lines.append(

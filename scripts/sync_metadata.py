@@ -27,21 +27,15 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as installed_version
 from pathlib import Path
 
-try:
-    from transon_authoring._snapshot import (
-        canonical_bytes,
-        extract_pin,
-        render_provenance,
-        sha256_hex,
-    )
-except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring._snapshot import (
-        canonical_bytes,
-        extract_pin,
-        render_provenance,
-        sha256_hex,
-    )
+from _shared import ensure_src
+
+ensure_src()
+from transon_authoring._snapshot import (  # noqa: E402
+    canonical_bytes,
+    read_pin,
+    render_provenance,
+    sha256_hex,
+)
 
 SIDECAR_SKELETON = {"schema_version": "1.0", "intents": {}}
 
@@ -83,16 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root: Path = args.root.resolve()
 
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
-        print(f"sync-metadata: no pyproject.toml under {root}", file=sys.stderr)
-        return 2
-    pin = extract_pin(pyproject.read_text(encoding="utf-8"))
-    if pin is None:
-        print(
-            f"sync-metadata: no 'transon==<version>' pin found in {pyproject}",
-            file=sys.stderr,
-        )
+    pin, pin_error = read_pin(root)
+    if pin_error is not None:
+        print(f"sync-metadata: {pin_error}", file=sys.stderr)
         return 2
 
     try:

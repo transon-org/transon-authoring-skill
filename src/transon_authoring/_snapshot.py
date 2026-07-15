@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from pathlib import Path
 from typing import Any, Mapping
 
 _JSON_BLOCK_RE = re.compile(r"```json\n(.*?)```", re.DOTALL)
@@ -34,6 +35,24 @@ def extract_pin(pyproject_text: str) -> str | None:
     """Return the ``transon==<version>`` pin from *pyproject_text*, or None."""
     match = PIN_RE.search(pyproject_text)
     return match.group(1) if match else None
+
+
+def read_pin(root: Path) -> tuple[str | None, str | None]:
+    """Read the ``transon==<version>`` pin from ``<root>/pyproject.toml``.
+
+    Returns ``(pin, error_detail)``. On success *error_detail* is ``None`` and
+    *pin* is the version string; on failure *pin* is ``None`` and *error_detail*
+    names the problem (missing file, or no pin found). Callers format their own
+    stderr messages — the installed-engine comparison stays at the call site.
+    """
+    root = Path(root)
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return None, f"no pyproject.toml under {root}"
+    pin = extract_pin(pyproject.read_text(encoding="utf-8"))
+    if pin is None:
+        return None, f"no 'transon==<version>' pin found in {pyproject}"
+    return pin, None
 
 
 def canonical_bytes(obj: Any) -> bytes:

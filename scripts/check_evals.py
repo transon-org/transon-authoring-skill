@@ -78,23 +78,24 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-try:
-    from transon_authoring import check_samples, get_metadata, verify
-    from transon_authoring._ingress import (
-        IngressError,
-        load_document,
-        schema_violations,
-    )
-    from transon_authoring.samples import content_fingerprint
-except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring import check_samples, get_metadata, verify
-    from transon_authoring._ingress import (
-        IngressError,
-        load_document,
-        schema_violations,
-    )
-    from transon_authoring.samples import content_fingerprint
+from _shared import (
+    OUTCOME_KEYS,
+    TOKEN_KEYS,
+    cache_ratio,
+    ensure_src,
+    examples_by_name,
+    import_sibling,
+    report_failures,
+)
+
+ensure_src()
+from transon_authoring import check_samples, get_metadata, verify  # noqa: E402
+from transon_authoring._ingress import (  # noqa: E402
+    IngressError,
+    load_document,
+    schema_violations,
+)
+from transon_authoring.samples import content_fingerprint  # noqa: E402
 
 #: Committed eval-policy files and their bundled schemas (AD-020, §11.8).
 POLICY_FILES = (
@@ -417,10 +418,7 @@ def _lint_seeds(
 
         # Check 8 — snapshot provenance (FR-029a / AD-021).
         if snapshot_examples is None:
-            snapshot_examples = {
-                entry["name"]: entry
-                for entry in get_metadata()["docs"]["examples"]
-            }
+            snapshot_examples = examples_by_name(get_metadata())
         entry = snapshot_examples.get(seed["source_example"])
         if entry is None:
             failures.append(
@@ -781,36 +779,21 @@ def _import_fixture_generator():
     """Import scripts/gen_fixtures.py lazily (same pattern as
     :func:`_import_eval_harness`): the FR-029 generator is only needed when
     seed files exist, and module-level lookups keep it monkeypatchable."""
-    try:
-        import gen_fixtures
-    except ImportError:  # pragma: no cover - invoked outside scripts/
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import gen_fixtures
-    return gen_fixtures
+    return import_sibling("gen_fixtures")
 
 
 def _import_eval_harness():
     """Import scripts/eval_harness.py lazily. Since AD-024/OQ-027 this is the
     **non-gating offline smoke fixture** (OQ-027d), no longer the gate harness;
     module-level lookups keep it monkeypatchable in its own tests (OQ-017e)."""
-    try:
-        import eval_harness
-    except ImportError:  # pragma: no cover - invoked outside scripts/
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import eval_harness
-    return eval_harness
+    return import_sibling("eval_harness")
 
 
 def _import_host_harness():
     """Import scripts/host_harness.py lazily (AD-024/OQ-027 — the real-host gate
     driver). Module-level lookups keep ``run_fixture`` monkeypatchable in the
     offline orchestration tests (OQ-027e), exactly as the raw loop was."""
-    try:
-        import host_harness
-    except ImportError:  # pragma: no cover - invoked outside scripts/
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import host_harness
-    return host_harness
+    return import_sibling("host_harness")
 
 
 def _build_host(runner_cfg: dict[str, Any]):
@@ -867,12 +850,12 @@ def write_transcripts(
 
 
 #: FR-035 — the additive per-episode token telemetry keys rolled up in the run
-#: summary (mirrors host_harness._new_tokens; never scored, AC-034).
-_TOKEN_KEYS = ("input", "output", "cache_read", "cache_creation", "turns")
+#: summary (from scripts._shared.TOKEN_KEYS / new_tokens; never scored, AC-034).
+_TOKEN_KEYS = TOKEN_KEYS
 
 #: FR-035 — the four §11.8 harness outcome classes, always present in the
 #: run-summary outcome histogram (each possibly zero) so the shape is stable.
-_OUTCOME_KEYS = ("submitted", "no_submit", "budget_exceeded", "infra_error")
+_OUTCOME_KEYS = OUTCOME_KEYS
 
 
 def _episode_stats(fixture_id: str, run_index: int, episode: dict[str, Any]) -> dict[str, Any]:
@@ -940,7 +923,7 @@ def build_run_summary(
 
         runs = len(rows)
         size = fixture_bytes.get(fixture_id, 0)
-        prompt_tokens = fx_tokens["input"] + fx_tokens["cache_read"] + fx_tokens["cache_creation"]
+        _prompt_tokens, cache_read_ratio = cache_ratio(fx_tokens)
         by_fixture[fixture_id] = {
             "runs": runs,
             "fixture_bytes": size,
@@ -950,9 +933,7 @@ def build_run_summary(
                 key: (fx_tokens[key] / runs) if runs else 0 for key in _TOKEN_KEYS
             },
             "steps_mean": (fx_steps / runs) if runs else None,
-            "cache_read_ratio": (
-                fx_tokens["cache_read"] / prompt_tokens if prompt_tokens else 0.0
-            ),
+            "cache_read_ratio": cache_read_ratio,
             "cost_usd_per_kb": (fx_cost / (size / 1024)) if size else None,
         }
 
@@ -1032,10 +1013,7 @@ def run_evals(
     """
     # Lint first — a corpus that fails NFR-011 never reaches the provider.
     failures = lint_evals(repo_root, verbose=verbose)
-    for message in failures:
-        print(f"check-evals: FAIL: {message}", file=sys.stderr)
-    if failures:
-        print(f"check-evals: {len(failures)} lint failure(s)", file=sys.stderr)
+    if report_failures("check-evals", failures, "lint failure(s)"):
         return 1
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -1322,10 +1300,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     failures = lint_evals(args.root.resolve(), verbose=args.verbose)
-    for message in failures:
-        print(f"check-evals: FAIL: {message}", file=sys.stderr)
-    if failures:
-        print(f"check-evals: {len(failures)} lint failure(s)", file=sys.stderr)
+    if report_failures("check-evals", failures, "lint failure(s)"):
         return 1
     print("check-evals: lint green", file=sys.stderr)
     return 0
