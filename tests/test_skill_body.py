@@ -897,3 +897,30 @@ def test_fr_034_ac_037_result_section_mandates_the_result_command():
         r"(never|do not|don't).{0,140}?(hand-writ|reconstruct|bare template)",
         result_section,
     ), "§7 does not forbid hand-writing / reconstructing the envelope"
+
+
+def test_fr_034_ac_037_refusal_uses_result_refuse_not_hand_written():
+    """FR-034 (rev 2026-07-15) / AC-037 — the REFUSAL envelope is machine-built
+    too: §2 (ground & refuse) and §7 tell the model to run `result --refuse
+    --status … --explanation …` and return its stdout verbatim, closing the
+    hand-written-refusal failure mode the real-host gate surfaced (correct
+    refusal decision, schema-invalid envelope → invalid_submission)."""
+    body = _body()
+    ground = body.split("## 2. Ground & refuse", 1)[1].split("## 3.", 1)[0]
+    result_section = body.split("## 7. Result", 1)[1]
+
+    # §2 refusal runs `result --refuse --status … --explanation …`.
+    assert _has(
+        r"result --refuse.{0,80}?--status.{0,60}?--explanation", ground
+    ), "§2 does not run `result --refuse --status … --explanation …` for a refusal"
+    assert _has(r"result --refuse.{0,400}?verbatim|verbatim.{0,400}?result --refuse", ground), (
+        "§2 does not require returning the refusal command's stdout verbatim"
+    )
+
+    # §7's failure/refusal path also mandates --refuse and forbids hand-writing.
+    assert _has(
+        r"result --refuse.{0,120}?--status.{0,80}?--explanation", result_section
+    ), "§7 refusal path does not run `result --refuse --status … --explanation …`"
+    assert _has(
+        r"(never|do not|don't|not).{0,80}?hand-write", result_section
+    ), "§7 does not forbid hand-writing the refusal envelope"

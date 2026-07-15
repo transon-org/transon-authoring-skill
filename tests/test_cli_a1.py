@@ -272,6 +272,56 @@ def test_fr_034_ac_037_result_command_builds_authoring_result_envelope(tmp_path)
     assert one_json_document(r)["status"] == "schema-error"
 
 
+def test_fr_034_ac_037_result_refuse_builds_refusal_envelope(tmp_path):
+    """FR-034 (rev 2026-07-15) / AC-037(a) — `result --refuse --status S
+    --explanation T` machine-builds the template-less refusal AuthoringResult
+    (`{schema_version, ok:false, status, explanation}`, exit 1) so a §2 refusal /
+    review stop is emitted verbatim, not hand-written. The real-host gate saw the
+    small model refuse correctly but hand-write schema-invalid envelopes (missing
+    schema_version/explanation, inventing error/reason keys) — invalid_submission
+    on every adversarial episode."""
+    # Each template-less refusal status → a schema-valid envelope, exit 1.
+    for status in ("aborted", "deferred", "need-samples", "repair-exhausted"):
+        r = run_cli("result", "--refuse", "--status", status,
+                    "--explanation", "No such operator 'frobnicate' in the pinned engine.")
+        assert r.returncode == 1, status
+        env = one_json_document(r)
+        assert schema_violations(env, "authoring_result.json") == [], (status, env)
+        assert env == {
+            "schema_version": "1.0", "ok": False, "status": status,
+            "explanation": "No such operator 'frobnicate' in the pinned engine.",
+        }
+        assert "template" not in env and "verdict" not in env  # AC-004
+
+    # A status OUTSIDE the template-less refusal set (verify-derived / matched /
+    # CLI-level) is a usage error, not a silently-built envelope → exit 2.
+    for bad_status in ("matched", "verify-failed", "samples-rejected",
+                       "schema-error", "profile-rejected", "bogus"):
+        r = run_cli("result", "--refuse", "--status", bad_status, "--explanation", "x")
+        assert r.returncode == 2, bad_status
+        assert one_json_document(r)["status"] == "schema-error"
+
+    # Empty / whitespace explanation → exit 2 (a refusal must explain itself).
+    r = run_cli("result", "--refuse", "--status", "aborted", "--explanation", "   ")
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
+
+    # --refuse is mutually exclusive with the verify inputs.
+    t = write_json(tmp_path, "t.json", ATTR_X)
+    r = run_cli("result", "--refuse", "--status", "aborted",
+                "--explanation", "x", "--template", t)
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
+
+    # --status/--explanation without --refuse is a usage error too.
+    r = run_cli("result", "--status", "aborted", "--explanation", "x")
+    assert r.returncode == 2
+    assert one_json_document(r)["status"] == "schema-error"
+
+    # Plain verify mode with neither pair nor --refuse → exit 2 (not a crash).
+    assert run_cli("result").returncode == 2
+
+
 def test_fr_014_verify_failed_stage_exit_1(tmp_path):
     ss = match_failure_samples()
     result = run_cli(

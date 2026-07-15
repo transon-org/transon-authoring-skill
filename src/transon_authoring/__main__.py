@@ -61,6 +61,17 @@ from transon_authoring.verify import dry_run, validate, verify
 #: rejected post-parse in a fixed order before any input file is read.
 _RESERVED_KNOBS = (("marker", "--marker"), ("transformer", "--transformer"))
 
+#: FR-034 (rev 2026-07-15) — the §11.5 failure statuses `result --refuse` will
+#: machine-build. These are the ones the skill emits DIRECTLY, with no template
+#: and no verify verdict: a §2 refusal (`aborted`), a review/sample-loop stop
+#: (`deferred`/`aborted`), a still-unconfirmed sample loop (`need-samples`), or
+#: repair exhaustion (`repair-exhausted`). `matched`/`samples-rejected`/
+#: `verify-failed` are verify-derived (--template/--samples); `schema-error`/
+#: `profile-rejected` are CLI-level CliErrors, never a skill refusal decision.
+_REFUSAL_STATUSES = frozenset(
+    {"aborted", "deferred", "need-samples", "repair-exhausted"}
+)
+
 
 class _ProfileRejected(Exception):
     """A reserved profile knob was requested (AC-027). ``flag`` is the CLI
@@ -151,12 +162,27 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 def _cmd_result(args: argparse.Namespace) -> int:
     """FR-034 / AC-037 — machine-build the COMPLETE §11.5 AuthoringResult
-    envelope from a single verify of the template against the SampleSet, so the
-    skill's §7 result step emits it verbatim instead of hand-writing it (which
-    the AD-021 small model does unreliably). Matched verdict → success envelope
-    (exit 0); any other verdict → the verify-derived failure envelope (exit 1);
-    malformed ingress → the §11.6 schema-error CliError as elsewhere (exit 2)."""
+    envelope so the skill's §7 result step emits it verbatim instead of
+    hand-writing it (which the AD-021 small model does unreliably — the real-host
+    gate saw hand-written refusals fail the schema with the same wrong keys).
+
+    Two modes: verify-derived (``--template PATH --samples PATH``) — matched
+    verdict → success envelope (exit 0), any other verdict → the verify-derived
+    failure envelope (exit 1); and refusal (``--refuse --status S --explanation
+    T``) — a template-less failure envelope (``ok: false``, exit 1) for a §2
+    refusal or a review/sample-loop stop. Malformed ingress or a bad
+    mode/argument combination → the §11.6 schema-error CliError (exit 2)."""
     _reject_reserved_knobs(args)
+    if args.refuse:
+        return _cmd_result_refuse(args)
+    if args.status is not None or args.explanation is not None:
+        raise IngressError(
+            [preflight_error("--status/--explanation require --refuse")]
+        )
+    if not args.template or not args.samples:
+        raise IngressError(
+            [preflight_error("result needs --template and --samples (or --refuse)")]
+        )
     template = load_json_file(args.template)
     sample_set = load_document(args.samples, "sample_set.json")
     verdict = verify(template, sample_set)
@@ -193,6 +219,41 @@ def _cmd_result(args: argparse.Namespace) -> int:
                 else "Template did not verify."
             ),
             "verdict": verdict,
+        }
+    )
+    return 1
+
+
+def _cmd_result_refuse(args: argparse.Namespace) -> int:
+    """FR-034 (rev 2026-07-15) / AC-037 — machine-build a template-less REFUSAL
+    ``AuthoringResult`` (``{schema_version, ok: false, status, explanation}``,
+    exit 1) so a §2 refusal or a review/sample-loop stop is emitted verbatim
+    instead of hand-written. ``--status`` must be a §11.5 refusal status
+    (:data:`_REFUSAL_STATUSES`) and ``--explanation`` a non-empty string;
+    anything else — including a stray ``--template``/``--samples`` — is a §11.6
+    schema-error (exit 2), matching every other bad-ingress path."""
+    errors: list[dict[str, Any]] = []
+    if args.template is not None or args.samples is not None:
+        errors.append(
+            preflight_error("--refuse takes no --template/--samples (no verify)")
+        )
+    if args.status not in _REFUSAL_STATUSES:
+        errors.append(
+            preflight_error(
+                "--refuse --status must be one of "
+                + ", ".join(sorted(_REFUSAL_STATUSES))
+            )
+        )
+    if not (isinstance(args.explanation, str) and args.explanation.strip()):
+        errors.append(preflight_error("--refuse needs a non-empty --explanation"))
+    if errors:
+        raise IngressError(errors)
+    _emit(
+        {
+            "schema_version": "1.0",
+            "ok": False,
+            "status": args.status,
+            "explanation": args.explanation,
         }
     )
     return 1
@@ -449,16 +510,38 @@ def _build_parser() -> argparse.ArgumentParser:
     result_parser = subcommands.add_parser(
         "result",
         help=(
-            "machine-build the complete AuthoringResult envelope from a single"
-            " verify of the template against the SampleSet (FR-034); the skill's"
-            " section 7 emits its output verbatim, never hand-writing the envelope"
+            "machine-build the complete AuthoringResult envelope (FR-034); the"
+            " skill's section 7 emits its output verbatim, never hand-writing the"
+            " envelope. Success/verify-derived: --template PATH --samples PATH."
+            " Refusal (no template): --refuse --status STATUS --explanation TEXT"
         ),
     )
+    # --template/--samples drive the verify-derived envelope; --refuse drives the
+    # template-less refusal envelope. Not `required` at the argparse layer —
+    # _cmd_result validates the two mutually exclusive modes and returns exit 2
+    # (schema-error) on a bad combination, matching the CLI's ingress contract.
     result_parser.add_argument(
-        "--template", required=True, metavar="PATH", help="template JSON file"
+        "--template", metavar="PATH", help="template JSON file (verify mode)"
     )
     result_parser.add_argument(
-        "--samples", required=True, metavar="PATH", help="SampleSet JSON file"
+        "--samples", metavar="PATH", help="SampleSet JSON file (verify mode)"
+    )
+    result_parser.add_argument(
+        "--refuse",
+        action="store_true",
+        help="machine-build a REFUSAL AuthoringResult (no template); needs"
+        " --status and --explanation",
+    )
+    result_parser.add_argument(
+        "--status",
+        metavar="STATUS",
+        help="refusal status (with --refuse): one of "
+        + ", ".join(sorted(_REFUSAL_STATUSES)),
+    )
+    result_parser.add_argument(
+        "--explanation",
+        metavar="TEXT",
+        help="human-readable refusal explanation (with --refuse)",
     )
     _add_reserved_knobs(result_parser)
     result_parser.set_defaults(handler=_cmd_result)

@@ -72,9 +72,16 @@ SampleSet files live.
    (4) the NL sidecar — hints only. Never use model memory, web docs, or Context7 for Transon
    semantics.
 3. If the request needs a capability that cannot be grounded in the pinned snapshot — an
-   operator, rule, or mode that does not exist there — REFUSE: stop and emit an
-   `AuthoringResult` with `ok: false`, `status: "aborted"`, and an explanation naming the
-   missing capability. Never invent names. Never guess syntax.
+   operator, rule, or mode that does not exist there — REFUSE: the result is an `AuthoringResult`
+   with `ok: false` and `status: "aborted"` naming the missing capability. Emit it by RUNNING the
+   section 7 result command — never hand-write the envelope:
+
+   ```
+   python -m transon_authoring result --refuse --status aborted --explanation "<name the missing capability>"
+   ```
+
+   Return its stdout verbatim as your final message. Never invent names (operator, rule, or mode);
+   never guess syntax.
 
 ## 3. Sample loop
 
@@ -259,8 +266,18 @@ return its fresh stdout — never paste or re-type the envelope from memory (han
 envelope corrupts the JSON).
 
 For a refusal or a failure that has NO matched template — you refused in section 2, the sample loop
-or review ended in defer/abort, or repairs exhausted — there is no `result` call to make: emit the
-failure `AuthoringResult` directly, with `ok: false` and the matching status from the table below.
+or review ended in defer/abort, or repairs exhausted — machine-build the failure envelope too, with
+`--refuse`, and return its stdout **verbatim** — do NOT hand-write it (hand-written refusals drop
+`schema_version`/`explanation` and invent keys, which fail scoring):
+
+```
+python -m transon_authoring result --refuse --status <STATUS> --explanation "<why>"
+```
+
+where `<STATUS>` is the matching status from the table below — one of `aborted` (refused /
+abandoned), `deferred` (stop for now), `need-samples` (sample loop unconfirmed), or
+`repair-exhausted`. (`samples-rejected` / `verify-failed` come from the plain `result --template
+--samples` above; `schema-error` / `profile-rejected` are CLI errors, not something you emit.)
 
 `ok: true` if and only if `status: "matched"`. Include `template` only on success. Failures always
 set `ok: false`, use a status from the table below, and never present a template as success.

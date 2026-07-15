@@ -473,9 +473,18 @@ No console-script product; no MCP.
   authoring model never constructs the envelope itself — removing the dropped-field / bare-template /
   prose-wrapped failure mode the §11.8 real-host gate surfaced under the AD-021 small model.
   Determinism (NFR-002) and authority (NFR-001) are unchanged: `result` runs only the pinned engine
-  through the AD-017 sandbox. The other §11.5 statuses (`need-samples`, `deferred`, `aborted`,
-  `repair-exhausted`, `profile-rejected`) arise from the skill's sample-loop / repair / refusal
-  steps, not from a single verify, and stay skill-emitted.
+  through the AD-017 sandbox. *(rev 2026-07-15: `result` also machine-builds the template-less
+  **refusal** envelope — `python -m transon_authoring result --refuse --status <STATUS>
+  --explanation <TEXT>` emits `{schema_version, ok: false, status, explanation}` (exit 1) for the
+  §11.5 statuses the skill emits DIRECTLY with no verify verdict: `aborted`, `deferred`,
+  `need-samples`, `repair-exhausted`. A bad combination — a status outside that set, an empty
+  `--explanation`, or a stray `--template`/`--samples` — is the §11.6 `schema-error` CliError
+  (exit 2). `profile-rejected` stays a CLI-level `CliError`, not a skill refusal. This closes the
+  same hand-writing failure mode on the refusal path that the verify path already closed: the
+  real-host gate saw the AD-021 model refuse CORRECTLY but hand-write a schema-invalid envelope —
+  missing `schema_version`/`explanation`, inventing `error`/`reason`/`detail` keys — failing OQ-016b
+  `invalid_submission` on every adversarial episode. `SKILL.md` §2/§7 now run `result --refuse` for
+  a refusal instead of hand-writing it.)*
 
 ### Observability
 - **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
@@ -690,9 +699,13 @@ No console-script product; no MCP.
   `status: "matched"`, `template` = T, `verdict` = the Verdict, `repair_count: 0`), exit 0; otherwise
   a failure envelope (`ok: false`, no `template`, `status: "samples-rejected"` if the samples stage
   failed else `"verify-failed"`, carrying the `verdict`), exit 1; malformed ingress → §11.6
-  `schema-error` CliError, exit 2. (b) `SKILL.md` §7 instructs the model to emit its `AuthoringResult`
-  by running `result` and returning its stdout verbatim, and forbids hand-writing the envelope
-  (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
+  `schema-error` CliError, exit 2. *(rev 2026-07-15: `result --refuse --status <STATUS>
+  --explanation <TEXT>` machine-builds the template-less refusal envelope `{schema_version, ok:
+  false, status, explanation}` (exit 1) for `status ∈ {aborted, deferred, need-samples,
+  repair-exhausted}`; a status outside that set, an empty `--explanation`, or a stray
+  `--template`/`--samples` → `schema-error` CliError, exit 2.)* (b) `SKILL.md` §2/§7 instruct the
+  model to emit its `AuthoringResult` by running `result` (verify-derived) or `result --refuse`
+  (refusal) and returning its stdout verbatim, and forbid hand-writing the envelope (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
   scorer to a correct hand-written one — the scorer's independent re-verify (AD-004) is unaffected.
 - **AC-038** — *(FR-035 / AD-025, added 2026-07-14)* **Run-observability artifacts are complete,
   correct, and inert.** A run with `--transcripts-dir DIR` writes (a) one
@@ -1158,7 +1171,7 @@ primary machine result on stderr.
 | `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
-| `result` | `--template PATH --samples PATH` | complete §11.5 `AuthoringResult`, machine-built (FR-034) | 0 if matched else 1 |
+| `result` | `--template PATH --samples PATH` **or** `--refuse --status STATUS --explanation TEXT` | complete §11.5 `AuthoringResult`, machine-built (FR-034): verify-derived from the template, or a template-less refusal (`STATUS ∈ {aborted, deferred, need-samples, repair-exhausted}`) | 0 if matched, 1 on any failure/refusal envelope, 2 on bad args |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
 | `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (rev 2026-07-11: flags aligned with §11.9) | `ProjectConfig` | 0/2 |
