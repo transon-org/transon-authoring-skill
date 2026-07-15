@@ -72,16 +72,18 @@ SampleSet files live.
    (4) the NL sidecar — hints only. Never use model memory, web docs, or Context7 for Transon
    semantics.
 3. If the request needs a capability that cannot be grounded in the pinned snapshot — an
-   operator, rule, or mode that does not exist there — REFUSE: the result is an `AuthoringResult`
-   with `ok: false` and `status: "aborted"` naming the missing capability. Emit it by RUNNING the
-   section 7 result command — never hand-write the envelope:
+   operator, rule, or mode that does not exist there — REFUSE. Your refusal is an `AuthoringResult`
+   with `ok: false` and `status: "aborted"` naming the missing capability — but do NOT hand-write
+   it, no matter how obvious the refusal seems. A hand-written refusal drops or misnames the
+   required `schema_version` / `explanation` fields, and a malformed refusal is scored as a FAILURE
+   even when your decision was correct. Emit it ONLY by running the command below, which builds the
+   complete envelope for you; then return its stdout verbatim as your final message:
 
    ```
    python -m transon_authoring result --refuse --status aborted --explanation "<name the missing capability>"
    ```
 
-   Return its stdout verbatim as your final message. Never invent names (operator, rule, or mode);
-   never guess syntax.
+   Never invent names (operator, rule, or mode); never guess syntax.
 
 ## 3. Sample loop
 

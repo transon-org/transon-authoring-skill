@@ -468,8 +468,10 @@ _REVIEW_APPROVAL = (
     "(`python -m transon_authoring result --template <path> --samples <path>`) and "
     "returning its stdout verbatim — never retype or reconstruct the envelope by hand. "
     "If instead the request needs a capability the pinned engine cannot ground (section "
-    "2), emit the refusal AuthoringResult directly (`ok: false`, `status: \"aborted\"`, "
-    "naming the missing capability). Do not ask me for files or assume prior work."
+    "2), emit the refusal (`ok: false`, `status: \"aborted\"`) by running "
+    "`python -m transon_authoring result --refuse --status aborted --explanation "
+    "\"<the missing capability>\"` and returning its stdout verbatim — do NOT hand-write "
+    "the refusal envelope. Do not ask me for files or assume prior work."
 )
 
 
