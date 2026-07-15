@@ -318,15 +318,13 @@ No console-script product; no MCP.
   Never return unverified JSON as success.
 
 ### Review
-- **FR-030** — *(added 2026-07-12)* **Interactive template review before emission.** In
-  interactive sessions, after `verify` yields `ok: true` and `assurance: "matched"`, the skill
-  presents the matched template together with its Verdict to the user before emitting the final
-  `AuthoringResult`. Exactly three exits:
+- **FR-030** — **Interactive template review before emission.** In interactive sessions, after
+  `verify` yields `ok: true` and `assurance: "matched"`, the skill presents the matched template
+  together with its Verdict to the user before emitting the final `AuthoringResult`. Exactly three
+  exits:
   - **approve** — the user accepts; the skill emits the success envelope (`status: "matched"`)
-    *(rev 2026-07-14: via the §7 `result` command, returning its stdout **verbatim** — never
-    re-typed. The real-host eval showed the AD-021 small model, prompted to emit after approval on
-    a later turn, re-types large envelopes by hand and corrupts the JSON; running `result` again
-    machine-builds a well-formed envelope — FR-034/AC-037).*
+    via the §7 `result` command, returning its stdout **verbatim** — never re-typed (FR-034 /
+    AC-037).
   - **revise** — the user supplies feedback. NL-only feedback → draft a new candidate under the
     FR-001 grounding rules and re-run `verify`, with a **fresh `repair_attempts` budget** for
     that revision round (each round independently bounded per FR-007/NFR-006). Feedback that
@@ -356,8 +354,7 @@ No console-script product; no MCP.
 
 ### Distribution
 - **FR-012** — Canonical `SKILL.md` + Claude/Cursor adapters.
-- **FR-013** — **Deprecated (pre-A0; no implementation).** MCP server removed from v1 (§3). Kept
-  only so the ID is not reused after A0 lock.
+- **FR-013** — **Deprecated.** MCP server removed from v1 (§3); ID retained so it is not reused.
 - **FR-014** — `python -m transon_authoring` module entry with subcommands in §11.6.
 
 ### Installation
@@ -367,20 +364,18 @@ No console-script product; no MCP.
   (manifest recorded at install time).
 
 ### Improvement
-- **FR-017** — Eval-driven loop (AD-010/020). *(rev 2026-07-14, AD-024 / OQ-027: the loop's
-  measurement harness is the **real host** — the Claude Agent SDK reference host pinned in
-  `evals/runner.json` — feeding the unchanged OQ-016 scorer through the OQ-027e adapter; the raw
-  OQ-017 loop is demoted to non-gating offline smoke. Scoring, targets, baseline, and lint
-  semantics are unchanged; see §11.8.)*
+- **FR-017** — Eval-driven loop (AD-010/020/024). Measurement harness is the **real host**
+  (Claude Agent SDK reference host pinned in `evals/runner.json`), feeding the OQ-016 scorer
+  through the host→EpisodeResult adapter; the raw OQ-017 loop is non-gating offline smoke.
+  Scoring, targets, baseline, and lint semantics: §11.8.
 - **FR-018** — Capture failing cases into evals only after **privacy redaction** and **explicit
-  consent** (§11.8). No raw secrets/PII committed. *(rev 2026-07-13 — two separable halves.)*
+  consent** (§11.8). No raw secrets/PII committed. Two halves:
   **(a) Capture mechanism (gating; A2–A3):** the SKILL.md §3.5 redaction+consent rule plus the
   `check_evals --lint` enforcement that rejects any real-use fixture lacking `redacted: true` +
-  a `consent` object (NFR-011, AC-025). This half is the A3-gating deliverable and is complete.
-  **(b) Real-use corpus growth (ongoing; non-gating):** committing actual captured fixtures is
-  driven by real usage (typically only after distribution, A4+); it grows the corpus over time
-  and **gates no milestone** — its absence never holds A3 open. AC-025 is a conditional
-  invariant enforced by half (a), satisfied vacuously while no real-use fixture is committed.
+  a `consent` object (NFR-011, AC-025).
+  **(b) Real-use corpus growth (ongoing; non-gating):** committing captured fixtures is driven by
+  real usage (typically A4+) and **gates no milestone**. AC-025 is a conditional invariant
+  enforced by half (a), satisfied vacuously while no real-use fixture is committed.
 - **FR-029** — **Synthetic fixture generator + seed provenance + regen gate (AD-021).** A
   maintainer script (`scripts/` — not shipped in the package) mints EvalFixtures from snapshot
   `docs.examples` seeds: deterministic (no wall-clock/randomness), **3–6 cases per fixture**
@@ -418,16 +413,11 @@ No console-script product; no MCP.
   under the current pin (AC-030) — the same drift discipline as `check_snapshot`. v1 scope: a tagged
   subset (~25–30 seeds, one per tag family) with the remainder as follow-up waves; the
   should-refuse bucket stays hand-authored (no synthesized refuse intents in v1).
-  *(rev 2026-07-12, OQ-025)* The applicability predicates — which corpus keys are **optional**,
-  which arrays receive the `list_*` kinds, when a `NO_CONTENT` case is **relevant**, what makes a
-  seed **writes-capable**, how `SampleSet.includes` is populated, and seed **eligibility** (the
-  corpus-pair re-execution assert; never-dropped obligations exceeding the six-case budget) — are
-  fixed in OQ-025.
-  *(rev 2026-07-12, OQ-026)* Wave-2 coverage extensions — list length-variation customs, root key
-  addition/deletion customs, the frozen `NO_CONTENT` probe count, and the extended drop order —
-  are fixed in OQ-026.
-- **FR-033** — *(added 2026-07-13, AD-023)* **Real-world structural fixture pack + engine-freeze
-  gate.** Large constructed EvalFixtures (AD-023) are committed under `evals/cases/` as ordinary
+  Applicability predicates (optional keys, `list_*` array scope, `NO_CONTENT` relevance,
+  writes-capable, includes population, seed eligibility) are fixed in OQ-025. Wave-2 coverage
+  extensions (list length-variation, root key add/delete, `NO_CONTENT` probe count, extended drop
+  order) are fixed in OQ-026.
+- **FR-033** — **Real-world structural fixture pack + engine-freeze gate (AD-023).** Large constructed EvalFixtures (AD-023) are committed under `evals/cases/` as ordinary
   EvalFixtures (§11.8 schema; `redacted: false`; no `consent`; **no seed-template field in the
   fixture**). Their provenance is a **constructed seed** at `evals/seeds/<fixture-id>.json` with the
   shape `{ "origin": "real-world-pack", "source_ref": string, "template": <Transon JSON>,
@@ -440,15 +430,8 @@ No console-script product; no MCP.
   closed `eval_fixture.json` schema, `additionalProperties: false`); (c) the SampleSet is
   `ok_for_verify` (FR-027). `source_ref` remains a **required non-empty provenance string** naming
   the documented API/source the payload was constructed from — the AD-023 "constructed, never
-  captured" audit trail that backs `redacted: false` / no `consent`.
-  *(rev 2026-07-15: the former clause (d) **provenance link** — resolving `source_ref`'s file
-  portion to an existing repo file — is **WITHDRAWN**. It was a repo-integrity check running inside
-  the credential-holding eval gate, which by OQ-027f(i) checks out nothing and runs from a minimal
-  bundle; it made the gate depend on the `docs/` tree and killed the first full dispatch in
-  pre-flight lint. `source_ref` has no consumer in scoring, verify, targets or baseline, and neither
-  the engine-freeze (a) nor the no-leakage (b) guarantee rests on resolving it to a path — so the
-  check is removed rather than the bundle widened. `source_ref` therefore no longer names a repo
-  path.)* Real-world-pack SampleSets SHOULD
+  captured" audit trail that backs `redacted: false` / no `consent`. `source_ref` is a provenance
+  string, not a repo path (it is not resolved to a filesystem location). Real-world-pack SampleSets SHOULD
   additionally carry edge obligations (empty arrays, missing→`null`) — a review-time authoring
   expectation (§12 maker ≠ checker), not a lint-enforced one. **Enforcement boundary:** the
   engine-freeze gate binds every fixture that **has** a constructed seed, and a real-world-pack
@@ -460,47 +443,41 @@ No console-script product; no MCP.
   faked output. The pack counts in the §11.8 authoring/adversarial denominators and is expected to
   lower the measured authoring rate, corrected by improving `SKILL.md`, never by lowering the §11.8
   targets.
-- **FR-034** — *(added 2026-07-14, OQ-027)* **Deterministic result emission (`result` command).**
-  The module CLI (§11.6) provides `python -m transon_authoring result --template <path>
-  --samples <path>`: it re-runs the §11.4 `verify` of the template against the SampleSet and emits
-  the COMPLETE §11.5 `AuthoringResult` envelope on stdout — **machine-generated, never hand-written.**
-  A matched verdict emits the success envelope (`ok: true`, `status: "matched"`, the verified
-  `template`, the verify `verdict`, and `repair_count` = the `--repair-count N` the skill passes —
-  the §11.5 repairs-consumed count from its §11.9 repair loop, `0` when omitted / a first-try
-  success, `N >= 0`); a non-matched verdict emits the failure
-  envelope (`ok: false`, no `template`, the verify-derived §11.5 `status` — `samples-rejected` when
-  the SampleSet stage failed, otherwise `verify-failed` — with the `verdict` diagnostic); malformed
-  ingress is the §11.6 `schema-error` CliError, as for every subcommand. `SKILL.md` §7's result step
-  MUST emit its `AuthoringResult` by running this command and returning its output verbatim, so the
-  authoring model never constructs the envelope itself — removing the dropped-field / bare-template /
-  prose-wrapped failure mode the §11.8 real-host gate surfaced under the AD-021 small model.
-  Determinism (NFR-002) and authority (NFR-001) are unchanged: `result` runs only the pinned engine
-  through the AD-017 sandbox. *(rev 2026-07-15: `result` also machine-builds the template-less
-  **refusal** envelope — `python -m transon_authoring result --refuse --status <STATUS>
-  --explanation <TEXT>` emits `{schema_version, ok: false, status, explanation}` (exit 1) for the
-  §11.5 statuses the skill emits DIRECTLY with no verify verdict: `aborted`, `deferred`,
-  `need-samples`, `repair-exhausted`, and `profile-rejected` (the skill-level out-of-profile stop —
-  §11.5: the skill stops WITHOUT calling verify when the request demands a non-default
-  marker/transformer). A bad combination — a status outside that set, an empty `--explanation`, a
-  stray `--template`/`--samples`, or `--repair-count` (a matched-success field) — is the §11.6
-  `schema-error` CliError (exit 2). The CLI's OWN reserved-knob rejection (`--marker`/`--transformer`,
-  AC-027) remains a `CliError` (exit 2), distinct from this skill-level `profile-rejected`
-  AuthoringResult; `schema-error` is a CLI ingress error only. This closes the
-  same hand-writing failure mode on the refusal path that the verify path already closed: the
-  real-host gate saw the AD-021 model refuse CORRECTLY but hand-write a schema-invalid envelope —
-  missing `schema_version`/`explanation`, inventing `error`/`reason`/`detail` keys — failing OQ-016b
-  `invalid_submission` on every adversarial episode. `SKILL.md` §2/§7 now run `result --refuse` for
-  a refusal instead of hand-writing it.)*
+- **FR-034** — **Deterministic result emission (`result` command).** The module CLI (§11.6)
+  provides `python -m transon_authoring result --template <path> --samples <path>`: it re-runs
+  the §11.4 `verify` of the template against the SampleSet and emits the COMPLETE §11.5
+  `AuthoringResult` envelope on stdout — **machine-generated, never hand-written.** A matched
+  verdict emits the success envelope (`ok: true`, `status: "matched"`, the verified `template`,
+  the verify `verdict`, and `repair_count` = the `--repair-count N` the skill passes — the §11.5
+  repairs-consumed count from its §11.9 repair loop, `0` when omitted / a first-try success,
+  `N >= 0`); a non-matched verdict emits the failure envelope (`ok: false`, no `template`, the
+  verify-derived §11.5 `status` — `samples-rejected` when the SampleSet stage failed, otherwise
+  `verify-failed` — with the `verdict` diagnostic); malformed ingress is the §11.6 `schema-error`
+  CliError, as for every subcommand. `result` also machine-builds the template-less **refusal**
+  envelope — `python -m transon_authoring result --refuse --status <STATUS> --explanation <TEXT>`
+  emits `{schema_version, ok: false, status, explanation}` (exit 1) for the §11.5 statuses the
+  skill emits DIRECTLY with no verify verdict: `aborted`, `deferred`, `need-samples`,
+  `repair-exhausted`, and `profile-rejected` (the skill-level out-of-profile stop — §11.5: the
+  skill stops WITHOUT calling verify when the request demands a non-default marker/transformer).
+  A bad combination — a status outside that set, an empty `--explanation`, a stray
+  `--template`/`--samples`, or `--repair-count` (a matched-success field) — is the §11.6
+  `schema-error` CliError (exit 2). The CLI's OWN reserved-knob rejection
+  (`--marker`/`--transformer`, AC-027) remains a `CliError` (exit 2), distinct from this
+  skill-level `profile-rejected` AuthoringResult; `schema-error` is a CLI ingress error only.
+  `SKILL.md` §2/§7 MUST emit `AuthoringResult` by running `result` / `result --refuse` and
+  returning stdout verbatim — the authoring model never constructs the envelope itself.
+  Determinism (NFR-002) and authority (NFR-001) are unchanged: `result` runs only the pinned
+  engine through the AD-017 sandbox.
 
 ### Observability
-- **FR-031** — *(added 2026-07-12, AD-022)* **Self-reported session trace.** `AuthoringResult`
+- **FR-031** — **Self-reported session trace (AD-022).** `AuthoringResult`
   MAY carry `trace`: an ordered array of `TraceEntry` (§11.5) — one entry per protocol step the
   skill performed (config, grounding, sample-loop rounds, confirm, draft, each verify/repair
   cycle, review, result), each carrying the verbatim `python -m transon_authoring` invocation
   when one ran and a step-local outcome. The skill body instructs filling it in interactive
   sessions. Diagnostic only: schema-validated when present, ignored by scoring and gates,
   absence never invalidates a result, content never treated as ground truth (AD-022).
-- **FR-032** — *(added 2026-07-12, AD-022)* **Eval episode transcripts + failure attribution.**
+- **FR-032** — **Eval episode transcripts + failure attribution (AD-022).**
   Full `check_evals` runs persist one `EpisodeTranscript` per episode (shape in §11.8) under a
   run-artifact directory (`--transcripts-dir`); transcripts are **never committed** to the repo
   (repo hygiene + NFR-011) — the credential-holding dispatch workflow retains them as build
@@ -511,7 +488,7 @@ No console-script product; no MCP.
   suffixed with `verdict.failed_stage`); the submitted status only ever labels a failure, it is
   never trusted as the score (AD-004). Scoring, targets, baseline, and lint semantics are
   unchanged by the presence or absence of transcripts.
-- **FR-035** — *(added 2026-07-14, AD-025)* **Run-observability artifacts + fixture selector.**
+- **FR-035** — **Run-observability artifacts + fixture selector (AD-025).**
   A `check_evals` run with `--transcripts-dir DIR` writes, in addition to the FR-032
   `EpisodeTranscript`s: (a) per episode, `DIR/messages/<fixture-id>.<run-index>.messages.json` — the
   **whole host message transcript** for that episode (ordered turns; each message's class/subtype
@@ -555,20 +532,19 @@ No console-script product; no MCP.
   `transon==…`. Does not track unpinned newer releases (AD-007).
 - **NFR-005 — Honest failure.** §11.5 statuses distinguishable from success.
 - **NFR-006 — Bounded repair.** Per FR-007; sample loop unbounded until confirm/defer/abort.
-  *(rev 2026-07-12, FR-030)* The interactive review loop is likewise unbounded until
-  approve/stop; each FR-030 revision round is a new candidate sequence with a fresh
-  `repair_attempts` budget — the machine bound applies within a round, never across user-driven
-  rounds.
+  The interactive review loop (FR-030) is likewise unbounded until approve/stop; each revision
+  round is a new candidate sequence with a fresh `repair_attempts` budget — the machine bound
+  applies within a round, never across user-driven rounds.
 - **NFR-007 — Adapter parity.** Claude/Cursor equal capability or documented exclusion.
 - **NFR-008 — Versioned releases.** Record skill version, engine pin, snapshot hash.
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
   smoke**, not host “discoverability,” except where OQ-010 enables a Claude listing check.
 - **NFR-010 — Eval regression gate.** Targets (OQ-006): authoring ≥80%→95% ratchet; adversarial
-  refuse-class =100%. Exact formula and runner: §11.8 / AD-020. *(rev 2026-07-14, AD-024 / OQ-027:
-  the pinned `runner.json.harness` — the real host + version — is part of gate identity alongside
-  the model pin; a harness change is an eval-policy commit that resets the baseline, §11.8.)*
+  refuse-class =100%. Exact formula and runner: §11.8 / AD-020/AD-024. The pinned
+  `runner.json.harness` (real host + version) is part of gate identity alongside the model pin;
+  a harness change is an eval-policy commit that resets the baseline (§11.8).
 - **NFR-011 — Privacy.** Real-use fixtures require redaction + consent before commit (FR-018).
-- **NFR-012 — Shipped-skill self-sufficiency.** *(added 2026-07-12)* The shipped skill body
+- **NFR-012 — Shipped-skill self-sufficiency.** The shipped skill body
   (`SKILL.md`) and adapter files must be fully operable standalone: every behavior, schema
   field, status, and gate they rely on is stated inline, and they contain **no references to
   repo files that are not shipped alongside them** — no links or paths into `docs/`, `harness/`,
@@ -598,9 +574,9 @@ No console-script product; no MCP.
 - **AC-009** — CI: Cursor structural install + module smoke; Claude structural install (listing
   only if OQ-010 allows). No false “discoverability” claims.
 - **AC-010** — Unmet obligations → gap codes; skill presents waivers; user accepts/rejects.
-- **AC-011** — *(rev 2026-07-11, OQ-023 split — conversational half, A3)* Conversational confirm
-  (skill body) writes `confirmation` and binds `content_fingerprint` via the OQ-015 acquisition
-  path. The schema-testable half is AC-029.
+- **AC-011** — Conversational confirm (skill body, A3) writes `confirmation` and binds
+  `content_fingerprint` via the OQ-015 acquisition path. The schema-testable half is AC-029
+  (OQ-023 split).
 - **AC-012** — Defer → `deferred`; abort → `aborted`; no template.
 - **AC-013** — Success ⇒ `verdict.ok && assurance === "matched"` only.
 - **AC-014** — CI fixtures with `confirmed` + `coverage_complete`; no layout prompt when config
@@ -622,11 +598,10 @@ No console-script product; no MCP.
 - **AC-024** — Captured `writes` matched when case declares `writes`; undeclared non-empty writes
   fail match.
 - **AC-025** — Eval fixtures from real use lack secrets/PII; consent recorded (NFR-011).
-  *(rev 2026-07-13, FR-018 split)* This is a **conditional invariant** enforced by the
-  `check_evals --lint` capture mechanism (FR-018a): any committed fixture sourced from real use
-  MUST carry `redacted: true` + a `consent` object, else the lint is red. It is **satisfied
-  vacuously** while the corpus holds no real-use fixture — AC-025 does **not** require that a
-  real-use fixture exist, so it never blocks A3.
+  This is a **conditional invariant** enforced by the `check_evals --lint` capture mechanism
+  (FR-018a): any committed fixture sourced from real use MUST carry `redacted: true` + a
+  `consent` object, else the lint is red. It is **satisfied vacuously** while the corpus holds
+  no real-use fixture — AC-025 does **not** require that a real-use fixture exist.
 - **AC-026** — Failure envelopes always include `ok: false` and a §11.5 `status`.
 - **AC-027** — `verify` always executes under the AD-017 default profile (base `Transformer`,
   marker `"$"`, built-in registries). Explicit profile-violating requests (reserved CLI flags /
@@ -635,33 +610,33 @@ No console-script product; no MCP.
   JSON that merely *would* need another marker is **not** detectable as a profile violation — it
   runs under `"$"` and fails or succeeds via normal validate/dry_run/match.
 - **AC-028** — Per-case dry-run exceeding 5s fails `dry_run` with timeout error.
-- **AC-029** — *(OQ-023 split — schema half, A2)* Persisting a SampleSet per FR-021/§11.1 and
+- **AC-029** — Persisting a SampleSet (OQ-023 schema half, A2) per FR-021/§11.1 and
   setting `confirmation` with `confirmed: true`, a valid `confirmed_by`, and the
   `content_fingerprint` obtained via the OQ-015 acquisition path yields `check_samples` →
   `confirmed: true`; any subsequent edit to the hashed content subset flips it back via
   `fingerprint_mismatch`.
-- **AC-030** — *(FR-029 regen gate)* `check_evals --lint` is **red** when any committed fixture
+- **AC-030** — `check_evals --lint` is **red** (FR-029 regen gate) when any committed fixture
   with a matching `evals/seeds/<fixture-id>.json` does not regenerate bit-identically (SampleSet
   content subset and `content_fingerprint`) from its seed under the current pin; when a seed
   file has no matching fixture; or when a seed fails FR-029 snapshot provenance
   (`source_example` absent from the pinned `docs.examples`, seed `template` ≠ that entry's
   `template`, or case 1 `input` ≠ that entry's `data`). A repo whose seeds, fixtures, and
   snapshot agree lints **green**.
-- **AC-031** — *(FR-030 review loop, added 2026-07-12)* In an interactive session a matched
+- **AC-031** — In an interactive session (FR-030 review loop) a matched
   template is presented with its Verdict before the success envelope is emitted; approve →
   `status: "matched"`; NL-feedback revise → a new draft cycle with a fresh FR-007 budget,
   re-verified and re-presented only when matched; sample-feedback revise → the SampleSet edit
   flips `confirmed` (`fingerprint_mismatch`) and the flow re-enters the FR-023 sample loop
   before redrafting; stop → `deferred`/`aborted` with no template; never auto-approve.
   Non-interactive runs emit `matched` without review.
-- **AC-032** — *(NFR-012 self-sufficiency lint, added 2026-07-12)* `check_parity` is **red**
+- **AC-032** — `check_parity` is **red** (NFR-012 self-sufficiency lint)
   when `SKILL.md` or any adapter file references an unshipped repo path (`docs/`, `harness/`,
   `scripts/`, `evals/`, `tests/`, `src/`, repo-root `resources/`), contains a `§`-section
   reference into `docs/SPEC.md`, or carries requirement-ID citations outside markdown comments;
   a self-contained skill body and adapters lint **green**. Mentions of the engine's own
   `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint — the exemption is the exact
   string `docs/SPECIFICATION.md`; any other `docs/…` path trips it (deterministic discriminator).
-- **AC-033** — *(FR-031, added 2026-07-12)* An `AuthoringResult` carrying `trace` validates
+- **AC-033** — An `AuthoringResult` carrying `trace` validates (FR-031)
   against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
   without `trace` remains valid; a malformed `trace` fails schema validation like any other
   field.
@@ -671,21 +646,19 @@ No console-script product; no MCP.
   `failure_modes` equals a hand-computed histogram over the same **scored** episode results
   under the §11.8 key precedence; the same run without `--transcripts-dir` produces identical
   scoring and gate outcomes.
-- **AC-035** — *(FR-033 / AD-023, added 2026-07-13)* `check_evals --lint` is **red** when a
+- **AC-035** — `check_evals --lint` is **red** (FR-033 / AD-023) when a
   committed fixture with a constructed seed (`evals/seeds/<id>.json`, `origin: "real-world-pack"`)
   does not engine-freeze — some case's committed `output` differs from re-executing the seed
   `template` through the pinned engine on that case's `input` (§11.4 equality) — or when the fixture
   object carries a template/answer field outside its SampleSet `cases` (leakage), or when a
   constructed-seed fixture's SampleSet is not `ok_for_verify`, or when the seed omits a non-empty
   `source_ref` provenance string. A real-world pack whose fixtures, seeds, and pinned engine
-  agree lints **green**. *(rev 2026-07-15: the `source_ref`-resolves-to-a-repo-file clause is
-  withdrawn with FR-033(d) — see FR-033. The field is still required and non-empty; only the
-  filesystem resolution is gone, so the lint no longer depends on the `docs/` tree and can run
-  inside the bundle-only eval job.)* The gate binds only fixtures that carry a constructed seed; a matched
+  agree lints **green**. `source_ref` must be a non-empty provenance string but is not
+  resolved to a repo file (see FR-033). The gate binds only fixtures that carry a constructed seed; a matched
   fixture committed without one is treated as hand-authored (trusted via §12 review, not
   engine-frozen), and a genuinely inexpressible transform is authored `expect: "refuse"` with no seed
   (AD-023) — see FR-033's enforcement boundary.
-- **AC-036** — *(OQ-027 / AD-024, added 2026-07-14)* **Real-host harness pin + adapter.**
+- **AC-036** — **Real-host harness pin + adapter (OQ-027 / AD-024).**
   (a) `evals/runner.json` carries a `harness` block `{ kind, version }` that validates against the
   `eval_runner.json` schema (`kind ∈ {agent-sdk, claude-code}`), and `check_evals` selects the
   driver by `harness.kind`, raising a config error (exit 2) on an unimplemented kind — exactly as
@@ -698,25 +671,26 @@ No console-script product; no MCP.
   `score_episode` (OQ-016) yields the same score the equivalent raw-loop EpisodeResult would — the
   scorer, targets, baseline, and lint semantics are byte-for-byte unchanged (AD-024). The adapter
   is unit-tested with a fake host (no live credentials), mirroring the OQ-017e fake-provider tests.
-- **AC-037** — *(FR-034 / OQ-027, added 2026-07-14)* **`result` emits a schema-valid AuthoringResult
-  matching the verify outcome; `SKILL.md` §7 mandates it.** (a) `python -m transon_authoring result
-  --template T --samples S` writes exactly one `AuthoringResult` (§11.5 schema) to stdout: when
-  `verify(T, S)` returns `ok` with `assurance: "matched"`, the success envelope (`ok: true`,
-  `status: "matched"`, `template` = T, `verdict` = the Verdict, `repair_count` = `--repair-count N`
-  (default 0, `N >= 0`)), exit 0; otherwise
-  a failure envelope (`ok: false`, no `template`, `status: "samples-rejected"` if the samples stage
-  failed else `"verify-failed"`, carrying the `verdict`), exit 1; malformed ingress → §11.6
-  `schema-error` CliError, exit 2. *(rev 2026-07-15: `result --refuse --status <STATUS>
-  --explanation <TEXT>` machine-builds the template-less refusal envelope `{schema_version, ok:
-  false, status, explanation}` (exit 1) for `status ∈ {aborted, deferred, need-samples,
-  repair-exhausted, profile-rejected}`; a status outside that set, an empty `--explanation`, a stray
-  `--template`/`--samples`, `--repair-count` with `--refuse`, or a negative `--repair-count` →
-  `schema-error` CliError, exit 2.)* (b) `SKILL.md` §2/§7 instruct the
-  model to emit its `AuthoringResult` by running `result` (verify-derived) or `result --refuse`
-  (refusal) and returning its stdout verbatim, and forbid hand-writing the envelope (skill-body test). A success envelope from `result` re-scores identically under the §11.8 OQ-016
-  scorer to a correct hand-written one — the scorer's independent re-verify (AD-004) is unaffected.
-- **AC-038** — *(FR-035 / AD-025, added 2026-07-14)* **Run-observability artifacts are complete,
-  correct, and inert.** A run with `--transcripts-dir DIR` writes (a) one
+- **AC-037** — **`result` emits a schema-valid AuthoringResult matching the verify outcome;
+  `SKILL.md` §7 mandates it (FR-034).** (a) `python -m transon_authoring result --template T
+  --samples S` writes exactly one `AuthoringResult` (§11.5 schema) to stdout: when `verify(T, S)`
+  returns `ok` with `assurance: "matched"`, the success envelope (`ok: true`, `status: "matched"`,
+  `template` = T, `verdict` = the Verdict, `repair_count` = `--repair-count N` (default 0,
+  `N >= 0`)), exit 0; otherwise a failure envelope (`ok: false`, no `template`,
+  `status: "samples-rejected"` if the samples stage failed else `"verify-failed"`, carrying the
+  `verdict`), exit 1; malformed ingress → §11.6 `schema-error` CliError, exit 2.
+  `result --refuse --status <STATUS> --explanation <TEXT>` machine-builds the template-less
+  refusal envelope `{schema_version, ok: false, status, explanation}` (exit 1) for
+  `status ∈ {aborted, deferred, need-samples, repair-exhausted, profile-rejected}`; a status
+  outside that set, an empty `--explanation`, a stray `--template`/`--samples`, `--repair-count`
+  with `--refuse`, or a negative `--repair-count` → `schema-error` CliError, exit 2.
+  (b) `SKILL.md` §2/§7 instruct the model to emit its `AuthoringResult` by running `result`
+  (verify-derived) or `result --refuse` (refusal) and returning its stdout verbatim, and forbid
+  hand-writing the envelope (skill-body test). A success envelope from `result` re-scores
+  identically under the §11.8 OQ-016 scorer — the scorer's independent re-verify (AD-004) is
+  unaffected.
+- **AC-038** — **Run-observability artifacts are complete, correct, and inert (FR-035 /
+  AD-025).** A run with `--transcripts-dir DIR` writes (a) one
   `DIR/messages/<id>.<run>.messages.json` per episode whose ordered `messages` reproduce the host
   turn stream (assistant text/thinking, each dispatched tool call and its result, across every
   turn), and (b) `DIR/run_summary.json` whose per-episode `tokens`, `cost_usd`, `steps`,
@@ -727,8 +701,8 @@ No console-script product; no MCP.
   byte-identical (extends AC-034), and the scored `EpisodeTranscript` files are unchanged.
 
 ### Use cases
-- **UC-001** — *(rev 2026-07-12, FR-030)* Claude Code: samples → confirm → author → `verify` →
-  user review (approve) → PR with template + SampleSet.
+- **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
+  PR with template + SampleSet (FR-030).
 - **UC-002** — Cursor same path; optional handoff to blockly import (no in-surface guarantee).
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
 - **UC-004** — New engineer installs adapters, first-run layout prompt, authors successfully.
