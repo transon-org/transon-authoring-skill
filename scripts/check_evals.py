@@ -74,6 +74,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -319,23 +320,16 @@ def _lint_constructed_seed(
         )
         return failures
 
-    # (d) provenance link (FR-033d / AC-035): the source_ref's file portion
-    # (before any '#' anchor or trailing whitespace/section label) must resolve
-    # to an existing repo file INSIDE the repo. Fail closed: an empty file part
-    # (anchor-only source_ref) or a path that escapes repo_root (absolute / '..')
-    # is red, never a silent skip.
-    repo_root = cases_dir.parent.parent.resolve()
-    file_part = re.split(r"[#\s]", seed["source_ref"], maxsplit=1)[0]
-    provenance_ok = False
-    if file_part:
-        resolved = (repo_root / file_part).resolve()
-        provenance_ok = resolved.is_relative_to(repo_root) and resolved.is_file()
-    if not provenance_ok:
-        failures.append(
-            f"{path}: source_ref file {file_part!r} does not resolve to a file "
-            "inside the repository (FR-033d provenance link / AC-035)"
-        )
-        return failures
+    # NOTE (rev 2026-07-15, FR-033/AC-035): the former (d) "provenance link" check
+    # — resolving source_ref's file portion to an existing repo file — is
+    # WITHDRAWN. It was a repo-integrity check running inside the eval gate, which
+    # by OQ-027f(i) checks out nothing and runs from a minimal bundle: it made the
+    # gate depend on the docs/ tree and killed the first full dispatch in the
+    # pre-flight lint. source_ref is still REQUIRED and non-empty (shape check
+    # above) as the AD-023 constructed-not-captured provenance trail, but it names
+    # a documented API/source, not a repo path — nothing in scoring, verify,
+    # targets or baseline reads it, and neither engine-freeze (a) nor no-leakage
+    # (b) depends on resolving it.
 
     fixture = fixtures_by_stem.get(path.stem)
     if fixture is None:
@@ -872,12 +866,164 @@ def write_transcripts(
             )
 
 
+#: FR-035 — the additive per-episode token telemetry keys rolled up in the run
+#: summary (mirrors host_harness._new_tokens; never scored, AC-034).
+_TOKEN_KEYS = ("input", "output", "cache_read", "cache_creation", "turns")
+
+#: FR-035 — the four §11.8 harness outcome classes, always present in the
+#: run-summary outcome histogram (each possibly zero) so the shape is stable.
+_OUTCOME_KEYS = ("submitted", "no_submit", "budget_exceeded", "infra_error")
+
+
+def _episode_stats(fixture_id: str, run_index: int, episode: dict[str, Any]) -> dict[str, Any]:
+    """FR-035 — one episode's telemetry row for the run summary: tokens, cost,
+    step count and the tool-call histogram (steps by category). Pure; derived
+    from the additive fields the host adapter records (never scored, AC-034)."""
+    log = episode.get("tool_call_log") or []
+    tokens = episode.get("tokens") or {}
+    return {
+        "fixture_id": fixture_id,
+        "run_index": run_index,
+        "outcome": episode["outcome"],
+        "error": episode.get("error"),
+        "tokens": {key: int(tokens.get(key, 0) or 0) for key in _TOKEN_KEYS},
+        "cost_usd": episode.get("cost_usd"),
+        "steps": len(log),
+        "steps_by_category": dict(Counter(str(call.get("name")) for call in log)),
+    }
+
+
+def build_run_summary(
+    fixtures: list[dict[str, Any]],
+    per_fixture_episodes: dict[str, list[dict[str, Any]]],
+    runner_cfg: dict[str, Any],
+    fixture_bytes: dict[str, int],
+) -> dict[str, Any]:
+    """FR-035 / AC-038 — pure telemetry roll-up over every episode (§11.8
+    RunSummary shape). Per-episode + totals of tokens, cost, steps and the
+    tool-call histogram; per-fixture normalized cost. **Additive telemetry**:
+    derived mechanically from recorded episodes, gates nothing, changes no
+    scoring (AC-034)."""
+    episodes: list[dict[str, Any]] = []
+    total_tokens = {key: 0 for key in _TOKEN_KEYS}
+    total_steps_by_category: Counter[str] = Counter()
+    outcomes = {key: 0 for key in _OUTCOME_KEYS}
+    total_cost = 0.0
+    total_steps = 0
+    total_errors = 0
+    by_fixture: dict[str, Any] = {}
+
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        eps = per_fixture_episodes[fixture_id]
+        rows = [
+            _episode_stats(fixture_id, i, ep) for i, ep in enumerate(eps)
+        ]
+        episodes.extend(rows)
+
+        fx_tokens = {key: 0 for key in _TOKEN_KEYS}
+        fx_cost = 0.0
+        fx_steps = 0
+        for row in rows:
+            for key in _TOKEN_KEYS:
+                total_tokens[key] += row["tokens"][key]
+                fx_tokens[key] += row["tokens"][key]
+            total_steps_by_category.update(row["steps_by_category"])
+            outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
+            cost = row["cost_usd"] or 0.0
+            total_cost += cost
+            fx_cost += cost
+            total_steps += row["steps"]
+            fx_steps += row["steps"]
+            if row["error"] is not None:
+                total_errors += 1
+
+        runs = len(rows)
+        size = fixture_bytes.get(fixture_id, 0)
+        prompt_tokens = fx_tokens["input"] + fx_tokens["cache_read"] + fx_tokens["cache_creation"]
+        by_fixture[fixture_id] = {
+            "runs": runs,
+            "fixture_bytes": size,
+            "cost_usd_total": fx_cost,
+            "cost_usd_mean": (fx_cost / runs) if runs else None,
+            "tokens_mean": {
+                key: (fx_tokens[key] / runs) if runs else 0 for key in _TOKEN_KEYS
+            },
+            "steps_mean": (fx_steps / runs) if runs else None,
+            "cache_read_ratio": (
+                fx_tokens["cache_read"] / prompt_tokens if prompt_tokens else 0.0
+            ),
+            "cost_usd_per_kb": (fx_cost / (size / 1024)) if size else None,
+        }
+
+    return {
+        "schema_version": "1.0",
+        "model_id": runner_cfg["model_id"],
+        "harness": runner_cfg.get("harness"),
+        "runs_per_fixture": runner_cfg["runs_per_fixture"],
+        "episodes": episodes,
+        "totals": {
+            "episodes": len(episodes),
+            "tokens": total_tokens,
+            "cost_usd": total_cost,
+            "steps": total_steps,
+            "steps_by_category": dict(total_steps_by_category),
+            "outcomes": outcomes,
+            "errors": total_errors,
+        },
+        "by_fixture": by_fixture,
+    }
+
+
+def write_episode_messages(
+    transcripts_dir: Path,
+    fixtures: list[dict[str, Any]],
+    per_fixture_episodes: dict[str, list[dict[str, Any]]],
+    runner_cfg: dict[str, Any],
+) -> None:
+    """FR-035 / AC-038 — persist one whole-episode message transcript
+    (``EpisodeMessages``) per episode to ``transcripts_dir/messages/``. A build
+    artifact only, **never committed**; additive telemetry that changes no
+    scoring (AC-034). The host records the serialized stream in
+    ``episode['messages']`` (empty for a host that exposes none)."""
+    messages_dir = transcripts_dir / "messages"
+    messages_dir.mkdir(parents=True, exist_ok=True)
+    model_id = runner_cfg["model_id"]
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        for run_index, episode in enumerate(per_fixture_episodes[fixture_id]):
+            document = {
+                "schema_version": "1.0",
+                "fixture_id": fixture_id,
+                "run_index": run_index,
+                "model_id": model_id,
+                "messages": episode.get("messages") or [],
+            }
+            path = messages_dir / f"{fixture_id}.{run_index}.messages.json"
+            path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+
+def write_run_summary(transcripts_dir: Path, summary: dict[str, Any]) -> None:
+    """FR-035 / AC-038 — persist the run-level telemetry roll-up to
+    ``transcripts_dir/run_summary.json``. Build artifact only, never committed;
+    additive (AC-034)."""
+    transcripts_dir.mkdir(parents=True, exist_ok=True)
+    (transcripts_dir / "run_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def run_evals(
     repo_root: Path,
     *,
     update_baseline: bool = False,
     verbose: bool = False,
     transcripts_dir: Path | None = None,
+    only: list[str] | None = None,
 ) -> int:
     """Full FR-017 eval gate: lint, provider episodes, scoring, aggregation.
 
@@ -908,10 +1054,43 @@ def run_evals(
     runner_cfg = load_document(evals_dir / "runner.json", "eval_runner.json")
     targets = load_document(evals_dir / "targets.json", "eval_targets.json")
     baseline = load_document(evals_dir / "baseline.json", "eval_baseline.json")
-    fixtures = [
-        load_document(path, "eval_fixture.json")
+    loaded = [
+        (load_document(path, "eval_fixture.json"), path)
         for path in sorted((evals_dir / "cases").glob("*.json"))
     ]
+    # FR-035 — on-disk fixture size feeds the run-summary per-fixture cost
+    # normalization (cost per KB against the intent+samples the fixture carries).
+    fixture_bytes = {fixture["id"]: path.stat().st_size for fixture, path in loaded}
+    fixtures = [fixture for fixture, _ in loaded]
+
+    # FR-035 — --only scopes the PROVIDER run (and thus the report) to named
+    # fixtures for a cost/diagnostic probe. The lint above already covered the
+    # full committed corpus; an unknown id is a config error (exit 2). A probe
+    # that omits a whole bucket makes the aggregate red-by-construction — that is
+    # expected: the run_summary telemetry, not the gate verdict, is the point.
+    # Distinguish `only is None` (no filter — full corpus) from `only == []` (an
+    # explicit but degenerate selection). The safeguard lives here at the gate
+    # boundary, not only in main()'s arg parsing, so no caller can silently
+    # full-run on an empty list (scripts/** — a gate must not pass on a degenerate
+    # input).
+    if only is not None:
+        if not only:
+            print(
+                "check-evals: config error: --only was given but names no "
+                "fixture ids",
+                file=sys.stderr,
+            )
+            return 2
+        known = {fixture["id"] for fixture in fixtures}
+        missing = [fid for fid in only if fid not in known]
+        if missing:
+            print(
+                "check-evals: config error: --only names unknown fixture id(s): "
+                + ", ".join(sorted(missing)),
+                file=sys.stderr,
+            )
+            return 2
+        fixtures = [fixture for fixture in fixtures if fixture["id"] in only]
 
     # AD-024/OQ-027: the gate harness is the real host (Agent SDK reference),
     # selected by runner.json.harness.kind; the raw loop is retired as the gate.
@@ -929,6 +1108,7 @@ def run_evals(
     # box, and surfaces prompt-cache effectiveness (cache_read climbing).
     total = len(fixtures)
     run_tokens = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
+    run_cost = 0.0
     for i, fixture in enumerate(fixtures, 1):
         episodes: list[dict[str, Any]] = []
         for j in range(runs_per_fixture):
@@ -937,10 +1117,20 @@ def run_evals(
             tok = episode.get("tokens") or {}
             for key in run_tokens:
                 run_tokens[key] += int(tok.get(key, 0) or 0)
+            # FR-035 — per-episode telemetry on the live line, so a long run is
+            # diagnosable AS IT RUNS (locally and in the dispatch job log), not
+            # only from the artifacts afterwards.
+            cost = float(episode.get("cost_usd") or 0.0)
+            run_cost += cost
+            steps = len(episode.get("tool_call_log") or [])
+            error = episode.get("error")
             print(
                 f"check-evals: [{i}/{total}] {fixture['id']} "
                 f"run {j + 1}/{runs_per_fixture} -> {episode['outcome']}  "
-                f"| tokens in={run_tokens['input']:,} out={run_tokens['output']:,} "
+                f"| steps={steps} cost=${cost:.4f}"
+                + (f" error={error}" if error else "")
+                + f"  | running: cost=${run_cost:.4f} "
+                f"tokens in={run_tokens['input']:,} out={run_tokens['output']:,} "
                 f"cache_read={run_tokens['cache_read']:,} "
                 f"cache_write={run_tokens['cache_creation']:,}",
                 file=sys.stderr,
@@ -948,7 +1138,7 @@ def run_evals(
             )
         per_fixture_episodes[fixture["id"]] = episodes
     print(
-        f"check-evals: episodes complete — total tokens "
+        f"check-evals: episodes complete — total cost=${run_cost:.4f} tokens "
         f"in={run_tokens['input']:,} out={run_tokens['output']:,} "
         f"cache_read={run_tokens['cache_read']:,} "
         f"cache_write={run_tokens['cache_creation']:,}",
@@ -956,13 +1146,60 @@ def run_evals(
         flush=True,
     )
 
-    # FR-032 — persist episode transcripts when a directory is given, before
-    # scoring and regardless of red/green (a build artifact, never committed).
+    # FR-032 / FR-035 — persist run artifacts when a directory is given, before
+    # scoring and regardless of red/green (build artifacts, never committed):
+    # the scored EpisodeTranscript (FR-032), the whole-episode message transcript
+    # and the run-summary telemetry roll-up (FR-035). All additive — a run
+    # without --transcripts-dir scores byte-identically (AC-034 / AC-038).
+    # These artifacts are ADDITIVE and non-gating (AC-034 / AC-038): a
+    # filesystem / serialization failure while writing them must never change the
+    # scored verdict or the 0/1/2 exit code. Catch and report diagnostically, then
+    # fall through to scoring exactly as a run without --transcripts-dir would.
     if transcripts_dir is not None:
-        write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
+        try:
+            write_transcripts(transcripts_dir, fixtures, per_fixture_episodes, runner_cfg)
+            write_episode_messages(
+                transcripts_dir, fixtures, per_fixture_episodes, runner_cfg
+            )
+            summary = build_run_summary(
+                fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
+            )
+            write_run_summary(transcripts_dir, summary)
+            print(
+                f"check-evals: run_summary — cost=${summary['totals']['cost_usd']:.4f} "
+                f"steps={summary['totals']['steps']} "
+                f"outcomes={summary['totals']['outcomes']} "
+                f"-> {transcripts_dir}/run_summary.json",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — additive artifacts never gate
+            print(
+                f"check-evals: WARNING: failed to write FR-035 run artifacts "
+                f"({type(exc).__name__}: {exc}); continuing — artifacts are "
+                "additive/non-gating (AC-034/AC-038), scoring is unaffected",
+                file=sys.stderr,
+                flush=True,
+            )
 
     report = aggregate(fixtures, per_fixture_episodes, targets, baseline)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    # FR-035 — keep the gate report BESIDE the telemetry so the artifact directory
+    # is self-contained and a local run's artifacts match the dispatch job's
+    # exactly (summarize_run folds majority/red in from here). stdout is unchanged
+    # — this is an additional artifact, never a substitute (AC-034 / AC-038).
+    if transcripts_dir is not None:
+        try:
+            (transcripts_dir / "report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:  # additive artifact — never gate (AC-038)
+            print(
+                f"check-evals: WARNING: failed to write report.json ({exc}); "
+                "the report on stdout is authoritative",
+                file=sys.stderr,
+            )
     for reason in report["red"]:
         print(f"check-evals: RED: {reason}", file=sys.stderr)
     if report["red"]:
@@ -1030,6 +1267,15 @@ def main(argv: list[str] | None = None) -> int:
         "never committed to the repo (repo hygiene + NFR-011)",
     )
     parser.add_argument(
+        "--only",
+        type=str,
+        default=None,
+        help="FR-035: comma-separated fixture id(s) to run through the provider "
+        "(a cost/diagnostic probe); the --lint corpus checks stay full-corpus. "
+        "Omitting a whole bucket makes the gate report red-by-construction — the "
+        "run_summary telemetry is the point, not the verdict",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
@@ -1043,11 +1289,36 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.lint:
+        only = None
+        if args.only is not None:
+            only = [fid.strip() for fid in args.only.split(",") if fid.strip()]
+            # A given-but-empty selector (`--only ,` / `--only ""`) must NOT
+            # silently fall through to an unrestricted full run — that would run
+            # the whole (paid) corpus by accident. Fail closed (exit 2) before any
+            # credential/provider work, like every other config error.
+            if not only:
+                print(
+                    "check-evals: config error: --only was given but names no "
+                    "fixture ids (FR-035: --only takes comma-separated ids)",
+                    file=sys.stderr,
+                )
+                return 2
+            # A subset probe must never mint the baseline: the OQ-016f baseline is
+            # the accepted-passers of a FULL-corpus green gate, not of a probe.
+            if args.update_baseline:
+                print(
+                    "check-evals: config error: --only (a subset probe) cannot be "
+                    "combined with --update-baseline — the baseline is minted only "
+                    "from a full-corpus run (OQ-016f / §11.8)",
+                    file=sys.stderr,
+                )
+                return 2
         return run_evals(
             args.root.resolve(),
             update_baseline=args.update_baseline,
             verbose=args.verbose,
             transcripts_dir=args.transcripts_dir,
+            only=only,
         )
 
     failures = lint_evals(args.root.resolve(), verbose=args.verbose)

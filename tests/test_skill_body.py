@@ -732,8 +732,19 @@ def test_fr_030_ac_031_review_loop():
     # approve -> matched success envelope — scoped to the approve bullet itself,
     # so an earlier `auto-approve` mention plus a later branch's
     # `status: "matched"` cannot satisfy it.
-    assert _has(r"status:\s*\"matched\"", _bounded_bullet(section, "approve")), (
+    approve = _bounded_bullet(section, "approve")
+    assert _has(r"status:\s*\"matched\"", approve), (
         "approve exit does not emit status matched"
+    )
+    # FR-030 rev 2026-07-14 / FR-034: approve emits via the §7 `result` command
+    # returning stdout VERBATIM, and forbids re-typing/reconstructing the presented
+    # envelope — the real-host eval showed the small model corrupts a hand-re-typed
+    # large envelope on the post-approval turn (100% of failures in the probe).
+    assert _has(r"result\b.{0,240}?verbatim", approve), (
+        "approve exit does not mandate returning the `result` command stdout verbatim"
+    )
+    assert _has(r"(do not|don't|never).{0,60}?(retype|reconstruct)", approve), (
+        "approve exit does not forbid re-typing/reconstructing the presented envelope"
     )
 
     # NL-only revise -> fresh repair_attempts budget + re-verify + re-present
@@ -863,3 +874,53 @@ def test_fr_008_result_section_specifies_full_authoring_result_envelope():
     assert _has(
         r"verdict.{0,160}?assurance.{0,24}?\"matched\"", result_section
     ), "Result section does not show the success Verdict carries assurance matched"
+
+
+def test_fr_034_ac_037_result_section_mandates_the_result_command():
+    """FR-034 / AC-037(b) — §7 emits a matched AuthoringResult by running
+    `python -m transon_authoring result --template … --samples …` and returning
+    its output verbatim, and forbids hand-writing/reconstructing the envelope
+    (the AD-021 small gate model does that unreliably — the real-host eval
+    surfaced dropped fields / bare templates)."""
+    result_section = _body().split("## 7. Result", 1)[1]
+    # names the result command with both required flags
+    assert _has(
+        r"python -m transon_authoring result\b.{0,90}?--template.{0,50}?--samples",
+        result_section,
+    ), "§7 does not tell the model to run `... result --template … --samples …`"
+    # the output is returned verbatim (not reconstructed)
+    assert _has(r"result\b.{0,240}?verbatim", result_section), (
+        "§7 does not require returning the result command's output verbatim"
+    )
+    # hand-writing / reconstructing the envelope is forbidden
+    assert _has(
+        r"(never|do not|don't).{0,140}?(hand-writ|reconstruct|bare template)",
+        result_section,
+    ), "§7 does not forbid hand-writing / reconstructing the envelope"
+
+
+def test_fr_034_ac_037_refusal_uses_result_refuse_not_hand_written():
+    """FR-034 (rev 2026-07-15) / AC-037 — the REFUSAL envelope is machine-built
+    too: §2 (ground & refuse) and §7 tell the model to run `result --refuse
+    --status … --explanation …` and return its stdout verbatim, closing the
+    hand-written-refusal failure mode the real-host gate surfaced (correct
+    refusal decision, schema-invalid envelope → invalid_submission)."""
+    body = _body()
+    ground = body.split("## 2. Ground & refuse", 1)[1].split("## 3.", 1)[0]
+    result_section = body.split("## 7. Result", 1)[1]
+
+    # §2 refusal runs `result --refuse --status … --explanation …`.
+    assert _has(
+        r"result --refuse.{0,80}?--status.{0,60}?--explanation", ground
+    ), "§2 does not run `result --refuse --status … --explanation …` for a refusal"
+    assert _has(r"result --refuse.{0,400}?verbatim|verbatim.{0,400}?result --refuse", ground), (
+        "§2 does not require returning the refusal command's stdout verbatim"
+    )
+
+    # §7's failure/refusal path also mandates --refuse and forbids hand-writing.
+    assert _has(
+        r"result --refuse.{0,120}?--status.{0,80}?--explanation", result_section
+    ), "§7 refusal path does not run `result --refuse --status … --explanation …`"
+    assert _has(
+        r"(never|do not|don't|not).{0,80}?hand-write", result_section
+    ), "§7 does not forbid hand-writing the refusal envelope"

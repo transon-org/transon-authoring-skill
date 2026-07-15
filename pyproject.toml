@@ -37,6 +37,12 @@ packages = ["src/transon_authoring"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Readable output by default. `-q` prints one anonymous dot per test, which tells
+# you nothing while the suite runs — and this suite is slow (~8 min: the AC-035 /
+# orchestrate tests each re-run the corpus lint, which spawns one AD-017 sandbox
+# worker subprocess per case). `-ra` summarises everything non-passing;
+# `--durations` names the slow tests instead of leaving them a mystery.
+addopts = "-ra --durations=15"
 markers = [
     "subprocess: spawns real `python -m transon_authoring` subprocesses (e.g. the NFR-003/AC-020 offline sanity checks)",
 ]

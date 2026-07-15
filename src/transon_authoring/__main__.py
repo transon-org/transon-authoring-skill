@@ -61,6 +61,20 @@ from transon_authoring.verify import dry_run, validate, verify
 #: rejected post-parse in a fixed order before any input file is read.
 _RESERVED_KNOBS = (("marker", "--marker"), ("transformer", "--transformer"))
 
+#: FR-034 (rev 2026-07-15) — the §11.5 failure statuses `result --refuse` will
+#: machine-build. These are the ones the skill emits DIRECTLY, with no template
+#: and no verify verdict: a §2 refusal (`aborted`), a review/sample-loop stop
+#: (`deferred`/`aborted`), a still-unconfirmed sample loop (`need-samples`),
+#: repair exhaustion (`repair-exhausted`), or a skill-level out-of-profile stop
+#: (`profile-rejected` — §11.5: the skill stops WITHOUT calling verify when the
+#: request demands a non-default marker/transformer; distinct from the CLI's own
+#: reserved-knob rejection, which is a CliError, exit 2, AC-027). `matched` /
+#: `samples-rejected` / `verify-failed` are verify-derived (--template/--samples);
+#: `schema-error` is a CLI ingress error, never a skill AuthoringResult.
+_REFUSAL_STATUSES = frozenset(
+    {"aborted", "deferred", "need-samples", "repair-exhausted", "profile-rejected"}
+)
+
 
 class _ProfileRejected(Exception):
     """A reserved profile knob was requested (AC-027). ``flag`` is the CLI
@@ -147,6 +161,116 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     verdict = verify(template, sample_set)
     _emit(verdict)
     return 0 if verdict["ok"] else 1
+
+
+def _cmd_result(args: argparse.Namespace) -> int:
+    """FR-034 / AC-037 — machine-build the COMPLETE §11.5 AuthoringResult
+    envelope so the skill's §7 result step emits it verbatim instead of
+    hand-writing it (which the AD-021 small model does unreliably — the real-host
+    gate saw hand-written refusals fail the schema with the same wrong keys).
+
+    Two modes: verify-derived (``--template PATH --samples PATH``) — matched
+    verdict → success envelope (exit 0), any other verdict → the verify-derived
+    failure envelope (exit 1); and refusal (``--refuse --status S --explanation
+    T``) — a template-less failure envelope (``ok: false``, exit 1) for a §2
+    refusal or a review/sample-loop stop. Malformed ingress or a bad
+    mode/argument combination → the §11.6 schema-error CliError (exit 2)."""
+    _reject_reserved_knobs(args)
+    if args.refuse:
+        return _cmd_result_refuse(args)
+    if args.status is not None or args.explanation is not None:
+        raise IngressError(
+            [preflight_error("--status/--explanation require --refuse")]
+        )
+    if not args.template or not args.samples:
+        raise IngressError(
+            [preflight_error("result needs --template and --samples (or --refuse)")]
+        )
+    # §11.5 repair_count = repairs consumed by the skill loop. The skill tracks it
+    # (SKILL.md §5.1) and passes it through so a REPAIRED success reports the true
+    # count, not a hard-coded 0. Absent → 0 (a first-try success); negative is a
+    # usage error (schema-error, exit 2) like every other bad ingress.
+    repair_count = 0 if args.repair_count is None else args.repair_count
+    if repair_count < 0:
+        raise IngressError([preflight_error("--repair-count must be an integer >= 0")])
+    template = load_json_file(args.template)
+    sample_set = load_document(args.samples, "sample_set.json")
+    verdict = verify(template, sample_set)
+    if verdict["ok"] and verdict.get("assurance") == "matched":
+        _emit(
+            {
+                "schema_version": "1.0",
+                "ok": True,
+                "status": "matched",
+                "explanation": "Template verified at assurance matched.",
+                "template": template,
+                "verdict": verdict,
+                "repair_count": repair_count,
+            }
+        )
+        return 0
+    # Non-matched: the SampleSet stage failing on a schema-valid SampleSet is
+    # samples-rejected (§11.5); every other stage (validate / dry_run / match)
+    # is verify-failed. No `template` on a failure envelope (AC-004 / AC-026).
+    status = (
+        "samples-rejected"
+        if verdict.get("failed_stage") == "samples"
+        else "verify-failed"
+    )
+    stage = verdict.get("failed_stage")
+    _emit(
+        {
+            "schema_version": "1.0",
+            "ok": False,
+            "status": status,
+            "explanation": (
+                f"Template did not verify: failed the {stage} stage."
+                if stage
+                else "Template did not verify."
+            ),
+            "verdict": verdict,
+        }
+    )
+    return 1
+
+
+def _cmd_result_refuse(args: argparse.Namespace) -> int:
+    """FR-034 (rev 2026-07-15) / AC-037 — machine-build a template-less REFUSAL
+    ``AuthoringResult`` (``{schema_version, ok: false, status, explanation}``,
+    exit 1) so a §2 refusal or a review/sample-loop stop is emitted verbatim
+    instead of hand-written. ``--status`` must be a §11.5 refusal status
+    (:data:`_REFUSAL_STATUSES`) and ``--explanation`` a non-empty string;
+    anything else — including a stray ``--template``/``--samples`` — is a §11.6
+    schema-error (exit 2), matching every other bad-ingress path."""
+    errors: list[dict[str, Any]] = []
+    if args.template is not None or args.samples is not None:
+        errors.append(
+            preflight_error("--refuse takes no --template/--samples (no verify)")
+        )
+    if args.repair_count is not None:
+        errors.append(
+            preflight_error("--repair-count applies to a matched success, not --refuse")
+        )
+    if args.status not in _REFUSAL_STATUSES:
+        errors.append(
+            preflight_error(
+                "--refuse --status must be one of "
+                + ", ".join(sorted(_REFUSAL_STATUSES))
+            )
+        )
+    if not (isinstance(args.explanation, str) and args.explanation.strip()):
+        errors.append(preflight_error("--refuse needs a non-empty --explanation"))
+    if errors:
+        raise IngressError(errors)
+    _emit(
+        {
+            "schema_version": "1.0",
+            "ok": False,
+            "status": args.status,
+            "explanation": args.explanation,
+        }
+    )
+    return 1
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
@@ -396,6 +520,53 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_reserved_knobs(verify_parser)
     verify_parser.set_defaults(handler=_cmd_verify)
+
+    result_parser = subcommands.add_parser(
+        "result",
+        help=(
+            "machine-build the complete AuthoringResult envelope (FR-034); the"
+            " skill's section 7 emits its output verbatim, never hand-writing the"
+            " envelope. Success/verify-derived: --template PATH --samples PATH."
+            " Refusal (no template): --refuse --status STATUS --explanation TEXT"
+        ),
+    )
+    # --template/--samples drive the verify-derived envelope; --refuse drives the
+    # template-less refusal envelope. Not `required` at the argparse layer —
+    # _cmd_result validates the two mutually exclusive modes and returns exit 2
+    # (schema-error) on a bad combination, matching the CLI's ingress contract.
+    result_parser.add_argument(
+        "--template", metavar="PATH", help="template JSON file (verify mode)"
+    )
+    result_parser.add_argument(
+        "--samples", metavar="PATH", help="SampleSet JSON file (verify mode)"
+    )
+    result_parser.add_argument(
+        "--refuse",
+        action="store_true",
+        help="machine-build a REFUSAL AuthoringResult (no template); needs"
+        " --status and --explanation",
+    )
+    result_parser.add_argument(
+        "--status",
+        metavar="STATUS",
+        help="refusal status (with --refuse): one of "
+        + ", ".join(sorted(_REFUSAL_STATUSES)),
+    )
+    result_parser.add_argument(
+        "--explanation",
+        metavar="TEXT",
+        help="human-readable refusal explanation (with --refuse)",
+    )
+    result_parser.add_argument(
+        "--repair-count",
+        type=int,
+        default=None,
+        metavar="N",
+        help="repairs consumed by the skill loop before a matched success "
+        "(§11.5 repair_count; verify mode only, >= 0; default 0)",
+    )
+    _add_reserved_knobs(result_parser)
+    result_parser.set_defaults(handler=_cmd_result)
 
     validate_parser = subcommands.add_parser(
         "validate", help="engine validate() debug check of a template (exit 0/1)"

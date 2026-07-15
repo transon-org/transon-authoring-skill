@@ -63,9 +63,10 @@ class HostOutcome:
 
     ``result`` is the returned ``AuthoringResult`` **verbatim** (kept even when
     schema-invalid, so OQ-016b failures stay diagnosable) and is only meaningful
-    when ``status == STATUS_RESULT``. ``step_log`` and ``tokens`` are additive
-    telemetry (never scored, AC-034); a host that exposes no per-step record
-    leaves ``step_log`` empty.
+    when ``status == STATUS_RESULT``. ``step_log``, ``tokens``, ``cost_usd`` and
+    ``messages`` are additive telemetry (never scored, AC-034 / FR-035); a host
+    that exposes no per-step record leaves ``step_log``/``messages`` empty and
+    ``cost_usd`` None.
     """
 
     status: str
@@ -73,6 +74,12 @@ class HostOutcome:
     error: Optional[str] = None
     step_log: list[dict[str, Any]] = field(default_factory=list)
     tokens: Optional[dict[str, int]] = None
+    #: FR-035 — host-reported episode cost (SDK ``ResultMessage.total_cost_usd``).
+    cost_usd: Optional[float] = None
+    #: FR-035 — the whole host message transcript, serialized (every turn's
+    #: assistant text/thinking, tool_use/tool_result), for the EpisodeMessages
+    #: artifact. Additive telemetry only.
+    messages: list[dict[str, Any]] = field(default_factory=list)
 
 
 class Host(Protocol):
@@ -125,6 +132,8 @@ def to_episode_result(outcome: HostOutcome) -> dict[str, Any]:
         error=outcome.error,
         step_log=outcome.step_log,
         tokens=outcome.tokens,
+        cost_usd=outcome.cost_usd,
+        messages=outcome.messages,
     )
 
 
@@ -135,10 +144,14 @@ def _episode_result(
     error: Optional[str] = None,
     step_log: Optional[list[dict[str, Any]]] = None,
     tokens: Optional[dict[str, int]] = None,
+    cost_usd: Optional[float] = None,
+    messages: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Build the §11.8 EpisodeResult dict (identical shape to
     :func:`eval_harness._episode_result`). ``tool_calls`` is the int step count
-    the scorer reads; ``tool_call_log`` is the FR-032 transcript record."""
+    the scorer reads; ``tool_call_log`` is the FR-032 transcript record.
+    ``cost_usd`` and ``messages`` are the additive FR-035 telemetry the
+    ``run_summary`` / EpisodeMessages artifacts read (never scored, AC-034)."""
     log = step_log if step_log is not None else []
     return {
         "submitted": submitted,
@@ -147,6 +160,8 @@ def _episode_result(
         "error": error,
         "tool_call_log": log,
         "tokens": tokens if tokens is not None else _new_tokens(),
+        "cost_usd": cost_usd,
+        "messages": messages if messages is not None else [],
     }
 
 
@@ -296,16 +311,90 @@ def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
     return tokens
 
 
+#: OQ-016d — substrings that mark a provider/credential fault the host may report
+#: as ordinary assistant text (the captured case: an invalid key surfaced as the
+#: assistant text "Invalid API key · Fix external API key"). Lowercased compare.
+#:
+#: DELIBERATELY NARROW: only unambiguous CLI/API fault strings that a model
+#: authoring JSON transforms would never legitimately emit. Generic capacity words
+#: ("quota", "rate limit", "overloaded") and financial phrases ("credit balance
+#: …") were REMOVED — they match ordinary assistant prose (e.g. a transform that
+#: mentions a rate-limit or quota field), which would wrongly exclude a genuine
+#: token-consuming MODEL failure from the denominator (OQ-016d honesty). Those
+#: faults prevent the turn from running and so are caught by the zero-token signal
+#: in _infra_hint (a real model turn always burns input tokens) — the robust
+#: catch-all; these markers are only belt-and-suspenders for the auth case.
+_INFRA_MARKERS = (
+    "invalid api key",
+    "fix external api key",
+    "authentication_error",
+)
+
+
+def _infra_hint(
+    messages: list[dict[str, Any]], tokens: Optional[dict[str, int]]
+) -> Optional[str]:
+    """OQ-016d — is this "successful" turn actually a provider/infra fault?
+
+    The Claude Code CLI reports an invalid key as a NORMAL assistant turn that
+    ends ``subtype: "success"`` (observed verbatim: two ``api_retry`` system
+    messages then the text "Invalid API key · Fix external API key"). Left alone,
+    the classifier maps that to ``no_submit`` — i.e. a MODEL failure counted
+    against the authoring target — when it is an infra fault that must be
+    ``infra_error`` and excluded from the bucket denominator (§11.8 / OQ-016d).
+    A dead key would score as the skill failing 150 times.
+
+    Two signals, either sufficient: (1) an explicit fault marker in the turn's
+    text; (2) the turn consumed **zero model tokens** — a real model turn always
+    burns input tokens, so a "success" with no usage never ran. Takes the
+    SERIALIZED message stream (:func:`_serialize_messages`) so it is pure and
+    unit-testable without live SDK objects. Returns a reason, or None when the
+    turn looks like a genuine model turn."""
+    consumed = 0
+    if tokens:
+        consumed = sum(
+            int(tokens.get(key, 0) or 0)
+            for key in ("input", "output", "cache_read", "cache_creation")
+        )
+    texts: list[str] = []
+    retried = False
+    for message in messages:
+        if message.get("subtype") == "api_retry":
+            retried = True
+        content = message.get("content")
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                text = block.get("text") if isinstance(block, dict) else None
+                if isinstance(text, str):
+                    texts.append(text)
+    blob = " ".join(texts).lower()
+    for marker in _INFRA_MARKERS:
+        if marker in blob:
+            return f"provider/credential fault reported by the host ({marker!r})"
+    if consumed == 0:
+        suffix = " after api_retry" if retried else ""
+        return (
+            f"the turn consumed no model tokens{suffix} — it never ran "
+            "(provider/transport fault, not a model failure)"
+        )
+    return None
+
+
 def _classify_terminal(
     subtype: Any,
     structured: Any,
     result_text: Any,
     tokens: Optional[dict[str, int]] = None,
+    cost_usd: Optional[float] = None,
+    infra_hint: Optional[str] = None,
 ) -> HostOutcome:
     """Pure host-terminal → :class:`HostOutcome` classification (OQ-027e /
     OQ-016d) — unit-tested offline (the surrounding SDK call is not). ``subtype``
     is the SDK ``ResultMessage.subtype`` (``None`` when the host produced no
-    terminal message at all).
+    terminal message at all). ``cost_usd`` (SDK ``total_cost_usd``) is carried
+    unchanged onto the outcome as additive FR-035 telemetry.
 
     - ``success`` + a recoverable AuthoringResult → ``STATUS_RESULT``;
     - ``success`` with no parseable result → ``STATUS_NO_RESULT`` (the model
@@ -318,12 +407,15 @@ def _classify_terminal(
     """
     sub = subtype or ""
     if "max_turns" in sub:
-        return HostOutcome(status=STATUS_BUDGET, error=f"host ended: {sub}", tokens=tokens)
+        return HostOutcome(
+            status=STATUS_BUDGET, error=f"host ended: {sub}", tokens=tokens, cost_usd=cost_usd
+        )
     if sub != "success":
         return HostOutcome(
             status=STATUS_INFRA,
             error=f"host ended: {sub or 'no ResultMessage'}",
             tokens=tokens,
+            cost_usd=cost_usd,
         )
     payload = (
         structured
@@ -331,12 +423,228 @@ def _classify_terminal(
         else _extract_authoring_result(result_text)
     )
     if isinstance(payload, dict):
-        return HostOutcome(status=STATUS_RESULT, result=payload, tokens=tokens)
+        # The episode demonstrably ran (it returned an envelope), so an infra
+        # hint never overrides a real answer.
+        return HostOutcome(
+            status=STATUS_RESULT, result=payload, tokens=tokens, cost_usd=cost_usd
+        )
+    # OQ-016d — "success" with no envelope is only a MODEL failure (no_submit) if
+    # a model turn actually happened. An auth/credit/transport fault that the host
+    # dressed up as a successful assistant turn is an INFRA fault: it must not be
+    # counted against the authoring target (it is excluded from the denominator).
+    if infra_hint:
+        return HostOutcome(
+            status=STATUS_INFRA,
+            error=f"host ended: success, but {infra_hint}",
+            tokens=tokens,
+            cost_usd=cost_usd,
+        )
     return HostOutcome(
         status=STATUS_NO_RESULT,
         error="host ended: success; no parseable AuthoringResult",
         tokens=tokens,
+        cost_usd=cost_usd,
     )
+
+
+#: OQ-027 — the SKILL.md §6 interactive-review "approve" exit, spoken by the
+#: driver AS the reviewing user. The shipped skill (FR-030) presents a matched
+#: template and waits for approval BEFORE emitting the AuthoringResult; a single
+#: autonomous turn never delivers that approval, so the model strands the
+#: presented template as its final message. The driver supplies the approval
+#: ONCE (see AgentSDKHost) so the eval measures the real present→approve→emit
+#: path, leaving the shipped skill unchanged.
+#: OQ-027 — the driver speaks this ONCE, as the reviewing user, when turn 1 ended
+#: with no AuthoringResult (see _needs_review_followup). It must NOT assert that a
+#: correct template exists: turn 1 may have PRESENTED a matched template for review
+#: (FR-030 — then it should emit it), but it may equally have produced nothing
+#: emittable because the request is not groundable (then it should REFUSE, §2).
+#: An earlier version said "Approved — the template is correct, run `result`", which
+#: fabricated approval of a non-existent template on refuse fixtures: the model
+#: then hunted for template/samples files that never existed and asked for them
+#: (no_submit), scoring the adversarial bucket 0.000. This message is therefore
+#: neutral about whether a template exists, tells the model the session is
+#: non-interactive, and offers BOTH exits — keeping the matched-emit path (run
+#: `result`, return stdout verbatim) that drives the authoring bucket.
+_REVIEW_APPROVAL = (
+    "This is a non-interactive session: produce your FINAL answer now as a single "
+    "AuthoringResult — I cannot answer questions, approve anything further, or provide "
+    "files, and there is no earlier session to recover. If you have a template that "
+    "verified `matched`, emit it by running the section 7 result command "
+    "(`python -m transon_authoring result --template <path> --samples <path>`) and "
+    "returning its stdout verbatim — never retype or reconstruct the envelope by hand. "
+    "If instead the request needs a capability the pinned engine cannot ground (section "
+    "2), emit the refusal (`ok: false`, `status: \"aborted\"`) by running "
+    "`python -m transon_authoring result --refuse --status aborted --explanation "
+    "\"<the missing capability>\"` and returning its stdout verbatim — do NOT hand-write "
+    "the refusal envelope. Do not ask me for files or assume prior work."
+)
+
+
+def _needs_review_followup(outcome: HostOutcome) -> bool:
+    """OQ-027 — did the first turn end WITHOUT an AuthoringResult, in a way the
+    §6 review "approve" exit would resolve? True only when the turn ended
+    cleanly but produced no envelope: ``STATUS_NO_RESULT`` (presented for review
+    / no parseable result), or ``STATUS_RESULT`` whose payload is not
+    envelope-shaped (a bare transon template — no ``ok`` / ``status`` /
+    ``schema_version``). NEVER true for an infra/budget failure (a real fault,
+    not a review stall) nor for a payload that already looks like an
+    AuthoringResult — including a refusal (``ok: false``): those are the model's
+    real answer and must not be overridden by an approval. Pure/total."""
+    if outcome.status == STATUS_NO_RESULT:
+        return True
+    if outcome.status == STATUS_RESULT:
+        result = outcome.result
+        return not (
+            isinstance(result, dict)
+            and any(k in result for k in ("ok", "status", "schema_version"))
+        )
+    return False
+
+
+def _add_tokens(
+    a: Optional[dict[str, int]], b: Optional[dict[str, int]]
+) -> Optional[dict[str, int]]:
+    """Sum two additive token telemetry dicts across a multi-turn episode
+    (never scored, AC-034). None is the additive identity."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return {key: int(a.get(key, 0)) + int(b.get(key, 0)) for key in set(a) | set(b)}
+
+
+def _add_cost(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    """Sum two host-reported costs across a multi-turn episode (FR-035, additive
+    telemetry, never scored). None is the additive identity so an episode where
+    no turn reported a cost stays None rather than becoming 0.0."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + b
+
+
+#: Cap a recorded tool-result payload so transcripts stay diagnosable without
+#: unbounded blow-up (a `Read`/`Bash` result can be huge). Diagnostic only.
+_TOOL_RESULT_MAX = 4000
+
+
+def _tool_result_value(content: Any) -> Any:
+    """Normalize + bound a tool_result payload for the FR-032 transcript record:
+    strings are truncated to :data:`_TOOL_RESULT_MAX`; other JSON is encoded
+    then truncated. Never scored (AC-034)."""
+    if content is None:
+        return None
+    text = (
+        content
+        if isinstance(content, str)
+        else json.dumps(content, ensure_ascii=False, default=str)
+    )
+    if len(text) > _TOOL_RESULT_MAX:
+        return text[:_TOOL_RESULT_MAX] + f"… (+{len(text) - _TOOL_RESULT_MAX} chars)"
+    return text
+
+
+def _tool_calls_from_messages(messages: list[Any]) -> list[dict[str, Any]]:
+    """OQ-027 / FR-032 — build the §11.8 transcript tool-call log from a host
+    turn's SDK message stream: one ``{seq, name, input, result}`` (the closed
+    `toolCall` shape) per tool_use block, its ``result`` filled from the matching
+    tool_result by ``tool_use_id``. Blocks are matched by duck-typing (tool_use →
+    ``name`` + ``input`` + ``id``; tool_result → ``tool_use_id``) so this pure
+    builder is unit-testable without live SDK objects. Additive telemetry only,
+    never scored (AC-034); makes a real-host episode diagnosable without a local
+    reproduction (the driver previously left this log empty)."""
+    calls: list[dict[str, Any]] = []
+    by_id: dict[Any, dict[str, Any]] = {}
+    for message in messages:
+        content = getattr(message, "content", None)
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            tool_use_id = getattr(block, "tool_use_id", None)
+            if tool_use_id is not None:  # a tool_result block
+                entry = by_id.get(tool_use_id)
+                if entry is not None:
+                    entry["result"] = _tool_result_value(
+                        getattr(block, "content", None)
+                    )
+                continue
+            name = getattr(block, "name", None)
+            if name is not None and hasattr(block, "input"):  # a tool_use block
+                entry = {
+                    "seq": len(calls) + 1,
+                    "name": name,
+                    "input": getattr(block, "input", None),
+                    "result": None,
+                }
+                calls.append(entry)
+                block_id = getattr(block, "id", None)
+                if block_id is not None:
+                    by_id[block_id] = entry
+    return calls
+
+
+def _serialize_block(block: Any) -> dict[str, Any]:
+    """Serialize one SDK content block into a plain, bounded dict for the FR-035
+    whole-episode transcript. Duck-typed (matching :func:`_tool_calls_from_messages`)
+    so it is unit-testable without live SDK objects: a ``tool_use`` block exposes
+    ``name``/``input``, a ``tool_result`` block exposes ``tool_use_id``, a text
+    block exposes ``text``, a thinking block exposes ``thinking``. Text / thinking
+    / tool-result payloads are length-bounded (:data:`_TOOL_RESULT_MAX`).
+    Additive telemetry only, never scored (AC-034)."""
+    tool_use_id = getattr(block, "tool_use_id", None)
+    if tool_use_id is not None:  # tool_result
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_use_id,
+            "result": _tool_result_value(getattr(block, "content", None)),
+        }
+    name = getattr(block, "name", None)
+    if name is not None and hasattr(block, "input"):  # tool_use
+        return {
+            "type": "tool_use",
+            "name": name,
+            "input": getattr(block, "input", None),
+        }
+    thinking = getattr(block, "thinking", None)
+    if thinking is not None:
+        return {"type": "thinking", "thinking": _tool_result_value(thinking)}
+    text = getattr(block, "text", None)
+    if text is not None:
+        return {"type": "text", "text": _tool_result_value(text)}
+    # Unknown block kind: keep a bounded best-effort record rather than drop it.
+    return {"type": getattr(block, "type", "unknown"), "repr": _tool_result_value(str(block))}
+
+
+def _serialize_content(content: Any) -> Any:
+    """Serialize a message's ``content`` (a block list, a bare string, or None)
+    for the FR-035 whole-episode transcript. Bounded / additive (AC-034)."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return _tool_result_value(content)
+    if isinstance(content, list):
+        return [_serialize_block(block) for block in content]
+    return _tool_result_value(content)
+
+
+def _serialize_messages(messages: list[Any]) -> list[dict[str, Any]]:
+    """FR-035 / AD-025 — serialize a host turn's whole SDK message stream into
+    plain dicts for the EpisodeMessages artifact: one ``{type, subtype, content}``
+    per message, in order, with content blocks bounded (text/thinking/tool-result).
+    ``type`` is the SDK message class name (system/assistant/user/result); pure
+    and unit-testable without live SDK objects. Additive telemetry only, never
+    scored (AC-034) — makes a real-host episode fully diagnosable from the
+    committed-out artifact directory without a local reproduction."""
+    return [
+        {
+            "type": type(message).__name__,
+            "subtype": getattr(message, "subtype", None),
+            "content": _serialize_content(getattr(message, "content", None)),
+        }
+        for message in messages
+    ]
 
 
 class AgentSDKHost:
@@ -385,7 +693,11 @@ class AgentSDKHost:
     async def _run_episode_async(
         self, *, prompt: str, workspace: Path
     ) -> HostOutcome:  # pragma: no cover - live SDK path, dispatch-only
-        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+        from claude_agent_sdk import (
+            ClaudeAgentOptions,
+            ClaudeSDKClient,
+            ResultMessage,
+        )
 
         cfg = self._runner_cfg
         options = ClaudeAgentOptions(
@@ -413,23 +725,69 @@ class AgentSDKHost:
             # STATUS_BUDGET below.
             max_turns=cfg["tool_budget"],
         )
-        # Only the TERMINAL ResultMessage classifies the episode — intermediate
+        # Drive the host as a stateful session (ClaudeSDKClient) so the driver
+        # can answer the skill's §6 interactive review. Only the TERMINAL
+        # ResultMessage of each turn classifies it (OQ-027e) — intermediate
         # System/Assistant/User/Stream messages (which may also carry a
-        # ``subtype``, e.g. init/thinking) must be ignored, else a mid-episode
-        # message is mistaken for the outcome.
-        # Only the terminal ResultMessage classifies the episode (OQ-027e).
-        # The skill emits the §11.5 AuthoringResult as its final answer; the SDK
-        # exposes it as structured_output (when a schema is set) or as result
-        # text (the shipped skill's natural output) — the classifier recovers it
-        # either way, and the scorer re-validates it (AD-004), so a schema-invalid
-        # payload still counts as a submission (OQ-016b / OQ-027e).
-        terminal = None
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, ResultMessage):
-                terminal = message
-        return _classify_terminal(
-            getattr(terminal, "subtype", None),
-            getattr(terminal, "structured_output", None),
-            getattr(terminal, "result", None),
-            _sdk_usage(getattr(terminal, "usage", None)),
-        )
+        # ``subtype``, e.g. init/thinking) are ignored, else a mid-turn message
+        # is mistaken for the outcome. The skill emits the §11.5 AuthoringResult
+        # as its final answer; the SDK exposes it as structured_output (when a
+        # schema is set) or as result text (the shipped skill's natural output) —
+        # the classifier recovers it either way and the scorer re-validates it
+        # (AD-004), so a schema-invalid payload still counts as a submission
+        # (OQ-016b / OQ-027e).
+        async def _turn_outcome() -> HostOutcome:
+            terminal = None
+            messages: list[Any] = []
+            async for message in client.receive_response():
+                messages.append(message)
+                if isinstance(message, ResultMessage):
+                    terminal = message
+            usage = _sdk_usage(getattr(terminal, "usage", None))
+            # FR-035 — the whole message stream (assistant text/thinking + every
+            # tool_use/tool_result) for the EpisodeMessages artifact...
+            serialized = _serialize_messages(messages)
+            # ...which OQ-016d also reads: a provider/credential fault the host
+            # dressed up as a `success` turn must score infra_error, never
+            # no_submit (see _infra_hint).
+            outcome = _classify_terminal(
+                getattr(terminal, "subtype", None),
+                getattr(terminal, "structured_output", None),
+                getattr(terminal, "result", None),
+                usage,
+                getattr(terminal, "total_cost_usd", None),
+                _infra_hint(serialized, usage),
+            )
+            # FR-032 — record this turn's tool calls into the transcript log.
+            outcome.step_log = _tool_calls_from_messages(messages)
+            outcome.messages = serialized
+            return outcome
+
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(prompt)
+            outcome = await _turn_outcome()
+            # OQ-027 — the shipped skill (FR-030) presents a matched template and
+            # WAITS for the reviewing user's approval before emitting the
+            # AuthoringResult. This eval is one autonomous turn, so a run that
+            # ends by presenting for review has produced no envelope yet. Answer
+            # the §6 "approve" exit ONCE, as the user would, then read the
+            # follow-up turn — measuring the real present→approve→emit path
+            # without altering the skill. Bounded to a single approval: a genuine
+            # authoring/refusal answer, or an infra/budget fault, is never
+            # overridden (see _needs_review_followup).
+            if _needs_review_followup(outcome):
+                await client.query(_REVIEW_APPROVAL)
+                followup = await _turn_outcome()
+                followup.tokens = _add_tokens(outcome.tokens, followup.tokens)
+                # FR-035 — episode cost is the sum across both turns.
+                followup.cost_usd = _add_cost(outcome.cost_usd, followup.cost_usd)
+                # Keep the full tool-call trail across both turns, re-sequenced
+                # (FR-032 — the transcript reflects everything the model did).
+                combined = outcome.step_log + followup.step_log
+                for seq, call in enumerate(combined, 1):
+                    call["seq"] = seq
+                followup.step_log = combined
+                # FR-035 — the whole-message transcript spans both turns in order.
+                followup.messages = outcome.messages + followup.messages
+                outcome = followup
+            return outcome

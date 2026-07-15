@@ -57,12 +57,25 @@ def run_check(*args: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
-    """A tmp repo root with the committed evals/ corpus copied in, plus the
-    docs/proposals/ tree the constructed real-world-pack seeds' source_ref
-    pointers resolve to (FR-033d provenance-link check)."""
+    """A tmp repo root with ONLY the committed evals/ corpus copied in.
+
+    Deliberately carries **no `docs/` tree** (rev 2026-07-15): the withdrawn
+    FR-033d provenance-link check used to resolve each constructed seed's
+    `source_ref` to a repo file, which forced this fixture — and, fatally, the
+    bundle-only eval job (OQ-027f(i) checks out nothing) — to carry `docs/`.
+    Linting green from this docs-free root is now the regression guard that the
+    corpus lint runs inside the eval bundle.
+
+    The baseline is reset to EMPTY here so scoring/aggregation unit tests are
+    isolated from the production `evals/baseline.json` (now populated by the first
+    accepted green gate, 2026-07-15 — a fixture failing its majority would
+    otherwise add a spurious OQ-016f baseline-regression red). Tests exercising
+    the ratchet write their own `passing` list into this copy; the committed
+    baseline's correctness is covered by test_eval_artifacts."""
     shutil.copytree(REPO_ROOT / "evals", tmp_path / "evals")
-    shutil.copytree(
-        REPO_ROOT / "docs" / "proposals", tmp_path / "docs" / "proposals"
+    (tmp_path / "evals" / "baseline.json").write_text(
+        json.dumps({"schema_version": "1.0", "passing": []}) + "\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -452,17 +465,12 @@ def mint_constructed_into(root: Path) -> tuple[Path, Path]:
     }
     seed = {
         "origin": "real-world-pack",
-        "source_ref": "docs/proposals/big-real-world-transform-samples.md#project-items",
+        # rev 2026-07-15 (FR-033/AC-035): a PROVENANCE string naming the
+        # documented source — no longer a repo path, and no longer resolved.
+        "source_ref": "GitHub project items API — public API reference",
         "template": copy.deepcopy(CONSTRUCTED_TEMPLATE),
         "notes": "Missing name defaults to null; empty items list yields an empty list.",
     }
-    # FR-033d: the seed source_ref's file portion must resolve under the lint
-    # root; the tmp_repo fixture already copies docs/proposals/, but guard for
-    # callers passing a bare root (create the referenced doc if it is absent).
-    doc = root / "docs" / "proposals" / "big-real-world-transform-samples.md"
-    if not doc.is_file():
-        doc.parent.mkdir(parents=True, exist_ok=True)
-        doc.write_text("stub provenance doc for the constructed-seed test\n", encoding="utf-8")
     seeds_dir = root / "evals" / "seeds"
     seeds_dir.mkdir(parents=True, exist_ok=True)
     fixture_path = root / "evals" / "cases" / f"{CONSTRUCTED_ID}.json"
@@ -558,34 +566,44 @@ def test_ac_035_non_ok_for_verify_red(tmp_repo: Path):
     ), failures
 
 
-def test_ac_035_bad_source_ref_file_red(tmp_repo: Path):
-    # AC-035 / FR-033d (provenance link) — a constructed seed whose source_ref
-    # file portion does not resolve to a repo file is red, even when the anchor
-    # is stripped.
+def test_ac_035_source_ref_is_provenance_not_a_repo_path(tmp_repo: Path):
+    """AC-035 / FR-033 (rev 2026-07-15) — `source_ref` is a REQUIRED non-empty
+    PROVENANCE string naming the documented API the payload was constructed from
+    (the AD-023 constructed-never-captured trail backing `redacted: false`), and
+    is NO LONGER resolved to a repo file.
+
+    The withdrawn FR-033d link check was a repo-integrity check running inside
+    the credential-holding eval gate, which by OQ-027f(i) checks out nothing and
+    runs from a minimal bundle — it made the gate depend on the `docs/` tree and
+    killed the full gate's first dispatch in pre-flight lint (15 failures, $0
+    spend). Nothing in scoring, verify, targets or baseline reads `source_ref`,
+    and neither engine-freeze nor no-leakage depends on resolving it."""
     _fixture_path, seed_path = mint_constructed_into(tmp_repo)
-    seed = json.loads(seed_path.read_text(encoding="utf-8"))
-    seed["source_ref"] = "docs/proposals/does-not-exist.md#anchor"
-    seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+    # The coupling is gone: the lint root carries NO docs/ tree — exactly the
+    # shape of the eval bundle (scripts + evals + SKILL.md).
+    assert not (tmp_repo / "docs").exists()
+
+    def set_ref(value):
+        seed = json.loads(seed_path.read_text(encoding="utf-8"))
+        seed["source_ref"] = value
+        seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
+
+    # Exactly two lint_evals() calls: each re-lints the whole 50-fixture corpus
+    # (engine-freeze spawns an AD-017 sandbox worker per case, ~10s a call), so
+    # this test asserts the contract with the minimum number of full lints.
+
+    # A source_ref that still LOOKS like a repo path but does NOT exist lints
+    # GREEN — the single strongest proof the resolution check is withdrawn.
+    set_ref("docs/proposals/does-not-exist.md#anchor")
+    assert lint_evals(tmp_repo) == [], "source_ref must no longer be resolved to a repo file"
+
+    # ...but the field is still REQUIRED and non-empty (FR-033 shape check).
+    # (Non-string / missing values are covered by the shape test, which deletes it.)
+    set_ref("")
     failures = lint_evals(tmp_repo)
     assert any(
-        str(seed_path) in f and "source_ref" in f and "does not resolve" in f
-        for f in failures
-    ), failures
-
-
-def test_ac_035_source_ref_fails_closed_red(tmp_repo: Path):
-    # AC-035 / FR-033d — the provenance-link check fails CLOSED: an anchor-only
-    # source_ref (empty file portion) and a path escaping the repo (absolute or
-    # `..`) are both red, never a silent skip.
-    _fixture_path, seed_path = mint_constructed_into(tmp_repo)
-    for bad_ref in ("#anchor-only", "../../etc/passwd", "/etc/passwd"):
-        seed = json.loads(seed_path.read_text(encoding="utf-8"))
-        seed["source_ref"] = bad_ref
-        seed_path.write_text(json.dumps(seed) + "\n", encoding="utf-8")
-        failures = lint_evals(tmp_repo)
-        assert any(
-            str(seed_path) in f and "source_ref" in f for f in failures
-        ), f"{bad_ref!r} did not fail closed: {failures}"
+        str(seed_path) in f and "source_ref" in f for f in failures
+    ), f"empty source_ref must still be red (required non-empty): {failures}"
 
 
 def test_fr_033_synthetic_and_constructed_seeds_coexist(tmp_repo: Path):
@@ -700,6 +718,11 @@ def verify_failed_result(stage="match"):
     }
 
 
+#: FR-035 — top-level artifacts a --transcripts-dir run writes ALONGSIDE the
+#: scored EpisodeTranscripts. Excluded when asserting the AC-034 transcript set.
+_FR035_SIBLINGS = {"run_summary.json", "report.json"}
+
+
 def corpus_scores(**overrides):
     """Per-fixture score plan for orchestration tests: default all-pass."""
     plan = {fid: "pass" for fid in ALL_FIXTURES}
@@ -714,6 +737,7 @@ def orchestrate(
     update_baseline=False,
     transcripts_dir=None,
     episode_for=None,
+    only=None,
 ):
     """Run `check_evals.main` in full-run mode, fully offline (OQ-027e):
     env key faked, host factory stubbed, `host_harness.run_fixture`
@@ -741,6 +765,8 @@ def orchestrate(
         argv.append("--update-baseline")
     if transcripts_dir is not None:
         argv += ["--transcripts-dir", str(transcripts_dir)]
+    if only is not None:
+        argv += ["--only", ",".join(only)]
     return check_evals.main(argv)
 
 
@@ -1040,11 +1066,14 @@ def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
     runs = runner["runs_per_fixture"]
     model_id = runner["model_id"]
 
-    # Exactly one transcript per (fixture, run_index).
+    # Exactly one EpisodeTranscript per (fixture, run_index). The FR-035
+    # run_summary.json / report.json siblings and the messages/ subdir are
+    # additive artifacts (asserted in test_fr_035_*) and excluded from this
+    # AC-034 transcript set.
     expected_names = {
         f"{fid}.{i}.json" for fid in ALL_FIXTURES for i in range(runs)
     }
-    written = {p.name for p in transcripts_dir.glob("*.json")}
+    written = {p.name for p in transcripts_dir.glob("*.json")} - _FR035_SIBLINGS
     assert written == expected_names
     assert len(written) == len(ALL_FIXTURES) * runs
 
@@ -1082,6 +1111,298 @@ def test_fr_032_ac_034_transcripts_written_and_scoring_parity(
     assert report_with == report_without
 
 
+def test_fr_035_ac_038_run_summary_rollup_matches_hand_computed():
+    # FR-035 / AC-038 — build_run_summary is a pure telemetry roll-up: its
+    # per-episode rows, totals, and per-fixture normalization equal a
+    # hand-computed histogram over the same episodes. Gates nothing (AC-034).
+    fixtures = [{"id": "fa", "expect": "matched"}, {"id": "fb", "expect": "matched"}]
+    per_fixture_episodes = {
+        "fa": [
+            {
+                "outcome": "submitted", "error": None,
+                "tokens": {"input": 100, "output": 50, "cache_read": 200,
+                           "cache_creation": 10, "turns": 2},
+                "cost_usd": 0.10,
+                "tool_call_log": [{"name": "Bash"}, {"name": "Read"}, {"name": "Bash"}],
+            },
+            {
+                "outcome": "no_submit", "error": "stalled",
+                "tokens": {"input": 80, "output": 40, "cache_read": 100,
+                           "cache_creation": 0, "turns": 1},
+                "cost_usd": 0.05,
+                "tool_call_log": [{"name": "Bash"}],
+            },
+        ],
+        "fb": [
+            {
+                "outcome": "submitted", "error": None,
+                "tokens": {"input": 60, "output": 30, "cache_read": 0,
+                           "cache_creation": 0, "turns": 1},
+                "cost_usd": None,  # host reported no cost this episode
+                "tool_call_log": [],
+            },
+        ],
+    }
+    runner_cfg = {
+        "model_id": "claude-haiku-4-5-20251001", "runs_per_fixture": 3,
+        "harness": {"kind": "agent-sdk", "version": "0.2.116"},
+    }
+    fixture_bytes = {"fa": 2048, "fb": 1024}
+
+    summary = check_evals.build_run_summary(
+        fixtures, per_fixture_episodes, runner_cfg, fixture_bytes
+    )
+
+    assert summary["schema_version"] == "1.0"
+    assert summary["model_id"] == "claude-haiku-4-5-20251001"
+    assert summary["harness"] == {"kind": "agent-sdk", "version": "0.2.116"}
+    # Per-episode rows in fixture order, each with steps + histogram.
+    assert [e["fixture_id"] for e in summary["episodes"]] == ["fa", "fa", "fb"]
+    assert summary["episodes"][0]["steps"] == 3
+    assert summary["episodes"][0]["steps_by_category"] == {"Bash": 2, "Read": 1}
+    assert summary["episodes"][1]["steps_by_category"] == {"Bash": 1}
+    assert summary["episodes"][2]["steps_by_category"] == {}
+    # Totals — a hand-computed histogram over the same three episodes.
+    totals = summary["totals"]
+    assert totals["episodes"] == 3
+    assert totals["tokens"] == {
+        "input": 240, "output": 120, "cache_read": 300,
+        "cache_creation": 10, "turns": 4,
+    }
+    assert totals["cost_usd"] == pytest.approx(0.15)  # None counts as 0
+    assert totals["steps"] == 4
+    assert totals["steps_by_category"] == {"Bash": 3, "Read": 1}
+    assert totals["outcomes"] == {
+        "submitted": 2, "no_submit": 1, "budget_exceeded": 0, "infra_error": 0,
+    }
+    assert totals["errors"] == 1
+    # Per-fixture normalization divides the fixture's totals by its run count.
+    fa = summary["by_fixture"]["fa"]
+    assert fa["runs"] == 2 and fa["fixture_bytes"] == 2048
+    assert fa["cost_usd_total"] == pytest.approx(0.15)
+    assert fa["cost_usd_mean"] == pytest.approx(0.075)
+    assert fa["steps_mean"] == pytest.approx(2.0)
+    assert fa["tokens_mean"]["cache_read"] == pytest.approx(150.0)
+    assert fa["cache_read_ratio"] == pytest.approx(300 / (180 + 300 + 10))
+    assert fa["cost_usd_per_kb"] == pytest.approx(0.15 / (2048 / 1024))
+    fb = summary["by_fixture"]["fb"]
+    assert fb["cost_usd_total"] == 0.0 and fb["cost_usd_per_kb"] == 0.0
+    assert fb["cache_read_ratio"] == 0.0  # no prompt tokens cached
+
+
+def test_fr_035_ac_038_artifacts_written_and_scoring_parity(
+    monkeypatch, tmp_repo, tmp_path, capsys
+):
+    # FR-035 / AC-038 — a run with --transcripts-dir also writes, per episode,
+    # a whole-transcript messages/<id>.<run>.messages.json, and one
+    # run_summary.json; the same run without the dir scores byte-identically
+    # (extends AC-034), and the scored EpisodeTranscript files are unchanged.
+    transcripts_dir = tmp_path / "runs"
+    scores = corpus_scores()
+    serialized_msgs = [
+        {"type": "AssistantMessage", "subtype": None,
+         "content": [{"type": "text", "text": "presenting for approval"}]},
+        {"type": "ResultMessage", "subtype": "success", "content": None},
+    ]
+
+    def episode_for(fixture):
+        return dict(
+            episode(outcome="submitted", tool_calls=2),
+            tool_call_log=[
+                {"seq": 1, "name": "Bash", "input": {"command": "x"}, "result": "ok"},
+                {"seq": 2, "name": "Read", "input": {"file_path": "s"}, "result": "{}"},
+            ],
+            tokens={"input": 10, "output": 5, "cache_read": 40,
+                    "cache_creation": 0, "turns": 1},
+            cost_usd=0.12,
+            messages=serialized_msgs,
+        )
+
+    exit_with = orchestrate(
+        monkeypatch, tmp_repo, scores,
+        transcripts_dir=transcripts_dir, episode_for=episode_for,
+    )
+    report_with, err = report_from(capsys)
+
+    runner = json.loads((tmp_repo / "evals" / "runner.json").read_text("utf-8"))
+    runs, model_id = runner["runs_per_fixture"], runner["model_id"]
+
+    # (a) one whole-transcript per (fixture, run), carrying the serialized stream.
+    for fid in ALL_FIXTURES:
+        for i in range(runs):
+            path = transcripts_dir / "messages" / f"{fid}.{i}.messages.json"
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            assert doc["fixture_id"] == fid and doc["run_index"] == i
+            assert doc["model_id"] == model_id
+            assert doc["messages"] == serialized_msgs
+    # (b) exactly one run_summary.json whose totals match the episodes.
+    summary = json.loads(
+        (transcripts_dir / "run_summary.json").read_text(encoding="utf-8")
+    )
+    n = len(ALL_FIXTURES) * runs
+    assert summary["totals"]["episodes"] == n
+    assert summary["totals"]["cost_usd"] == pytest.approx(0.12 * n)
+    assert summary["totals"]["steps"] == 2 * n
+    assert summary["totals"]["steps_by_category"] == {"Bash": n, "Read": n}
+    assert "run_summary" in err  # the stderr one-line telemetry summary
+    # The gate report is kept beside the telemetry so the artifact dir is
+    # self-contained (local runs match the dispatch job's artifacts exactly).
+    assert json.loads(
+        (transcripts_dir / "report.json").read_text(encoding="utf-8")
+    ) == report_with
+    # The scored EpisodeTranscript files still exist, one per episode.
+    assert len({p.name for p in transcripts_dir.glob("*.json")} - _FR035_SIBLINGS) == n
+
+    # Parity: the same run WITHOUT --transcripts-dir gives an identical report.
+    exit_without = orchestrate(monkeypatch, tmp_repo, scores, episode_for=episode_for)
+    report_without, _ = report_from(capsys)
+    assert exit_with == exit_without == 0
+    assert report_with == report_without
+
+
+def test_fr_035_summarize_run_renders_measured_telemetry():
+    # FR-035 — summarize_run renders the MEASURED run_summary (the host's real
+    # total_cost_usd, never a list-price estimate), the steps-by-category
+    # histogram, the per-fixture normalization and the per-episode intermediate
+    # results. Pure presentation: it gates nothing (AC-038).
+    import summarize_run
+
+    summary = {
+        "schema_version": "1.0",
+        "model_id": "claude-haiku-4-5-20251001",
+        "harness": {"kind": "agent-sdk", "version": "0.2.116"},
+        "runs_per_fixture": 3,
+        "episodes": [
+            {
+                "fixture_id": "fa", "run_index": 0, "outcome": "submitted",
+                "error": None,
+                "tokens": {"input": 10, "output": 500, "cache_read": 900,
+                           "cache_creation": 90, "turns": 1},
+                "cost_usd": 0.0750, "steps": 8,
+                "steps_by_category": {"Bash": 6, "Read": 2},
+            },
+            {
+                "fixture_id": "fa", "run_index": 1, "outcome": "no_submit",
+                "error": "host ended: success; no parseable AuthoringResult",
+                "tokens": {"input": 10, "output": 900, "cache_read": 1100,
+                           "cache_creation": 90, "turns": 2},
+                "cost_usd": 0.2600, "steps": 12,
+                "steps_by_category": {"Bash": 9, "Read": 3},
+            },
+        ],
+        "totals": {
+            "episodes": 2,
+            "tokens": {"input": 20, "output": 1400, "cache_read": 2000,
+                       "cache_creation": 180, "turns": 3},
+            "cost_usd": 0.3350, "steps": 20,
+            "steps_by_category": {"Bash": 15, "Read": 5},
+            "outcomes": {"submitted": 1, "no_submit": 1,
+                         "budget_exceeded": 0, "infra_error": 0},
+            "errors": 1,
+        },
+        "by_fixture": {
+            "fa": {
+                "runs": 2, "fixture_bytes": 5100,
+                "cost_usd_total": 0.3350, "cost_usd_mean": 0.1675,
+                "tokens_mean": {"input": 10, "output": 700, "cache_read": 1000,
+                                "cache_creation": 90, "turns": 1.5},
+                "steps_mean": 10.0, "cache_read_ratio": 0.9091,
+                "cost_usd_per_kb": 0.0672,
+            },
+        },
+    }
+    report = {"fixtures": {"fa": {"majority": "pass"}}, "red": ["some red reason"]}
+
+    out = summarize_run.render(summary, report)
+
+    # Measured cost — the host's total_cost_usd, explicitly not an estimate.
+    assert "$0.3350" in out and "measured" in out.lower()
+    assert "estimate" not in out.lower()
+    # Outcomes, errors, cache hit rate, and the steps-by-category histogram.
+    assert "submitted=1" in out and "no_submit=1" in out and "errors=1" in out
+    assert "`Bash`=15" in out and "`Read`=5" in out
+    assert "prompt cache hit" in out
+    # Per-fixture row carries the majority (folded in from the gate report).
+    assert "`fa`" in out and "pass" in out and "5,100" in out
+    assert "some red reason" in out
+    # Per-episode intermediate results, including the failing episode's error.
+    assert "per-episode results" in out
+    assert "$0.2600" in out and "no parseable AuthoringResult" in out
+
+    # Renders without a report too (no majority/red available).
+    assert "$0.3350" in summarize_run.render(summary)
+
+    # A literal `|` in verbatim engine error text is escaped so it can't corrupt
+    # the Markdown table (GFM cell delimiter).
+    piped = json.loads(json.dumps(summary))  # deep copy
+    piped["episodes"][1]["error"] = "dry_run failed: a|b mismatch"
+    out2 = summarize_run.render(piped)
+    assert "a\\|b mismatch" in out2
+    assert "| a|b mismatch |" not in out2  # never a raw unescaped pipe in a cell
+
+
+def test_fr_035_only_scopes_provider_run(monkeypatch, tmp_repo, capsys):
+    # FR-035 — --only restricts the provider run (and thus the report) to the
+    # named fixtures. One fixture from each bucket keeps every gating bucket
+    # populated, so a corpus-all-pass plan stays green.
+    selected = [
+        "seed-matched-flatten-orders",   # matched
+        "refuse-uppercase-currency",     # refuse
+        "seed-correction-attr-misspelled",  # correction
+    ]
+    for fid in selected:
+        assert ALL_FIXTURES[fid]  # guard: the ids exist in the committed corpus
+    exit_code = orchestrate(monkeypatch, tmp_repo, corpus_scores(), only=selected)
+    report, err = report_from(capsys)
+    assert exit_code == 0, err
+    assert set(report["fixtures"]) == set(selected)
+
+
+def test_fr_035_only_unknown_id_is_config_error(monkeypatch, tmp_repo, capsys):
+    # FR-035 — an --only id absent from the corpus is a config error (exit 2),
+    # naming the unknown id; no provider run happens.
+    exit_code = orchestrate(
+        monkeypatch, tmp_repo, corpus_scores(), only=["no-such-fixture"]
+    )
+    assert exit_code == 2
+    assert "unknown fixture id" in capsys.readouterr().err
+
+
+def test_fr_035_empty_only_is_config_error_not_full_run(tmp_repo, capsys):
+    # FR-035 — a given-but-empty --only (`--only ,` / `--only ""`) must NOT fall
+    # through to an unrestricted (paid) full run; it exits 2 before any provider
+    # work, with the reason on stderr. Checked in main() before run_evals, so no
+    # credentials or host stub are needed.
+    for empty in (",", "", " , "):
+        rc = check_evals.main(["--only", empty, "--root", str(tmp_repo)])
+        assert rc == 2, repr(empty)
+        assert "names no fixture ids" in capsys.readouterr().err
+
+
+def test_fr_035_only_with_update_baseline_is_config_error(tmp_repo, capsys):
+    # FR-035 / OQ-016f — a subset probe must never mint the baseline; combining
+    # --only with --update-baseline is rejected (exit 2) before any run.
+    rc = check_evals.main(
+        ["--only", "seed-matched-flatten-orders", "--update-baseline",
+         "--root", str(tmp_repo)]
+    )
+    assert rc == 2
+    assert "cannot be combined with --update-baseline" in capsys.readouterr().err
+
+
+def test_fr_035_run_evals_rejects_empty_only_at_the_gate_boundary(
+    monkeypatch, tmp_repo, capsys
+):
+    # FR-035 — defense in depth: run_evals ITSELF rejects an explicit empty
+    # only=[] (returns 2 after the lint, before building the host / any provider
+    # work), so no caller — not just main() — can silently full-run on a
+    # degenerate selection. only=None (no filter) stays the full-corpus path.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
+    rc = check_evals.run_evals(tmp_repo, only=[])
+    assert rc == 2
+    assert "names no fixture ids" in capsys.readouterr().err
+
+
 def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
     # FR-017 / AC-008 — all fixtures majority-pass: exit 0 and one
     # schema-consistent JSON report on stdout (rates, per-fixture episodes
@@ -1101,7 +1422,8 @@ def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
         assert all(e["score"] == "pass" for e in entry["episodes"])
     assert report["red"] == []
     assert "gate green" in err
-    # Without --update-baseline the committed baseline is untouched.
+    # Without --update-baseline the run never writes the baseline: the tmp_repo
+    # copy (reset to empty by the fixture) stays empty.
     baseline = json.loads(
         (tmp_repo / "evals" / "baseline.json").read_text(encoding="utf-8")
     )

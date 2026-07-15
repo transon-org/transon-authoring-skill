@@ -1,6 +1,6 @@
 {
   "origin": "real-world-pack",
-  "source_ref": "docs/proposals/big-real-world-transform-samples.md §2 — Stripe checkout.session.completed",
+  "source_ref": "Stripe checkout.session.completed webhook — constructed from the public API reference (AD-023 real-world pack §2)",
   "template": {
     "$": "object",
     "fields": {

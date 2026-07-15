@@ -1,6 +1,6 @@
 {
   "origin": "real-world-pack",
-  "source_ref": "docs/proposals/big-real-world-transform-samples.md §3 — GitHub push webhook",
+  "source_ref": "GitHub push webhook payload — constructed from the public API reference (AD-023 real-world pack §3)",
   "template": {
     "$": "object",
     "fields": {
