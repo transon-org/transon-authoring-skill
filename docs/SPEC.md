@@ -211,7 +211,7 @@ No console-script product; no MCP.
   are explicit eval-policy commits per §11.8. Synthetic SampleSets are **evals/CI fixtures
   only** — they never substitute for user confirmation in interactive authoring (AD-014/AD-016
   untouched).
-- **AD-022 — Observability: mechanical records over self-report (added 2026-07-12).** Two
+- **AD-022 — Observability: mechanical records over self-report.** Two
   layers. (1) The skill MAY self-report an ordered `trace` in `AuthoringResult` (§11.5,
   FR-031) — **diagnostic only**: never an input to scoring, gating, or `verify`, and never
   trusted as evidence a step actually ran (a model can misreport its own steps). (2) The
@@ -220,7 +220,7 @@ No console-script product; no MCP.
   FR-032). Effectiveness questions — *which step failed, how often, at what cost* — are
   answered from layer 2; layer 1 adds narrative color in interactive sessions. Gates and
   determinism (NFR-002) are untouched: traces and transcripts are artifacts, never gate inputs.
-- **AD-023 — Real-world structural fixture pack (constructed, engine-frozen; added 2026-07-13).**
+- **AD-023 — Real-world structural fixture pack (constructed, engine-frozen).**
   The eval corpus (§11.8) MAY grow beyond the AD-021 synthetic-from-`docs.examples` set with a
   **third fixture class**: hand-authored EvalFixtures built from large, realistic-shape API
   payloads (AWS EC2, Stripe, GitHub webhooks, JOLT/JMESPath suites — see
@@ -241,8 +241,7 @@ No console-script product; no MCP.
   flatten, tag/array pivot, null-defaulting projection, minor-unit division, reduce-count/flatten)
   are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
   pack is ongoing improvement-loop work (FR-017) and gates no milestone.
-- **AD-024 — Real-host eval harness (Agent SDK reference; resolves OQ-027, absorbs RFC-002; added
-  2026-07-14).** The NFR-010 gate measures `SKILL.md` **where it ships** — inside a real host
+- **AD-024 — Real-host eval harness (Agent SDK reference; resolves OQ-027, absorbs RFC-002).** The NFR-010 gate measures `SKILL.md` **where it ships** — inside a real host
   agent harness with a rich tool suite (Read/Write/Edit/Bash/Glob/Grep, plus the host's `Skill`
   tool to load the skill body) and a mature loop — not
   the OQ-017 bespoke 3-tool `messages.create` loop, which measured a configuration that never
@@ -262,7 +261,7 @@ No console-script product; no MCP.
   pinned `harness.kind`/`harness.version` is an eval-policy commit that resets `evals/baseline.json`
   (OQ-027b), mirroring the gate-model swap (§11.8 / OQ-024g). Determinism (NFR-002) is untouched:
   the harness is a measurement instrument, never a gate input beyond the EpisodeResult it produces.
-- **AD-025 — Run-artifact observability: whole transcript + telemetry roll-up (added 2026-07-14).**
+- **AD-025 — Run-artifact observability: whole transcript + telemetry roll-up.**
   Extends the AD-022 mechanical record so a run answers *which step failed, how often, at what cost*
   (AD-022's own words) directly from artifacts. Beyond the scored `EpisodeTranscript` (FR-032), a
   `check_evals` run given `--transcripts-dir` also persists, per episode, the **whole host message
@@ -640,7 +639,7 @@ No console-script product; no MCP.
   against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
   without `trace` remains valid; a malformed `trace` fails schema validation like any other
   field.
-- **AC-034** — *(FR-032, added 2026-07-12)* A full `check_evals` run with `--transcripts-dir`
+- **AC-034** — A full `check_evals` run with `--transcripts-dir` (FR-032)
   writes one `EpisodeTranscript` per episode, each carrying the episode's ordered `tool_calls`
   and the `submit_result` payload verbatim (even when schema-invalid); the report's
   `failure_modes` equals a hand-computed histogram over the same **scored** episode results
@@ -778,7 +777,7 @@ AuthoringTag =
 Tagged forms MUST NOT appear inside **templates** or **include** map templates (those are plain
 Transon JSON; the library does not reject such keys at ingress — a template object using
 `"$transon_authoring"` is ordinary data to the engine and is faithfully re-encoded on output).
-AuthoringTags appear in exactly two places (rev 2026-07-11, OQ-012):
+AuthoringTags appear in exactly two places (OQ-012):
 
 1. **SampleSet expectation values** (`output`, `writes` values), decoded per the rules above.
    **Decoding applies recursively at every nesting level** of an expected value.
@@ -1011,7 +1010,7 @@ Verdict = {
    engine leaks e.g. `TypeError` for `{"$": 5}`) is reported like the dry-run leak closure
    (OQ-014c) but in the “template invalid” class: `type: "DefinitionError"`, `engine_type` = the
    actual Python exception class name, `message` = verbatim `str(exc)`,
-   `failed_stage: "validate"` (rev 2026-07-11).
+   `failed_stage: "validate"`.
 3. **`dry_run`** — per case, execute in a **worker subprocess** (AD-017) with
    `transform(input, no_content=Transformer.NO_CONTENT)`, sandboxed delegates, timeout 5s,
    `max_include_depth=50`, `includes` from SampleSet only. Cases execute **sequentially in
@@ -1132,10 +1131,10 @@ the authoritative step record in evals. Absence of `trace` never invalidates a r
 
 | status | When |
 |---|---|
-| `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` — in interactive sessions only after FR-030 user approval *(rev 2026-07-12)* |
+| `matched` | skill returns a template with `verdict.ok` and `assurance === "matched"` — in interactive sessions only after FR-030 user approval |
 | `need-samples` | stopped with incomplete coverage / need more cases |
-| `deferred` | user chose defer — in the sample loop or as an FR-030 review **stop** *(rev 2026-07-12)* |
-| `aborted` | user chose abort (sample loop or FR-030 review stop; rev 2026-07-12), **or the skill aborted after determining the request cannot be grounded in the pinned metadata (refusal — AC-003; rev 2026-07-11, OQ-016b)** |
+| `deferred` | user chose defer — in the sample loop or as an FR-030 review **stop** |
+| `aborted` | user chose abort (sample loop or FR-030 review stop), **or the skill aborted after determining the request cannot be grounded in the pinned metadata (refusal — AC-003 / OQ-016b)** |
 | `repair-exhausted` | skill consumed all `repair_attempts` without a matched verdict |
 | `samples-rejected` | `check_samples` / verify `samples` stage failed on a schema-valid SampleSet |
 | `verify-failed` | validate, dry_run, or match failed and the skill stopped without scheduling another repair |
@@ -1156,7 +1155,7 @@ primary machine result on stderr.
 | `result` | `--template PATH --samples PATH [--repair-count N]` **or** `--refuse --status STATUS --explanation TEXT` | complete §11.5 `AuthoringResult`, machine-built (FR-034): verify-derived from the template (`repair_count = N`, default 0), or a template-less refusal (`STATUS ∈ {aborted, deferred, need-samples, repair-exhausted, profile-rejected}`) | 0 if matched, 1 on any failure/refusal envelope, 2 on bad args |
 | `validate` | `--template PATH` | `{ "schema_version": "1.0", ok, errors }` debug | 0/1 |
 | `dry-run` | `--template PATH --input PATH` [`--includes PATH`] | `{ "schema_version": "1.0", ok, result?, writes?, errors }` | 0/1 |
-| `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (rev 2026-07-11: flags aligned with §11.9) | `ProjectConfig` | 0/2 |
+| `init-config` | `--layout sibling\|central\|custom` [`--pattern STR`] [`--samples-dir STR`] [`--repair-attempts N`] [`--non-interactive`] [`--force`] (flags aligned with §11.9) | `ProjectConfig` | 0/2 |
 
 **Exit codes:** `0` success; `1` semantic check/verify failure on **schema-valid** inputs; `2`
 usage / **schema** / config error; `3` internal unexpected error — emits the `CliError`
@@ -1207,13 +1206,13 @@ package (runtime dependency `jsonschema>=4.18`); `schema_invalid` gap / `Preflig
 messages derive from validator errors sorted by (JSON instance path, message) for determinism
 (OQ-013). Because message text originates in `jsonschema`, NFR-002's byte-determinism for these
 messages is scoped to a **fixed environment** (same `jsonschema` version); cross-version message
-drift is possible and acceptable (rev 2026-07-11).
+drift is possible and acceptable.
 
 If the SampleSet is schema-valid but `ok_for_verify` is false, `check-samples` exits **`1`** with a
 normal `SampleCheck`. If schema-valid but verify stages fail, `verify` exits **`1`** with a normal
 `Verdict` (`failed_stage` set).
 
-**Exit-2 boundary (rev 2026-07-11):** exit 2 covers failures of the **bundled JSON Schema** (plus
+**Exit-2 boundary:** exit 2 covers failures of the **bundled JSON Schema** (plus
 parse/version/read failures). The procedural §11.0 rule-2 unknown-AuthoringTag check is a
 `schema_invalid` **gap** on a schema-valid document — reported in a normal `SampleCheck` /
 `Verdict` with exit **1**, not a `CliError`.
@@ -1251,7 +1250,7 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
   "runs_per_fixture": 3,
   "pass_rule": "majority",
   "seed": number | null,
-  "harness": {                        # AD-024 / OQ-027 (added 2026-07-14) — the
+  "harness": {                        # AD-024 / OQ-027 — the
                                       # real host that runs the skill; a
                                       # gate-identity field beside the model pin
     "kind": "agent-sdk" | "claude-code",
@@ -1261,28 +1260,22 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
 }
 ```
 
-Initial committed values are chosen at A2 standup and become part of the gate identity; changing
-them is an explicit eval-policy commit. *(rev 2026-07-14, AD-024 / OQ-027: the `harness` block is
-part of gate identity — a change to `harness.kind` or `harness.version` is an eval-policy commit
-that resets `evals/baseline.json` in the same commit, mirroring the gate-model swap below. v1
-implements `kind: "agent-sdk"` as the reference host; `"claude-code"` is admitted by the shape but
-unimplemented.)* *(rev 2026-07-12: `temperature` removed from the shape —
-the pinned `claude-sonnet-5` rejects non-default sampling parameters with a 400; the harness
-never sends sampling parameters, and determinism steering lives in the prompt.)*
+Initial committed values become part of the gate identity; changing them is an explicit
+eval-policy commit. The `harness` block is part of gate identity — a change to `harness.kind` or
+`harness.version` is an eval-policy commit that resets `evals/baseline.json` in the same commit,
+mirroring the gate-model swap below. v1 implements `kind: "agent-sdk"` as the reference host;
+`"claude-code"` is admitted by the shape but unimplemented. The harness never sends sampling
+parameters; determinism steering lives in the prompt.
 
-*(rev 2026-07-12, AD-021 / OQ-024)* **Gate model policy:** the primary NFR-010 gate model is a
-**small model**; the normative pin — effective from the §14-ordered eval-policy commit that
-swaps `runner.json`, until which the A2-standup values remain in force — is
-`provider: "anthropic"`, `model_id: "claude-haiku-4-5-20251001"` (the harness still sends no
-sampling parameters). A commit that
-changes the gate `model_id` (including this swap from the A2-standup `claude-sonnet-5`) is an
+**Gate model policy (AD-021 / OQ-024):** the primary NFR-010 gate model is a **small model**;
+the normative pin is `provider: "anthropic"`, `model_id: "claude-haiku-4-5-20251001"` (the
+harness still sends no sampling parameters). A commit that changes the gate `model_id` is an
 eval-policy commit that **MUST in the same commit** reset `evals/baseline.json` to
 `{ "schema_version": "1.0", "passing": [] }` — majority results under one model are not
-transferable to another, so no fixture is "previously passing" under a model that never ran it;
-the baseline repopulates via `check_evals --update-baseline` on the next green run.
-`evals/targets.json` is **not** reset: `authoring_target` keeps its current ratchet value (0.80
-floor at swap time), and an expected sub-target rate after a gate-model swap surfaces as a red
-gate to fix by improving `SKILL.md`, never by lowering targets.
+transferable to another; the baseline repopulates via `check_evals --update-baseline` on the
+next green run. `evals/targets.json` is **not** reset: `authoring_target` keeps its current
+ratchet value, and an expected sub-target rate after a gate-model swap surfaces as a red gate
+to fix by improving `SKILL.md`, never by lowering targets.
 
 **EvalFixture** (`evals/cases/*.json`, schema_version `"1.0"`):
 ```
@@ -1327,7 +1320,7 @@ EvalFixture = {
   passing" is the committed `evals/baseline.json` (OQ-016f):
   `{ "schema_version": "1.0", "passing": [fixture ids…] }`; ids are added only by explicit
   `check_evals --update-baseline` commits.
-- **Harness (OQ-017, rev 2026-07-14 by AD-024 / OQ-027):** the gate runs the skill in the **real
+- **Harness (OQ-017 / AD-024 / OQ-027):** the gate runs the skill in the **real
   host agent harness** it ships into — the reference host is the **Claude Agent SDK**, pinned by
   `runner.json.harness = { kind: "agent-sdk", version }`. The driver (`scripts/host_harness.py`,
   behind the optional extra `transon-authoring[evals]`) installs `SKILL.md` as shipped into the
@@ -1353,7 +1346,7 @@ EvalFixture = {
   **demoted to a non-gating offline smoke fixture** (OQ-027d) — retained and unit-tested with a
   fake provider, never the gate. Full runs live in a credential-holding dispatch workflow; per-PR
   CI runs `check_evals --lint` + the fake-host / fake-provider unit tests.
-- **Transcripts & attribution (FR-032 / AD-022, added 2026-07-12):** full runs write one
+- **Transcripts & attribution (FR-032 / AD-022):** full runs write one
   `EpisodeTranscript` JSON per episode to `--transcripts-dir`; **never committed** to the repo
   (repo hygiene + NFR-011) — the dispatch workflow retains the directory as a build artifact:
   ```
@@ -1373,10 +1366,9 @@ EvalFixture = {
     error: string | null
   }
   ```
-  *(rev 2026-07-14, AD-024 / OQ-027: under the real-host harness the four `outcome` values are
-  produced by the OQ-027e host→EpisodeResult adapter rather than the raw loop; `tool_calls` carries
-  the host's reported step record when it exposes one and is otherwise `[]`. This is additive
-  telemetry — the transcript changes no scoring, exactly as before.)*
+  Under the real-host harness the four `outcome` values are produced by the host→EpisodeResult
+  adapter; `tool_calls` carries the host's reported step record when it exposes one and is
+  otherwise `[]` (additive telemetry — transcripts change no scoring).
   The gate report gains `failure_modes`: per bucket, a histogram over the runs that **failed
   that bucket's OQ-016 success rule**, plus reported-only `infra_error` runs. Each failed run
   is keyed by its final **scored** outcome, first match in this precedence wins:
@@ -1389,7 +1381,7 @@ EvalFixture = {
   score itself. Derived mechanically from scored episode results;
   transcripts and `failure_modes` change no scoring, target, baseline, or lint semantics —
   a run without `--transcripts-dir` scores identically.
-  **Privacy & retention** *(rev 2026-07-13)*: an episode transcript contains only (a) fixture
+  **Privacy & retention:** an episode transcript contains only (a) fixture
   content already committed under `evals/cases/` — real-use fixtures having passed the NFR-011
   redaction + consent lint before commit, synthetic fixtures (AD-021) containing no real-use
   data by construction — and (b) library envelopes and gate-model output over that content,
@@ -1398,7 +1390,7 @@ EvalFixture = {
   transcripts MUST NOT be re-committed to the repo. Capturing a **real-use** failing
   conversation remains governed by FR-018/NFR-011 — the transcript mechanism records eval
   episodes only, never interactive sessions.
-- **Whole transcript + telemetry roll-up (FR-035 / AD-025, added 2026-07-14):** the same
+- **Whole transcript + telemetry roll-up (FR-035 / AD-025):** the same
   `--transcripts-dir DIR` additionally persists, per episode, the **whole host message transcript**
   and, per run, a **`run_summary.json`** — both additive, non-gating, never committed (a run without
   the directory scores identically). The recommended, git-ignored location is `evals/_runs/`.
@@ -1446,7 +1438,7 @@ EvalFixture = {
   (shape in FR-029) and is **never** part of the fixture object, the harness prompt, or the
   episode workspace. `check_evals --lint` enforces seed↔fixture bit-identical regeneration
   (AC-030). Synthetic `intent_nl` is LLM-drafted, human-accepted before commit (AD-021).
-- **Real-world structural fixtures (AD-023 / FR-033, added 2026-07-13):** a third fixture class —
+- **Real-world structural fixtures (AD-023 / FR-033):** a third fixture class —
   large **constructed** EvalFixtures matched to real API schemas (AWS/Stripe/GitHub/JOLT/JMESPath),
   carrying no real-use data (`redacted: false`, no `consent`; the FR-018 / NFR-011 real-use path is
   unaffected). Same schema, buckets, and scoring as every other fixture. Their case `output`s are
@@ -1479,7 +1471,7 @@ inside the repo root (no `..` escape).
 **Collisions:** `init-config` refuses to overwrite unless `--force`. Sample file write refuses
 overwrite unless user/CI confirms or `--force`.
 
-**Write location (rev 2026-07-11):** `init-config` writes `.transon-authoring.json` to the
+**Write location:** `init-config` writes `.transon-authoring.json` to the
 **current working directory** (the skill runs `init-config` at the repo root) and emits the
 `ProjectConfig` document on stdout. Interactive prompting (layout only) happens only when stdin
 is a TTY and `--non-interactive` is absent; `check-samples`/`verify` never read config and never
@@ -1767,6 +1759,6 @@ excluded from active coverage.
 | **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
 | **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
-| A3 | After A2 green | Skill body (incl. FR-030 review loop, added 2026-07-12) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
+| A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
 | A5 | After A4 | Optional editor sink demo. |
