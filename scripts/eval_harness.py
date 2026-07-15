@@ -5,9 +5,8 @@
 host (Claude Agent SDK reference; :mod:`host_harness`). This module is **demoted
 to a non-gating offline smoke fixture**: retained and importable, exercised by
 its fake-provider unit tests to smoke the tool-call plumbing without credentials,
-but never selected by :mod:`check_evals`. It also documents the shared harness
-conventions (verbatim ``SKILL.md`` prompt, workspace confinement, budget/infra
-distinctions) that the real host inherits.
+but never selected by :mod:`check_evals`. Shared harness conventions (workspace
+setup, EpisodeResult shape, token telemetry) live in :mod:`_shared`.
 
 Runs a single eval fixture as one episode against a provider (SPEC §11.8
 "Harness (OQ-017)"):
@@ -37,6 +36,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol
+
+from _shared import build_episode_result, new_tokens, prepare_workspace, usage_tokens
 
 #: Fixed byte cap applied to captured stdout and stderr of the
 #: ``transon_authoring`` tool (OQ-017b: "truncated at a fixed byte cap").
@@ -198,12 +199,7 @@ def _usage_dict(usage: Any) -> Optional[dict[str, int]]:
     """Normalize a provider usage object into the Turn.usage shape, or None."""
     if usage is None:
         return None
-    return {
-        "input": int(getattr(usage, "input_tokens", 0) or 0),
-        "output": int(getattr(usage, "output_tokens", 0) or 0),
-        "cache_read": int(getattr(usage, "cache_read_input_tokens", 0) or 0),
-        "cache_creation": int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
-    }
+    return usage_tokens(lambda k, d=0: getattr(usage, k, d))
 
 
 class AnthropicProvider:
@@ -332,13 +328,7 @@ def _tool_transon_authoring(
 
 
 def _new_tokens() -> dict[str, int]:
-    return {
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_creation": 0,
-        "turns": 0,
-    }
+    return new_tokens()
 
 
 def _episode_result(
@@ -355,14 +345,15 @@ def _episode_result(
     # FR-032 EpisodeTranscript persists (additive; changes no scoring, AC-034).
     # ``tokens`` is per-episode provider usage (additive cost telemetry; never
     # consulted by scoring).
-    return {
-        "submitted": submitted,
-        "outcome": outcome,
-        "tool_calls": tool_calls,
-        "error": error,
-        "tool_call_log": tool_call_log if tool_call_log is not None else [],
-        "tokens": tokens if tokens is not None else _new_tokens(),
-    }
+    return build_episode_result(
+        submitted=submitted,
+        outcome=outcome,
+        tool_calls=tool_calls,
+        error=error,
+        tool_call_log=tool_call_log,
+        tokens=tokens,
+        include_fr035=False,
+    )
 
 
 def run_fixture(
@@ -391,18 +382,8 @@ def run_fixture(
     try:
         try:
             # OQ-017a: system prompt = verbatim SKILL.md bytes + fixed preamble.
-            skill_md = (repo_root / "SKILL.md").read_bytes().decode("utf-8")
+            skill_md, user_message = prepare_workspace(fixture, repo_root, workspace)
             system = skill_md + HARNESS_PREAMBLE
-
-            user_message = fixture["intent_nl"]
-            if fixture.get("samples") is not None:
-                (workspace / "samples.json").write_text(
-                    json.dumps(fixture["samples"], ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                user_message += (
-                    "\n\nA confirmed SampleSet is available at samples.json."
-                )
         except Exception as exc:  # workspace/SKILL.md fault = infra (OQ-016d)
             return _episode_result(
                 outcome="infra_error",

@@ -8,7 +8,8 @@ This replaces the raw 3-tool ``messages.create`` loop
 NFR-010 gate harness.
 
 Design (mirrors the OQ-017 :class:`eval_harness.Provider` seam so the gate stays
-unit-testable offline, OQ-027e):
+unit-testable offline, OQ-027e); shared workspace / EpisodeResult / token helpers
+live in :mod:`_shared`:
 
 - :class:`Host` is an injected protocol: given the skill body, the fixture
   prompt and an ephemeral workspace, run one episode and report a
@@ -38,6 +39,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol
+
+from _shared import build_episode_result, new_tokens, prepare_workspace, usage_tokens
 
 #: Host-native execution statuses the adapter accepts (OQ-027e). These are the
 #: four mutually exclusive ways an episode in any real host can end; every
@@ -96,13 +99,7 @@ class Host(Protocol):
 
 
 def _new_tokens() -> dict[str, int]:
-    return {
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_creation": 0,
-        "turns": 0,
-    }
+    return new_tokens()
 
 
 def to_episode_result(outcome: HostOutcome) -> dict[str, Any]:
@@ -148,21 +145,21 @@ def _episode_result(
     messages: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Build the §11.8 EpisodeResult dict (identical shape to
-    :func:`eval_harness._episode_result`). ``tool_calls`` is the int step count
-    the scorer reads; ``tool_call_log`` is the FR-032 transcript record.
-    ``cost_usd`` and ``messages`` are the additive FR-035 telemetry the
-    ``run_summary`` / EpisodeMessages artifacts read (never scored, AC-034)."""
-    log = step_log if step_log is not None else []
-    return {
-        "submitted": submitted,
-        "outcome": outcome,
-        "tool_calls": len(log),
-        "error": error,
-        "tool_call_log": log,
-        "tokens": tokens if tokens is not None else _new_tokens(),
-        "cost_usd": cost_usd,
-        "messages": messages if messages is not None else [],
-    }
+    :func:`eval_harness._episode_result`, plus FR-035 ``cost_usd`` /
+    ``messages``). Shared builder: :func:`_shared.build_episode_result`.
+    ``tool_calls`` is the int step count the scorer reads; ``tool_call_log``
+    is the FR-032 transcript record. ``cost_usd`` and ``messages`` are
+    additive FR-035 telemetry (never scored, AC-034)."""
+    return build_episode_result(
+        submitted=submitted,
+        outcome=outcome,
+        error=error,
+        tool_call_log=step_log,
+        tokens=tokens,
+        cost_usd=cost_usd,
+        messages=messages,
+        include_fr035=True,
+    )
 
 
 def _install_skill(workspace: Path, skill_md: str) -> None:
@@ -204,16 +201,9 @@ def run_fixture(
         try:
             # SKILL.md is measured verbatim, exactly as the raw loop did
             # (OQ-017a) — the real host just loads it as a skill.
-            skill_md = (repo_root / "SKILL.md").read_bytes().decode("utf-8")
+            # Shared workspace setup: :func:`_shared.prepare_workspace`.
+            skill_md, prompt = prepare_workspace(fixture, repo_root, workspace)
             _install_skill(workspace, skill_md)
-
-            prompt = fixture["intent_nl"]
-            if fixture.get("samples") is not None:
-                (workspace / "samples.json").write_text(
-                    json.dumps(fixture["samples"], ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                prompt += "\n\nA confirmed SampleSet is available at samples.json."
         except Exception as exc:  # workspace/SKILL.md fault = infra (OQ-016d)
             return _episode_result(
                 outcome="infra_error",
@@ -302,11 +292,8 @@ def _sdk_usage(usage: Any) -> Optional[dict[str, int]]:
     if usage is None:
         return None
     get = usage.get if isinstance(usage, dict) else lambda k, d=0: getattr(usage, k, d)
-    tokens = _new_tokens()
-    tokens["input"] = int(get("input_tokens", 0) or 0)
-    tokens["output"] = int(get("output_tokens", 0) or 0)
-    tokens["cache_read"] = int(get("cache_read_input_tokens", 0) or 0)
-    tokens["cache_creation"] = int(get("cache_creation_input_tokens", 0) or 0)
+    tokens = new_tokens()
+    tokens.update(usage_tokens(get))
     tokens["turns"] = 1
     return tokens
 

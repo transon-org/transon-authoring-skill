@@ -69,23 +69,17 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-try:
-    from transon_authoring import get_metadata
-    from transon_authoring.samples import (
-        _parse_pointer,
-        _structural_check,
-        check_samples,
-    )
-    from transon_authoring.verify import dry_run, verify
-except ImportError:  # pragma: no cover - source-checkout fallback (SPEC §10)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from transon_authoring import get_metadata
-    from transon_authoring.samples import (
-        _parse_pointer,
-        _structural_check,
-        check_samples,
-    )
-    from transon_authoring.verify import dry_run, verify
+from _shared import ensure_src, examples_by_name
+
+ensure_src()
+from transon_authoring import get_metadata  # noqa: E402
+from transon_authoring.samples import (  # noqa: E402
+    _escape_pointer_token,
+    _parse_pointer,
+    _structural_check,
+    check_samples,
+)
+from transon_authoring.verify import dry_run, verify  # noqa: E402
 
 #: Recorded in every seed doc (FR-029 seed shape ``generator.version``);
 #: informational — AC-030 regen compares content subset + fingerprint only.
@@ -138,12 +132,8 @@ class GeneratorError(Exception):
 # --------------------------------------------------------------------------
 
 
-def _escape_token(token: str) -> str:
-    return token.replace("~", "~0").replace("/", "~1")
-
-
 def _pointer_string(tokens: list[str]) -> str:
-    return "/" + "/".join(_escape_token(t) for t in tokens) if tokens else ""
+    return "/" + "/".join(_escape_pointer_token(t) for t in tokens) if tokens else ""
 
 
 def _walk_plan(data: Any, optional_names: set[str]) -> list[dict[str, Any]]:
@@ -694,8 +684,8 @@ def generate(
     """
     template = source_example["template"]
     data = source_example["data"]
-    examples_by_name = {e["name"]: e for e in get_metadata()["docs"]["examples"]}
-    includes = _resolve_includes(template, examples_by_name)
+    examples_index = examples_by_name(get_metadata())
+    includes = _resolve_includes(template, examples_index)
     engine = _Engine(template, includes)
     accessors = _attr_accessors_ordered(template)
     plan = _walk_plan(data, _optional_names(accessors))
@@ -844,8 +834,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    examples_by_name = {e["name"]: e for e in get_metadata()["docs"]["examples"]}
-    entry = examples_by_name.get(args.example)
+    examples_index = examples_by_name(get_metadata())
+    entry = examples_index.get(args.example)
     if entry is None:
         print(
             f"gen-fixtures: config error: example {args.example!r} is not in "

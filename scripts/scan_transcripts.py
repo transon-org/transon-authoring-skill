@@ -14,14 +14,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from _shared import import_sibling
+
 
 def _import_check_evals():
-    try:
-        import check_evals
-    except ImportError:  # pragma: no cover - invoked outside scripts/
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import check_evals
-    return check_evals
+    return import_sibling("check_evals")
 
 
 def scan(directory: Path) -> list[str]:

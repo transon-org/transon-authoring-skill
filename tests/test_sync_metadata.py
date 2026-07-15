@@ -144,6 +144,17 @@ def test_fr_011_pin_mismatch_exits_2(tmp_path: Path):
     assert not (tmp_path / "resources").exists()
 
 
+def test_fr_011_undecodable_pyproject_exits_2(tmp_path: Path):
+    # FR-011 / §11.7 — an unreadable pyproject is a config error (exit 2),
+    # never a traceback (read_pin catches OSError/UnicodeDecodeError).
+    (tmp_path / "pyproject.toml").write_bytes(b"\xff\xfe not utf-8")
+    result = run_sync(tmp_path)
+    assert result.returncode == 2
+    assert "cannot read" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert not (tmp_path / "resources").exists()
+
+
 def test_fr_011_missing_engine_exits_2(tmp_root: Path, monkeypatch, capsys):
     # FR-011 / AC-006 — a missing pinned engine is a pin/config error (exit 2
     # with a diagnostic on stderr), never a traceback.
