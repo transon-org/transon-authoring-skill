@@ -321,7 +321,7 @@ def _lint_constructed_seed(
         )
         return failures
 
-    # NOTE (rev 2026-07-15, FR-033/AC-035): the former (d) "provenance link" check
+    # NOTE: the former (d) "provenance link" check
     # — resolving source_ref's file portion to an existing repo file — is
     # WITHDRAWN. It was a repo-integrity check running inside the eval gate, which
     # by OQ-027f(i) checks out nothing and runs from a minimal bundle: it made the

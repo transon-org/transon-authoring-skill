@@ -452,7 +452,7 @@ def test_fr_029_oq_026_key_addition_and_deletion():
 
 
 def test_fr_029_oq_026_key_addition_value_typing_and_order():
-    # OQ-026b(i)/(d) (rev 2026-07-12) — a default member is NOT required for
+    # OQ-026b(i)/(d) — a default member is NOT required for
     # membership in the addition set; the addition value is the FIRST entry
     # of the table row keyed by the attr's literal default JSON type when
     # one is present (non-literal default → string row; no default at all →
@@ -591,7 +591,7 @@ def test_fr_029_oq_026_motivating_join_default_insertion_branch():
 
 
 def test_fr_029_oq_026_format_label_addition_derived_but_engine_skipped():
-    # OQ-026b(i) (rev 2026-07-12) — the FormatWithDefault "label" accessor
+    # OQ-026b(i) — the FormatWithDefault "label" accessor
     # carries NO default member, so the amended addition set DOES derive the
     # {"other": 1, "label": "variation-alpha"} candidate. But under the
     # pinned engine the format pattern "{label}" formats against the

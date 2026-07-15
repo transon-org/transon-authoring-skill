@@ -94,7 +94,7 @@ def test_fr_002_ac_014_preconfirmed_fixture_ci_path():
 
 
 def test_fr_002_ac_014_config_never_read_by_check_or_verify(tmp_path):
-    # §11.9 (rev 2026-07-11): "check-samples/verify never read config and
+    # §11.9: "check-samples/verify never read config and
     # never prompt". A malformed .transon-authoring.json in cwd would crash
     # any code path that parses it — both verbs must still succeed.
     (tmp_path / ".transon-authoring.json").write_text(

@@ -239,7 +239,7 @@ def adhoc_violations(instance, schema):
 
 # ---------------------------------------------------------------------------
 # 1a. CliError failure envelopes, end-to-end through the CLI —
-#     status "schema-error" for every §11.6/OQ-014c ingress-failure kind
+# status "schema-error" for every §11.6/OQ-014c ingress-failure kind
 # ---------------------------------------------------------------------------
 
 _SCHEMA_ERROR_INVOCATIONS = {
@@ -311,7 +311,7 @@ def test_nfr_005_ac_026_profile_rejected_cli_error_conforms(tmp_path, knob):
 
 # ---------------------------------------------------------------------------
 # 1c. CliError "internal-error" (OQ-014a) — induced fault, in-process main()
-#     with a monkeypatched handler (the controllable exit-3 technique)
+# with a monkeypatched handler (the controllable exit-3 technique)
 # ---------------------------------------------------------------------------
 
 
@@ -358,7 +358,7 @@ def test_nfr_005_ac_026_failing_sample_check_envelope_conforms(tmp_path):
 
 # ---------------------------------------------------------------------------
 # 1e. Failing Verdict for EACH failed_stage value, end-to-end (plus the
-#     TimeoutError dry_run variant in-process)
+# TimeoutError dry_run variant in-process)
 # ---------------------------------------------------------------------------
 
 _FAILING_VERIFY_INPUTS = {
@@ -405,7 +405,7 @@ def test_nfr_005_ac_026_timeout_verdict_envelope_conforms(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # 2. Success envelopes validate too (NFR-005: statuses distinguishable from
-#    success requires the success shapes to be schema-clean as well)
+# success requires the success shapes to be schema-clean as well)
 # ---------------------------------------------------------------------------
 
 
@@ -546,8 +546,8 @@ def test_nfr_005_adhoc_examples_search_schema_rejects_violations(bad):
 
 # ---------------------------------------------------------------------------
 # 3. AuthoringResult §11.5 conformance — fixture per status (the producer is
-#    the A3 skill; §11.5 prescribes fixture unit tests), real engine-derived
-#    Verdicts / SampleChecks embedded (AD-018)
+# the A3 skill; §11.5 prescribes fixture unit tests), real engine-derived
+# Verdicts / SampleChecks embedded (AD-018)
 # ---------------------------------------------------------------------------
 
 

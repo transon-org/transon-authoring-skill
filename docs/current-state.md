@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `4ed7a33` — docs: slice D — residual history sweep in §6/§11 |
+| Repo HEAD | `12b3e38` — docs: slice F — historical banners on docs/proposals/ |
 | Branch | `hygiene-culture-and-denoise` |
 | Engine pin | `transon==0.1.7` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -28,8 +28,8 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Next steps (ordered)
 
-1. Slice F — verify historical banners on `docs/proposals/`.
-2. Slice G — narrative comment sweep in `src/` / `scripts/` / `harness/` / `tests/` (keep requirement-ID citations).
+1. Open a PR for `hygiene-culture-and-denoise` when ready for review (local + CodeRabbit).
+2. Resume product work (A4 distribution slice) under the new hygiene culture.
 
 ## Open blockers / waiting-on
 

@@ -562,7 +562,7 @@ def test_oq_016d_prose_mentioning_capacity_words_is_not_infra():
 
 
 def test_fr_030_review_approval_prompt_mandates_result_verbatim():
-    """FR-030 (rev 2026-07-14) / FR-034 — the driver's review-approval message
+    """FR-030 / FR-034 — the driver's review-approval message
     tells the model to emit by RUNNING the `result` command and returning its
     stdout verbatim, and forbids hand-re-typing the envelope. The real-host probe
     showed a bare 'emit the envelope as your response' prompt makes the small

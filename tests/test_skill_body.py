@@ -736,7 +736,7 @@ def test_fr_030_ac_031_review_loop():
     assert _has(r"status:\s*\"matched\"", approve), (
         "approve exit does not emit status matched"
     )
-    # FR-030 rev 2026-07-14 / FR-034: approve emits via the §7 `result` command
+    # FR-030 / FR-034: approve emits via the §7 `result` command
     # returning stdout VERBATIM, and forbids re-typing/reconstructing the presented
     # envelope — the real-host eval showed the small model corrupts a hand-re-typed
     # large envelope on the post-approval turn (100% of failures in the probe).
@@ -805,7 +805,7 @@ def test_fr_030_ac_031_review_loop():
 
 
 def test_uc_001_walkthrough_review_approve():
-    """UC-001 (rev 2026-07-12, FR-030) — scripted happy path over library calls
+    """UC-001 — scripted happy path over library calls
     only: a confirmed, coverage-complete SampleSet clears the section-3 gate
     (`ok_for_verify`), its template verifies matched (section 5), and the user's
     **approve** review exit (section 6) assembles the final success envelope — a
@@ -900,7 +900,7 @@ def test_fr_034_ac_037_result_section_mandates_the_result_command():
 
 
 def test_fr_034_ac_037_refusal_uses_result_refuse_not_hand_written():
-    """FR-034 (rev 2026-07-15) / AC-037 — the REFUSAL envelope is machine-built
+    """FR-034 / AC-037 — the REFUSAL envelope is machine-built
     too: §2 (ground & refuse) and §7 tell the model to run `result --refuse
     --status … --explanation …` and return its stdout verbatim, closing the
     hand-written-refusal failure mode the real-host gate surfaced (correct

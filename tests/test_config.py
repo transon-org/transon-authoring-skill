@@ -1,5 +1,5 @@
 """FR-022 / AC-014 — ProjectConfig ``.transon-authoring.json`` + the
-``init-config`` CLI verb (SPEC §11.9 incl. the rev 2026-07-11 write-location
+``init-config`` CLI verb (SPEC §11.9 write-location
 block, §11.6 init-config row, §11.0 schema-version list).
 
 CLI invocations go through a real subprocess with ``cwd`` set to a temp repo
@@ -64,7 +64,7 @@ def assert_schema_error(result) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# init-config happy path (FR-022; §11.9 write location rev 2026-07-11)
+# init-config happy path (FR-022; §11.9 write location)
 # ---------------------------------------------------------------------------
 
 
@@ -79,7 +79,7 @@ def test_fr_022_init_config_writes_cwd_file_and_emits_valid_project_config(tmp_p
         "layout": "sibling",
         "repair_attempts": 3,
     }
-    # §11.9 (rev 2026-07-11): the file lands in the CURRENT WORKING DIRECTORY.
+    # §11.9: the file lands in the CURRENT WORKING DIRECTORY.
     written = tmp_path / CONFIG_FILENAME
     assert written.is_file()
     assert json.loads(written.read_text(encoding="utf-8")) == document
@@ -377,15 +377,15 @@ def _confirmed_sample_set() -> dict:
 
 def test_ac_014_no_prompt_when_config_present_or_samples_given(tmp_path):
     # 1) init-config with a non-TTY stdin and NO --non-interactive flag:
-    #    must not prompt or hang (run_cli's DEVNULL stdin + timeout make a
-    #    prompt regression fail loudly); layout missing → exit 2, no file.
+    # must not prompt or hang (run_cli's DEVNULL stdin + timeout make a
+    # prompt regression fail loudly); layout missing → exit 2, no file.
     result = run_cli("init-config", cwd=tmp_path)
     assert_schema_error(result)
     assert not (tmp_path / CONFIG_FILENAME).exists()
 
     # 2) check-samples with --samples given never reads .transon-authoring.json
-    #    (§11.9: check-samples/verify never read config and never prompt) —
-    #    a malformed config in cwd must not affect it.
+    # (§11.9: check-samples/verify never read config and never prompt) —
+    # a malformed config in cwd must not affect it.
     (tmp_path / CONFIG_FILENAME).write_text("{definitely not json", encoding="utf-8")
     samples = tmp_path / "orders.samples.json"
     samples.write_text(

@@ -59,7 +59,7 @@ def run_check(*args: str) -> subprocess.CompletedProcess:
 def tmp_repo(tmp_path: Path) -> Path:
     """A tmp repo root with ONLY the committed evals/ corpus copied in.
 
-    Deliberately carries **no `docs/` tree** (rev 2026-07-15): the withdrawn
+    Deliberately carries **no `docs/` tree**: the withdrawn
     FR-033d provenance-link check used to resolve each constructed seed's
     `source_ref` to a repo file, which forced this fixture — and, fatally, the
     bundle-only eval job (OQ-027f(i) checks out nothing) — to carry `docs/`.
@@ -465,8 +465,7 @@ def mint_constructed_into(root: Path) -> tuple[Path, Path]:
     }
     seed = {
         "origin": "real-world-pack",
-        # rev 2026-07-15 (FR-033/AC-035): a PROVENANCE string naming the
-        # documented source — no longer a repo path, and no longer resolved.
+        # Provenance string naming the documented source (not a repo path).
         "source_ref": "GitHub project items API — public API reference",
         "template": copy.deepcopy(CONSTRUCTED_TEMPLATE),
         "notes": "Missing name defaults to null; empty items list yields an empty list.",
@@ -567,7 +566,7 @@ def test_ac_035_non_ok_for_verify_red(tmp_repo: Path):
 
 
 def test_ac_035_source_ref_is_provenance_not_a_repo_path(tmp_repo: Path):
-    """AC-035 / FR-033 (rev 2026-07-15) — `source_ref` is a REQUIRED non-empty
+    """AC-035 / FR-033 — `source_ref` is a REQUIRED non-empty
     PROVENANCE string naming the documented API the payload was constructed from
     (the AD-023 constructed-never-captured trail backing `redacted: false`), and
     is NO LONGER resolved to a repo file.

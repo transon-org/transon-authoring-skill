@@ -181,7 +181,7 @@ def test_fr_005_oq_012_dec_no_content_ref_is_singleton_marker():
 
 
 def test_fr_005_oq_012_dec_recurses_at_every_nesting_level():
-    # §11.0 (rev 2026-07-11, OQ-012): decoding applies recursively at every
+    # §11.0: decoding applies recursively at every
     # nesting level of an expected value.
     expected = {
         "top": [{TAG_KEY: "NO_CONTENT"}, {"deep": {"deeper": [{TAG_KEY: "NO_CONTENT"}]}}],
