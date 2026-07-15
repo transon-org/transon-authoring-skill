@@ -61,7 +61,7 @@ from transon_authoring.verify import dry_run, validate, verify
 #: rejected post-parse in a fixed order before any input file is read.
 _RESERVED_KNOBS = (("marker", "--marker"), ("transformer", "--transformer"))
 
-#: FR-034 (rev 2026-07-15) — the §11.5 failure statuses `result --refuse` will
+#: FR-034 — the §11.5 failure statuses `result --refuse` will
 #: machine-build. These are the ones the skill emits DIRECTLY, with no template
 #: and no verify verdict: a §2 refusal (`aborted`), a review/sample-loop stop
 #: (`deferred`/`aborted`), a still-unconfirmed sample loop (`need-samples`),
@@ -235,7 +235,7 @@ def _cmd_result(args: argparse.Namespace) -> int:
 
 
 def _cmd_result_refuse(args: argparse.Namespace) -> int:
-    """FR-034 (rev 2026-07-15) / AC-037 — machine-build a template-less REFUSAL
+    """FR-034 / AC-037 — machine-build a template-less REFUSAL
     ``AuthoringResult`` (``{schema_version, ok: false, status, explanation}``,
     exit 1) so a §2 refusal or a review/sample-loop stop is emitted verbatim
     instead of hand-written. ``--status`` must be a §11.5 refusal status
@@ -338,7 +338,7 @@ def _prompt_layout() -> str:
 
 
 def _cmd_init_config(args: argparse.Namespace) -> int:
-    """FR-022 (§11.9 write location, rev 2026-07-11): write
+    """FR-022 (§11.9 write location): write
     ``.transon-authoring.json`` to the CURRENT WORKING DIRECTORY, emit the
     ProjectConfig document on stdout, exit 0. Input/validation problems are
     ``CliError`` ``schema-error`` envelopes, exit 2."""

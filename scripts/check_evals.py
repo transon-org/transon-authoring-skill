@@ -321,16 +321,8 @@ def _lint_constructed_seed(
         )
         return failures
 
-    # NOTE (rev 2026-07-15, FR-033/AC-035): the former (d) "provenance link" check
-    # — resolving source_ref's file portion to an existing repo file — is
-    # WITHDRAWN. It was a repo-integrity check running inside the eval gate, which
-    # by OQ-027f(i) checks out nothing and runs from a minimal bundle: it made the
-    # gate depend on the docs/ tree and killed the first full dispatch in the
-    # pre-flight lint. source_ref is still REQUIRED and non-empty (shape check
-    # above) as the AD-023 constructed-not-captured provenance trail, but it names
-    # a documented API/source, not a repo path — nothing in scoring, verify,
-    # targets or baseline reads it, and neither engine-freeze (a) nor no-leakage
-    # (b) depends on resolving it.
+    # `source_ref` is required provenance metadata, but is not resolved
+    # against repository paths; lint may run from a minimal bundle.
 
     fixture = fixtures_by_stem.get(path.stem)
     if fixture is None:

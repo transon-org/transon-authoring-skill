@@ -8,7 +8,9 @@ the CI (GitHub mandates the root).
   `spec-reviewer`)
 - `commands/` — command procedures (`run-milestone` · `implement-requirement` ·
   `propose-spec-change`)
+- `skills/` — tool-neutral skill / always-on rule bodies (`hygiene`)
 - `scripts/` — deterministic harness gates (`check_traceability` · `check_append_only_ids`)
+  and harness utilities (`update_memory`)
 - `githooks/` — binding git hooks (`pre-commit` · `commit-msg`); enable with
   `git config core.hooksPath harness/githooks`
 
@@ -32,5 +34,8 @@ behavior still goes SPEC-first (SPEC §12). Ported from the `transon-blockly` ha
    here). Claude Code and Cursor are first-class peers.
 3. **Gated, not hoped.** `check_traceability.py` and `check_append_only_ids.py` bind in the
    pre-commit hook and CI. A red gate is a STOP: fix it, never weaken or bypass it.
-4. **Docs split by role.** `AGENTS.md` + `harness/` + the adapters *operate*; `docs/` *contracts*.
-   Adapters reference the operating contract, never restate it.
+4. **Docs split by role.** `AGENTS.md` + `harness/` + the adapters *operate*; `docs/SPEC.md` +
+   `docs/traceability.md` + `docs/id-ledger.json` *contract*; `docs/current-state.md` is
+   **non-authoritative working memory** (session handoff — regenerate its header with
+   `python3 harness/scripts/update_memory.py --state`). Adapters reference the operating
+   contract, never restate it.

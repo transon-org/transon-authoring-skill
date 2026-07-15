@@ -289,7 +289,7 @@ def test_fr_034_ac_037_result_command_builds_authoring_result_envelope(tmp_path)
 
 
 def test_fr_034_ac_037_result_refuse_builds_refusal_envelope(tmp_path):
-    """FR-034 (rev 2026-07-15) / AC-037(a) — `result --refuse --status S
+    """FR-034 / AC-037(a) — `result --refuse --status S
     --explanation T` machine-builds the template-less refusal AuthoringResult
     (`{schema_version, ok:false, status, explanation}`, exit 1) so a §2 refusal /
     review stop is emitted verbatim, not hand-written. The real-host gate saw the

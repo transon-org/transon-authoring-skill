@@ -1,6 +1,6 @@
 """FR-017 / OQ-017 — raw provider-API tool loop (non-gating offline smoke).
 
-*(rev 2026-07-14, AD-024 / OQ-027d)* This raw 3-tool ``messages.create`` loop is
+** This raw 3-tool ``messages.create`` loop is
 **no longer the NFR-010 gate harness** — the gate now runs the skill in the real
 host (Claude Agent SDK reference; :mod:`host_harness`). This module is **demoted
 to a non-gating offline smoke fixture**: retained and importable, exercised by
@@ -230,7 +230,7 @@ class AnthropicProvider:
         # Prompt-cache the stable system+tools prefix and growing transcript
         # (semantically transparent — no effect on output/scoring, NFR-002).
         system_param, messages_param = with_cache_control(system, messages)
-        # No sampling parameters (SPEC §11.8 rev 2026-07-12): the pinned
+        # No sampling parameters (SPEC §11.8): the pinned
         # model rejects non-default temperature/top_p/top_k with a 400.
         response = self._client.messages.create(
             model=self._model,

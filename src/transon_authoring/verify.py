@@ -157,7 +157,7 @@ def _validate_template(template: Any) -> dict | None:
     NO ``case_id`` (OQ-011: validate errors are never case-attributable).
     Non-``DefinitionError`` exceptions leaked by the pinned engine (e.g.
     ``TypeError`` for ``{"$": 5}``) map to the same "template invalid" class
-    per §11.2 stage 2 (rev 2026-07-11), message kept verbatim.
+    per §11.2 stage 2, message kept verbatim.
     """
     # Engine import stays local so importing this module never loads the
     # engine (the samples stage must be able to reject engine-free, AD-019).

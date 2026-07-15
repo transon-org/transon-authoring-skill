@@ -324,7 +324,7 @@ def test_fr_004_validate_debug_api_shape():
 
 
 def test_fr_004_validate_leaked_exception_maps_to_definition_error(monkeypatch):
-    # §11.2 stage 2 (rev 2026-07-11): a non-DefinitionError leak from the
+    # §11.2 stage 2: a non-DefinitionError leak from the
     # pinned engine's validate() (e.g. TypeError for {"$": 5}) is the
     # "template invalid" class — DefinitionError bucket, engine_type = actual
     # class, verbatim message, failed_stage "validate" — never exit-3 fodder.

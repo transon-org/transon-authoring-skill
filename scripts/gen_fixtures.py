@@ -196,7 +196,7 @@ _NO_DEFAULT = object()
 
 
 def _attr_accessors_ordered(template: Any) -> list[tuple[str, Any]]:
-    """OQ-026b(i) key-addition set (rev 2026-07-12) in template pre-order
+    """OQ-026b(i) key-addition set in template pre-order
     discovery order: EVERY ``attr`` node with a literal string ``name`` — a
     ``default`` member is not required. The value-typing default per name is
     the first pre-order node of that name carrying a ``default``
@@ -221,7 +221,7 @@ def _optional_names(accessors: list[tuple[str, Any]]) -> set[str]:
 
 
 def _addition_value(default: Any) -> Any:
-    """OQ-026b(i) (rev 2026-07-12): the first entry of the
+    """OQ-026b(i): the first entry of the
     substitution-table row keyed by the JSON type of the attr's literal
     ``default`` when one is present; no ``default`` at all, a non-literal
     default, or a literal whose JSON type has no table row take the string

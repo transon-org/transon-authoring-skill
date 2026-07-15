@@ -1,0 +1,8 @@
+---
+description: Narrative hygiene — no changelog comments, no history prose in contract docs
+alwaysApply: true
+---
+
+# Hygiene
+
+Follow the tool-neutral body in [`harness/skills/hygiene.md`](../../harness/skills/hygiene.md).

@@ -20,7 +20,7 @@ from typing import Any, Mapping
 _JSON_BLOCK_RE = re.compile(r"```json\n(.*?)```", re.DOTALL)
 
 # Textual pin extraction from the pyproject dependency line, e.g.
-#   dependencies = ["transon==0.1.7"]
+# dependencies = ["transon==0.1.7"]
 # PEP 440 version charset in the capture so quotes/brackets stay out of it.
 # Anchored to the ``dependencies`` line so a version string in a comment
 # elsewhere in the file can never repoint the pin.

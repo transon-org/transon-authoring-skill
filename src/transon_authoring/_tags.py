@@ -161,7 +161,7 @@ def encode_engine_value(v: Any) -> Any:
 
 def decode_expected(v: Any) -> Any:
     """Decode a SampleCase expectation per §11.4 ``dec``, recursively at every
-    nesting level (§11.0, rev 2026-07-11 / OQ-012), into the encoded domain:
+    nesting level (§11.0 / OQ-012), into the encoded domain:
 
     * ``NoContentRef`` → :data:`NO_CONTENT_REF` (module singleton marker);
     * ``LitRef(value)`` → ``enc(value)`` (literal data contains no sentinel);

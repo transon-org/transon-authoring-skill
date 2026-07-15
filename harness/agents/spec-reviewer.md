@@ -23,7 +23,13 @@ code; you report findings.
    - gates not weakened: diffs to `harness/scripts/`, hooks, CI, or test assertions that relax a
      check are findings unless separately justified;
    - determinism (NFR-002): no wall-clock, randomness, or env-dependent behavior in
-     `check_samples`/`verify`/match paths (the AD-017 timeout is the specified exception).
+     `check_samples`/`verify`/match paths (the AD-017 timeout is the specified exception);
+   - **hygiene** ([`harness/skills/hygiene.md`](../skills/hygiene.md)): flag changelog/narration
+     comments in code (`# changed…`, `# previously…`, `# rev 2026-…`); flag history prose or new
+     stacked `*(rev …)*` / `*(added …)*` markers added to contract docs; flag `docs/traceability.md`
+     Tests cells that carry status/closure essays instead of test references; flag session
+     narrative written anywhere except `docs/current-state.md`. Deleting pre-existing narrative
+     noise is not a finding — adding it is.
 4. Run the gates and the test suite yourself; report actual output, not the implementer's claims.
 
 ## Output
