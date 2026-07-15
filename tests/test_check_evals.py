@@ -64,8 +64,19 @@ def tmp_repo(tmp_path: Path) -> Path:
     `source_ref` to a repo file, which forced this fixture — and, fatally, the
     bundle-only eval job (OQ-027f(i) checks out nothing) — to carry `docs/`.
     Linting green from this docs-free root is now the regression guard that the
-    corpus lint runs inside the eval bundle."""
+    corpus lint runs inside the eval bundle.
+
+    The baseline is reset to EMPTY here so scoring/aggregation unit tests are
+    isolated from the production `evals/baseline.json` (now populated by the first
+    accepted green gate, 2026-07-15 — a fixture failing its majority would
+    otherwise add a spurious OQ-016f baseline-regression red). Tests exercising
+    the ratchet write their own `passing` list into this copy; the committed
+    baseline's correctness is covered by test_eval_artifacts."""
     shutil.copytree(REPO_ROOT / "evals", tmp_path / "evals")
+    (tmp_path / "evals" / "baseline.json").write_text(
+        json.dumps({"schema_version": "1.0", "passing": []}) + "\n",
+        encoding="utf-8",
+    )
     return tmp_path
 
 
@@ -1368,7 +1379,8 @@ def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
         assert all(e["score"] == "pass" for e in entry["episodes"])
     assert report["red"] == []
     assert "gate green" in err
-    # Without --update-baseline the committed baseline is untouched.
+    # Without --update-baseline the run never writes the baseline: the tmp_repo
+    # copy (reset to empty by the fixture) stays empty.
     baseline = json.loads(
         (tmp_repo / "evals" / "baseline.json").read_text(encoding="utf-8")
     )
