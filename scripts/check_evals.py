@@ -1068,7 +1068,19 @@ def run_evals(
     # full committed corpus; an unknown id is a config error (exit 2). A probe
     # that omits a whole bucket makes the aggregate red-by-construction — that is
     # expected: the run_summary telemetry, not the gate verdict, is the point.
-    if only:
+    # Distinguish `only is None` (no filter — full corpus) from `only == []` (an
+    # explicit but degenerate selection). The safeguard lives here at the gate
+    # boundary, not only in main()'s arg parsing, so no caller can silently
+    # full-run on an empty list (scripts/** — a gate must not pass on a degenerate
+    # input).
+    if only is not None:
+        if not only:
+            print(
+                "check-evals: config error: --only was given but names no "
+                "fixture ids",
+                file=sys.stderr,
+            )
+            return 2
         known = {fixture["id"] for fixture in fixtures}
         missing = [fid for fid in only if fid not in known]
         if missing:

@@ -1390,6 +1390,19 @@ def test_fr_035_only_with_update_baseline_is_config_error(tmp_repo, capsys):
     assert "cannot be combined with --update-baseline" in capsys.readouterr().err
 
 
+def test_fr_035_run_evals_rejects_empty_only_at_the_gate_boundary(
+    monkeypatch, tmp_repo, capsys
+):
+    # FR-035 — defense in depth: run_evals ITSELF rejects an explicit empty
+    # only=[] (returns 2 after the lint, before building the host / any provider
+    # work), so no caller — not just main() — can silently full-run on a
+    # degenerate selection. only=None (no filter) stays the full-corpus path.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
+    rc = check_evals.run_evals(tmp_repo, only=[])
+    assert rc == 2
+    assert "names no fixture ids" in capsys.readouterr().err
+
+
 def test_fr_017_ac_008_green_path_exit_0(monkeypatch, tmp_repo, capsys):
     # FR-017 / AC-008 — all fixtures majority-pass: exit 0 and one
     # schema-consistent JSON report on stdout (rates, per-fixture episodes
