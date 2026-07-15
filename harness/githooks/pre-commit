@@ -13,3 +13,18 @@ set -e
 python3 harness/scripts/check_traceability.py
 # Requirement IDs are append-only vs the committed ledger — never deleted or renumbered.
 python3 harness/scripts/check_append_only_ids.py
+
+# Non-blocking hygiene nudge: possible narrative / changelog comments in the
+# staged diff. Does not fail the commit — review and delete if they are noise.
+if command -v rg >/dev/null 2>&1; then
+  staged=$(git diff --cached --name-only --diff-filter=ACMR -- \
+    '*.py' '*.md' '*.ts' '*.tsx' '*.js' 2>/dev/null || true)
+  if [ -n "$staged" ]; then
+    if echo "$staged" | xargs rg -n --no-messages \
+      '(#|//|\*)\s*(NEW:|CHANGED|previously|this now|switched from|updated to|\(rev [0-9]{4})' \
+      2>/dev/null; then
+      echo "⚠ Possible narrative comments detected in staged files." >&2
+      echo "  Review against harness/skills/hygiene.md before committing." >&2
+    fi
+  fi
+fi
