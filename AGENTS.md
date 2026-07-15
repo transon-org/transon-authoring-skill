@@ -41,6 +41,12 @@ in SPEC §17.
     under `adapters/` are deliverables, SPEC §10). Harness procedures use distinct names
     (`run-milestone`, `implement-requirement`, `propose-spec-change`) — never name harness
     machinery after the product.
+11. **No narrative comments or doc history (hygiene).** Comments explain non-obvious intent, never
+    narrate what the code does or document the change being made. Contract docs carry current
+    state only — no stacked revision parentheticals, no superseded-design diaries. Traceability
+    cells list test references only. Session status goes to `docs/current-state.md`. When editing,
+    delete existing comments/prose that violate this — do not preserve them out of conservatism.
+    Full rule: [`harness/skills/hygiene.md`](harness/skills/hygiene.md).
 
 ## Stack
 

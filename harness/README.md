@@ -8,7 +8,9 @@ the CI (GitHub mandates the root).
   `spec-reviewer`)
 - `commands/` — command procedures (`run-milestone` · `implement-requirement` ·
   `propose-spec-change`)
-- `scripts/` — deterministic harness gates (`check_traceability` · `check_append_only_ids`)
+- `skills/` — tool-neutral skill / always-on rule bodies (`hygiene`)
+- `scripts/` — deterministic harness gates (`check_traceability` · `check_append_only_ids` ·
+  `update_memory`)
 - `githooks/` — binding git hooks (`pre-commit` · `commit-msg`); enable with
   `git config core.hooksPath harness/githooks`
 
