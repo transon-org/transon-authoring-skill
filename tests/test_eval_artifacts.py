@@ -25,6 +25,7 @@ from transon_authoring._ingress import load_document, schema_violations
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EVALS = REPO_ROOT / "evals"
 CASES_DIR = EVALS / "cases"
+SEEDS_DIR = EVALS / "seeds"
 
 FIXTURE_PATHS = sorted(CASES_DIR.glob("*.json"))
 
@@ -90,6 +91,46 @@ def test_fr_017_targets_start_at_the_initial_authoring_target():
     document = load_document(EVALS / "targets.json", "eval_targets.json")
     assert document["authoring_target"] == 0.80
     assert document["adversarial_target"] == 1.0
+
+
+def test_fr_001_ac_002_corpus_exercises_mode_variant_authoring():
+    """FR-001 / AC-002 — a mode/variant intent must drive the skill to the
+    CORRECT engine mode and still verify `matched`. The pinned engine's clearest
+    mode/variant is the `map` operator's FORM: dict-reconstruction (`key`/`value`)
+    vs list (`item`/`items`). The corpus witnesses AC-002 with two matched
+    fixtures whose intents force DIFFERENT map forms, both accepted green by the
+    §11.8 gate (run 29381271246):
+
+      - syn-map-dict-to-dict-items: "swap keys and values" → dict→dict, requiring
+        the `map` key/value mode (seed template `{$:map, key:{$:value},
+        value:{$:key}}`) — NOT the list `item` mode;
+      - syn-map-dict-to-list: dict→list, a different map form.
+
+    Choosing the wrong mode fails `verify` (the output shape would differ), so a
+    `matched` verdict IS proof the skill picked the right engine mode from the
+    NL intent. This pins the corpus coverage; the green gate is the behavioral
+    proof the skill authors it correctly."""
+    dict_mode = load_document(CASES_DIR / "syn-map-dict-to-dict-items.json", "eval_fixture.json")
+    list_mode = load_document(CASES_DIR / "syn-map-dict-to-list.json", "eval_fixture.json")
+    assert dict_mode["expect"] == "matched" and list_mode["expect"] == "matched"
+
+    # The dict→dict fixture's reference template uses the map dict key/value mode,
+    # distinct from the list `item` mode — an unambiguous mode/variant choice.
+    seed = json.loads(
+        (SEEDS_DIR / "syn-map-dict-to-dict-items.json").read_text(encoding="utf-8")
+    )
+    tmpl = seed["template"]
+    assert tmpl["$"] == "map"
+    assert "key" in tmpl and "value" in tmpl, "not the dict key/value map mode"
+    assert "item" not in tmpl and "items" not in tmpl, "must NOT be the list map mode"
+
+    # The two fixtures demand different map forms from their (dict) inputs: one
+    # reconstructs a dict, the other emits a list — so the corpus genuinely
+    # discriminates the mode/variant, not just one shape.
+    def first_output(fixture):
+        return fixture["samples"]["cases"][0]["output"]
+    assert isinstance(first_output(dict_mode), dict)
+    assert isinstance(first_output(list_mode), list)
 
 
 def test_fr_017_baseline_reflects_the_accepted_green_gate():
