@@ -28,7 +28,7 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Next steps (ordered)
 
-1. spec-reviewer pass on `a4-distribution`, then PR + merge.
+1. Merge PR #19 (`a4-distribution`; spec-reviewer verdict: merge — review nits 5–8 left open by decision).
 2. A5: versioned release notes with pin, first PyPI publish (OQ-020), optional editor sink demo — after re-running the real-host eval baseline (SKILL.md rendered text changed in A4).
 
 ## Open blockers / waiting-on
