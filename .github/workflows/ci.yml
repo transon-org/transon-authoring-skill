@@ -47,6 +47,13 @@ jobs:
       # you nothing; GitHub collapses the step anyway, so verbosity is free.
       # pyproject's addopts adds -ra + --durations=15 (which test is slow, and why).
       - run: python3 -m pytest -v
+      # NFR-007 / AC-005 + NFR-012 / AC-032 — adapter parity + shipped-skill
+      # self-sufficiency lint (offline text/tree scan).
+      - run: python3 scripts/check_parity.py
+      # FR-019 / NFR-009 / AC-007 / AC-009 — install rehearsal in temp dirs
+      # (both matrix OSes = the §11.9 supported platforms). Needs the installed
+      # package for the Cursor runtime smoke — provided by the pip install above.
+      - run: python3 scripts/check_install.py
 
   # NFR-003 / AC-020 — offline after install: verify/check/metadata need no
   # network once the pinned engine and package are installed. Install runs
