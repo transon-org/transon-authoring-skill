@@ -23,9 +23,10 @@ HTML comments (``<!-- … -->``, multi-line-aware) are stripped first (the
 NFR-012 comment exemption):
 
 1. Unshipped-path rule: any token under ``docs/``, ``harness/``,
-   ``scripts/``, ``evals/``, ``tests/``, ``src/``, or ``resources/`` is red.
-   Sole exact-string exemption: ``docs/SPECIFICATION.md`` (the engine's
-   external authority doc, AD-018).
+   ``scripts/``, ``evals/``, ``tests/``, ``src/``, or ``resources/`` is red;
+   a leading ``./`` does not defeat the rule. Sole exemption (after ``./``
+   normalization): ``docs/SPECIFICATION.md`` (the engine's external
+   authority doc, AD-018).
 2. Spec-section rule: the token ``SPEC.md`` is red (never false-positives on
    ``SPECIFICATION.md``); a ``§`` character is red unless the same line
    names ``SPECIFICATION.md``.
@@ -66,8 +67,13 @@ EXEMPT_PATH = "docs/SPECIFICATION.md"
 
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 RECIPE_RE = re.compile(r"python3?\s+-m\s+transon_authoring\s+([A-Za-z0-9_-]+)")
+# The optional leading `./` alternative keeps repo-relative references red
+# even when spelled `./docs/…` (a `./` prefix must not defeat the lint),
+# while paths under some other prefix (`foo/docs/…`, `../docs/…`) stay
+# unmatched as before.
 UNSHIPPED_PATH_RE = re.compile(
-    r"(?<![\w/-])(?:docs|harness|scripts|evals|tests|src|resources)/[\w./-]*"
+    r"(?:(?<![\w/.-])\./|(?<![\w/-]))"
+    r"(?:docs|harness|scripts|evals|tests|src|resources)/[\w./-]*"
 )
 SPEC_MD_RE = re.compile(r"\bSPEC\.md\b")
 ID_RE = re.compile(r"\b(?:FR|NFR|AC|AD|OQ|UC)-\d{3}\b")
@@ -106,6 +112,8 @@ def scan_self_sufficiency(rel: str, text: str, findings: list) -> None:
     for lineno, line in enumerate(rendered.splitlines(), 1):
         for match in UNSHIPPED_PATH_RE.finditer(line):
             token = match.group(0).rstrip(".")
+            if token.startswith("./"):
+                token = token[2:]  # normalize `./docs/…` -> `docs/…`
             if token == EXEMPT_PATH:
                 continue
             findings.append(

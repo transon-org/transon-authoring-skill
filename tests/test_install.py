@@ -8,6 +8,7 @@ root and home built under tmp_path — the real ``~`` is never touched.
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -179,6 +180,80 @@ def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):
     )
     assert other_manifest["engine_pin"] == "transon==9.9.9"
     assert other_manifest["skill_version"] == "1.2.3"
+
+
+def test_fr015_target_root_separates_source_and_destination(tmp_path: Path):
+    # FR-015 / §11.9 — `<repo>` in the destination table is the *target
+    # project root*: --target-root installs into a project distinct from the
+    # source checkout; skill files are still read from --repo-root. Uninstall
+    # honors the same flag. Default (other tests) stays the checkout root.
+    checkout = make_repo(tmp_path, name="checkout")
+    target = tmp_path / "project"
+    target.mkdir()
+
+    for script, tool_dir in (
+        (CLAUDE_INSTALLER, ".claude"),
+        (CURSOR_INSTALLER, ".cursor"),
+    ):
+        result = run_installer(
+            script,
+            "--repo-root",
+            str(checkout),
+            "--target-root",
+            str(target),
+        )
+        assert result.returncode == 0, result.stderr
+        dest = target / tool_dir / "skills" / "transon-authoring"
+        assert (dest / "SKILL.md").read_text(encoding="utf-8") == SKILL_BODY
+        assert (dest / ".install-manifest.json").is_file()
+        assert json.loads(result.stdout)["dest"] == str(dest)
+        # Nothing is created under the source checkout's tool directories.
+        assert not (checkout / tool_dir).exists()
+
+        uninstall = run_installer(
+            script,
+            "--repo-root",
+            str(checkout),
+            "--target-root",
+            str(target),
+            "--uninstall",
+        )
+        assert uninstall.returncode == 0, uninstall.stderr
+        assert not dest.exists()
+        report = json.loads(uninstall.stdout)
+        assert report["action"] == "uninstall"
+        assert report["files"] == ["SKILL.md", ".install-manifest.json"]
+
+
+def test_fr015_oq020_missing_runtime_hint_still_exit_0(tmp_path: Path):
+    # FR-015 / OQ-020 (§11.9 runtime-distribution paragraph) — when the
+    # runtime package is not importable, the installer prints a stderr hint
+    # naming `pip install transon-authoring` and still exits 0: the
+    # structural install completes and is valid without the runtime.
+    repo = make_repo(tmp_path)
+    shadow = tmp_path / "shadow" / "transon_authoring"
+    shadow.mkdir(parents=True)
+    (shadow / "__init__.py").write_text(
+        "raise ImportError('runtime not installed (test fixture)')\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(tmp_path / "shadow")
+
+    result = subprocess.run(
+        [sys.executable, str(CLAUDE_INSTALLER), "--repo-root", str(repo)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "pip install transon-authoring" in result.stderr
+
+    dest = repo / ".claude" / "skills" / "transon-authoring"
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == SKILL_BODY
+    manifest = json.loads((dest / ".install-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["files"] == ["SKILL.md", ".install-manifest.json"]
+    assert json.loads(result.stdout)["action"] == "install"
 
 
 def test_fr016_reinstall_idempotent_byte_identical(tmp_path: Path):

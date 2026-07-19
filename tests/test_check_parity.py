@@ -173,6 +173,16 @@ def test_ac032_red_on_other_docs_path(shipped_tree: Path):
     assert "docs/traceability.md" in result.stderr
 
 
+def test_ac032_red_on_dot_slash_prefixed_unshipped_path(shipped_tree: Path):
+    # NFR-012 / AC-032 — a leading `./` must not defeat the unshipped-path
+    # lint: `./docs/…` is the same repo-relative reference as `docs/…`.
+    # Paths under some other prefix (e.g. `foo/docs/`) stay unmatched.
+    append_to_skill(shipped_tree, "\nSee `./docs/notes.md` for details.\n")
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    assert "docs/notes.md" in result.stderr
+
+
 def test_ac032_red_on_spec_section_ref(shipped_tree: Path):
     # NFR-012 / AC-032 — a `§`-section reference into the (unshipped) spec
     # is red, as is naming SPEC.md itself.
@@ -205,9 +215,11 @@ def test_ac032_red_on_id_in_adapter_readme(shipped_tree: Path):
 def test_ac032_green_on_specification_md_exemption(shipped_tree: Path):
     # NFR-012 / AC-032 — the engine's own docs/SPECIFICATION.md (external
     # authority) is exempt; § on the same line as SPECIFICATION.md is too.
+    # The exemption is consistent for the `./`-prefixed spelling.
     append_to_skill(
         shipped_tree,
-        "\nConsult §3 of the engine `docs/SPECIFICATION.md` when unsure.\n",
+        "\nConsult §3 of the engine `docs/SPECIFICATION.md` when unsure.\n"
+        "Or open `./docs/SPECIFICATION.md` directly.\n",
     )
     result = run_check(shipped_tree)
     assert result.returncode == 0, result.stderr

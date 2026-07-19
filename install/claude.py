@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Claude Code skill installer (FR-015/FR-016, SPEC §11.9).
 
-Project scope: ``<repo-root>/.claude/skills/transon-authoring/``.
+Project scope: ``<target-root>/.claude/skills/transon-authoring/``
+(``--target-root``; default: the ``--repo-root`` checkout itself).
 Personal scope: ``~/.claude/skills/transon-authoring/`` (``--home`` overrides).
 Copies files only; the runtime comes from ``pip install transon-authoring``.
 """

@@ -6,8 +6,9 @@ imports from ``scripts/`` or ``src/``, and never runs ``pip`` (OQ-020) — the
 runtime package is installed separately (``pip install transon-authoring``).
 
 Strategy per §11.9: **copy** the adapter-listed files (never symlink) into the
-tool's skill directory and record ``.install-manifest.json`` listing owned
-paths + versions. Upgrade = re-run install (idempotent replace of owned
+tool's skill directory under the target project root (``--target-root``;
+default: the source checkout) and record ``.install-manifest.json`` listing
+owned paths + versions. Upgrade = re-run install (idempotent replace of owned
 files). Uninstall deletes only manifest paths.
 """
 
@@ -47,9 +48,10 @@ def _fail(prog: str, message: str) -> int:
     return 2
 
 
-def destination(tool: str, scope: str, repo_root: Path, home: Path) -> Path:
-    """§11.9 install-destination table."""
-    base = repo_root if scope == "project" else home
+def destination(tool: str, scope: str, target_root: Path, home: Path) -> Path:
+    """§11.9 install-destination table. ``<repo>`` there is the **target
+    project root** (``--target-root``; default: the source checkout root)."""
+    base = target_root if scope == "project" else home
     return base / f".{tool}" / "skills" / SKILL_DIR_NAME
 
 
@@ -173,12 +175,21 @@ def run(tool: str, argv: Optional[list[str]] = None) -> int:
         f"{tool} (SPEC §11.9; FR-015/FR-016). Copies files only; never runs pip.",
     )
     parser.add_argument("--scope", choices=("project", "personal"), default="project")
-    parser.add_argument("--repo-root", default=".", help="skill repo checkout root")
+    parser.add_argument(
+        "--repo-root", default=".", help="skill repo checkout root (source files)"
+    )
+    parser.add_argument(
+        "--target-root",
+        default=None,
+        help="target project root receiving the project-scope install "
+        "(default: --repo-root)",
+    )
     parser.add_argument("--home", default=None, help="override ~ (personal scope)")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()
+    target_root = Path(args.target_root).resolve() if args.target_root else repo_root
     home = Path(args.home).resolve() if args.home else Path.home()
 
     adapter_path = repo_root / "adapters" / tool / "adapter.json"
@@ -193,7 +204,7 @@ def run(tool: str, argv: Optional[list[str]] = None) -> int:
             f"supported: {', '.join(adapter['scopes'])})",
         )
 
-    dest = destination(tool, args.scope, repo_root, home)
+    dest = destination(tool, args.scope, target_root, home)
     if args.uninstall:
         return _uninstall(prog, tool, args.scope, dest)
     return _install(prog, tool, args.scope, adapter, repo_root, dest)
