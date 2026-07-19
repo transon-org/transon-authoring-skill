@@ -182,14 +182,27 @@ def check_adapter_parity(root: Path, findings: list) -> None:
     if claude is None or cursor is None:
         return
 
-    if claude.get("files") != cursor.get("files"):
+    files = {}
+    for tool, adapter in (("claude", claude), ("cursor", cursor)):
+        files[tool] = adapter.get("files")
+        if not isinstance(files[tool], list) or not files[tool]:
+            findings.append(
+                (
+                    f"adapters/{tool}/adapter.json",
+                    0,
+                    "adapter 'files' must be a non-empty list of shipped "
+                    "files (NFR-007 / AC-005)",
+                )
+            )
+    both_valid = all(isinstance(v, list) and v for v in files.values())
+    if both_valid and files["claude"] != files["cursor"]:
         findings.append(
             (
                 "adapters/claude/adapter.json",
                 0,
                 "adapter 'files' lists differ between claude "
-                f"({claude.get('files')!r}) and cursor "
-                f"({cursor.get('files')!r}) — adapters must ship the same "
+                f"({files['claude']!r}) and cursor "
+                f"({files['cursor']!r}) — adapters must ship the same "
                 "single-source surface (NFR-007 / AC-005)",
             )
         )

@@ -148,6 +148,19 @@ def test_ac005_red_on_files_list_mismatch(shipped_tree: Path):
     assert "files" in result.stderr
 
 
+def test_ac005_red_on_missing_files_key(shipped_tree: Path):
+    # NFR-007 / AC-005 — a missing/empty 'files' key must be red, never a
+    # vacuous None == None pass that the installer would crash on.
+    for tool in ("claude", "cursor"):
+        path = shipped_tree / "adapters" / tool / "adapter.json"
+        adapter = json.loads(path.read_text(encoding="utf-8"))
+        del adapter["files"]
+        path.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    assert result.stderr.count("non-empty list") == 2
+
+
 # --- Self-sufficiency half: NFR-012 / AC-032 -----------------------------
 
 
