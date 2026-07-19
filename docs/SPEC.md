@@ -358,7 +358,9 @@ No console-script product; no MCP.
 
 ### Installation
 - **FR-015** — Install procedures (§11.9): Claude personal/project skill paths; Cursor
-  `.cursor/skills/transon-authoring/`. Pin skill + engine versions in adapter metadata/comments.
+  `.cursor/skills/transon-authoring/`. Skill + engine versions and the snapshot hash are
+  recorded install-time in `.install-manifest.json` (§11.9), never stamped into adapter files —
+  the installed body stays byte-identical to the canonical `SKILL.md`.
 - **FR-016** — Idempotent install; uninstall removes **only** files this installer created
   (manifest recorded at install time).
 
@@ -1600,6 +1602,10 @@ prompt.
 |---|---|---|
 | Claude Code | `<repo>/.claude/skills/transon-authoring/` | `~/.claude/skills/transon-authoring/` |
 | Cursor | `<repo>/.cursor/skills/transon-authoring/` | n/a (project-only in v1) |
+
+`<repo>` in the table is the **target project root**: installers accept a target root distinct
+from the source checkout/archive they run from (default: the checkout root itself), so a project
+other than the checkout can receive the skill files.
 
 Strategy: **copy** adapter files (not symlink) for hermeticity. Record
 `.install-manifest.json` listing owned paths + versions. **Upgrade:** re-run install (idempotent
