@@ -40,7 +40,7 @@ Never skip a gate. Every final answer is exactly ONE `AuthoringResult` object (s
 a headless/single-turn run — that path IS your SampleSet: **skip the samples-LOCATION discovery
 below**, and do NOT run `init-config`, prompt, or create a config. Its `layout` is irrelevant when
 the path is explicit. But if `.transon-authoring.json` already exists at the repo root, read it ONCE
-for its `repair_attempts` budget only (used by the section 5.1 repair loop, FR-007/NFR-006) — never
+for its `repair_attempts` budget only (used by the section 5.1 repair loop) — never
 create or prompt for one. Then go straight to section 2. The location-discovery steps below apply
 ONLY when no samples path was given and you must find where SampleSet files live.
 
@@ -346,7 +346,7 @@ In an interactive session you MAY add an ordered `trace` array to the `Authoring
 `TraceEntry` per protocol step you performed. Each entry has a 1-based `seq` (contiguous, in
 conversation order), a `step` — one of `config`, `ground`, `propose`, `present-gaps`, `confirm`,
 `draft`, `verify`, `repair`, `review`, `result` — and a one-line `summary`. When the step ran a
-module command, copy that exact python -m transon_authoring invocation into `command` verbatim,
+module command, copy that exact module invocation into `command` verbatim,
 and record a step-local `outcome` (e.g. the reported gap count or the `failed_stage`).
 
 `trace` is DIAGNOSTIC ONLY. It never gates anything, is never treated as evidence that a step

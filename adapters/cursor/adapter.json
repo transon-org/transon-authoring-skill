@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "tool": "cursor",
+  "scopes": ["project"],
+  "files": ["SKILL.md"],
+  "exclusions": [
+    {
+      "capability": "personal scope",
+      "reason": "Cursor is project-only in v1 (install table)"
+    }
+  ]
+}
