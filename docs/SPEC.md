@@ -1695,7 +1695,26 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
   OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
-- **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
+- **A5 — Editor sink + release.** UC-002 demo (optional); versioned release notes with pin
+  (NFR-008); the **distribution-verification ladder** proving a fresh host works from the
+  shipped artifacts, not the checkout:
+  1. **Dist smoke (CI job):** build the wheel/sdist, `pip install` the **wheel** (never
+     editable) into a fresh venv, run the §11.6 surface offline against the committed
+     fixtures — catches packaging gaps (e.g. bundled `resources/` missing from the wheel)
+     that editable installs cannot see.
+  2. **Distribution-faithful eval provisioning:** the §11.8 harness workspace is installed
+     by `install/claude.py --target-root <workspace>` from a release-archive-shaped layout
+     before host auto-activation (OQ-027a), so the gate measures the installed-from-
+     distribution configuration; validated first by a targeted `--only` probe. Installed
+     bytes are byte-identical to canonical, so this alone forces no baseline reset — any
+     `harness.kind`/`version` change still follows §11.8 discipline.
+  3. **UC-004 human walkthrough (release checklist, NFR-008):** on a machine without the
+     repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
+     publish), run both installers, confirm the skill activates in real Claude Code and
+     real Cursor, author one template; outcome recorded in the release notes.
+  *Entry:* re-run the real-host eval baseline before release (A4's NFR-012 lint changed
+  `SKILL.md` rendered text). *DoD:* ladder steps 1–3 green/recorded; release notes cite
+  skill version, engine pin, snapshot hash; first PyPI publish per OQ-020.
 
 *Improvement-loop note (AD-021 / FR-029):* synthetic corpus growth and the small-model gate swap
 are **A3 deliverables** (folded into the A3 DoD above) — the harness they rely on is the A2
@@ -1893,4 +1912,4 @@ excluded from active coverage.
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4 | Optional editor sink demo. |
+| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough) + release notes/publish; editor sink demo optional. |
