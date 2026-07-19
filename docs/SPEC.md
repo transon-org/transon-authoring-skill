@@ -1718,8 +1718,8 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
      repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
      publish), run both installers, confirm the skill activates in real Claude Code and
      real Cursor, author one template; outcome recorded in the release notes.
-  *Entry:* re-run the real-host eval baseline before release (A4's NFR-012 lint changed
-  `SKILL.md` rendered text). *Resolve during A5:* **OQ-028** (Cursor personal scope).
+  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md`; re-run it before
+  release. *Resolve during A5:* **OQ-028** (Cursor personal scope).
   *DoD:* ladder steps 1–4 green/recorded; release notes cite skill version, engine pin,
   snapshot hash; first PyPI publish per OQ-020.
 
@@ -1746,7 +1746,7 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
 - **OQ-005** — **Resolved (2026-07-09):** no in-surface gate/disclosure (AD-013).
 - **OQ-006** — **Resolved (2026-07-09):** authoring ≥80%→95%; adversarial refuse =100%.
 - **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP.
-- **OQ-008** — **Resolved (2026-07-10; revised 2026-07-19):** Cursor's deterministic CI claim
+- **OQ-008** — **Resolved (2026-07-19):** Cursor's deterministic CI claim
   stays structural + runtime smoke — the Cursor CLI (`cursor-agent`) still exposes no
   credential-free command to enumerate discovered skills. Its headless mode (`agent -p`) does
   make a **model-invoking activation smoke** possible: allowed only at the credentialed
