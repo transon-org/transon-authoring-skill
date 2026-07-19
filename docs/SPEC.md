@@ -577,9 +577,13 @@ No console-script product; no MCP.
   convention.
 
 ### Install CI
-- **FR-019** — CI install checks:
-  - **Claude Code:** structural install at documented path; plus headless listing **if** OQ-010
-    resolves positively — until then claim **install integrity**, not “discoverability.”
+- **FR-019** — CI install checks (`check_install`; offline, deterministic):
+  - **Claude Code:** structural install at the §11.9 path — installed `SKILL.md` byte-identical
+    to the canonical root file, complete `.install-manifest.json`, idempotent re-install,
+    uninstall removes only manifest paths — plus the OQ-010 discoverability-precondition lint
+    (frontmatter parses; `name` equals the skill directory name; non-empty `description`).
+    No headless listing exists (OQ-010): CI claims **install integrity + discoverability
+    preconditions**, never “discoverability.”
   - **Cursor:** structural adapter install + `python -m transon_authoring metadata` runtime smoke.
     Do **not** claim Cursor “discovered/ingested” the skill (OQ-008).
 
@@ -611,7 +615,8 @@ No console-script product; no MCP.
 - **NFR-007 — Adapter parity.** Claude/Cursor equal capability or documented exclusion.
 - **NFR-008 — Versioned releases.** Record skill version, engine pin, snapshot hash.
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
-  smoke**, not host “discoverability,” except where OQ-010 enables a Claude listing check.
+  smoke**, not host “discoverability”; the Claude check adds only the OQ-010
+  discoverability-precondition lint.
 - **NFR-010 — Eval regression gate.** Targets (OQ-006): authoring ≥80%→95% ratchet; adversarial
   refuse-class =100%. Exact formula and runner: §11.8 / AD-020/AD-024. The pinned
   `runner.json.harness` (real host + version) is part of gate identity alongside the model pin;
@@ -644,8 +649,9 @@ No console-script product; no MCP.
 - **AC-006** — Pin/metadata change without sync → drift gate red until `sync-metadata`.
 - **AC-007** — Clean install/uninstall idempotent on supported platforms (§11.9).
 - **AC-008** — Eval rate below target or fixture regression → gate red (NFR-010).
-- **AC-009** — CI: Cursor structural install + module smoke; Claude structural install (listing
-  only if OQ-010 allows). No false “discoverability” claims.
+- **AC-009** — CI: Cursor structural install + module smoke; Claude structural install + the
+  OQ-010 frontmatter discoverability-precondition lint (no headless listing exists). No false
+  “discoverability” claims.
 - **AC-010** — Unmet obligations → gap codes; skill presents waivers; user accepts/rejects.
 - **AC-011** — Conversational confirm (skill body, A3) writes `confirmation` and binds
   `content_fingerprint` via the OQ-015 acquisition path. The schema-testable half is AC-029
@@ -778,7 +784,8 @@ No console-script product; no MCP.
   PR with template + SampleSet (FR-030).
 - **UC-002** — Cursor same path; optional handoff to blockly import (no in-surface guarantee).
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
-- **UC-004** — New engineer installs adapters, first-run layout prompt, authors successfully.
+- **UC-004** — New engineer: `pip install transon-authoring`, installs adapters via `install/`,
+  first-run layout prompt, authors successfully.
 
 ---
 
@@ -1600,6 +1607,12 @@ replace of owned files). **Uninstall:** delete only manifest paths.
 
 Supported platforms for install scripts: macOS and Linux (Windows best-effort; not a v1 gate).
 
+**Runtime package distribution (OQ-020):** `install/claude.py` / `install/cursor.py` copy skill
+files only and never run `pip`. The runtime (`python -m transon_authoring`) is installed
+separately from public PyPI (`pip install transon-authoring`, which pins `transon==0.1.7`
+transitively). If `transon_authoring` is not importable at skill-file install time, the installer
+prints a stderr hint and still exits 0 (structural install is valid without the runtime).
+
 ---
 
 ## 12. Governance
@@ -1673,8 +1686,8 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
   satisfied vacuously — real-use corpus growth (FR-018b) is ongoing and gates nothing). The live
   authoring-target run depends on the OQ-027f isolation contract being in force in the dispatch
   workflow.
-- **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI; resolve
-  OQ-010 and **OQ-020** (Python package distribution channel). *DoD:* AC-005/007/009/032
+- **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
+  OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
 - **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
 
@@ -1703,8 +1716,11 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
 - **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP.
 - **OQ-008** — **Resolved (2026-07-10):** Cursor = structural + runtime smoke; no ingest claim.
 - **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
-- **OQ-010** — *(open; A4 only)* Claude Code headless skill listing. Until resolved, CI asserts
-  **install integrity** only for Claude (FR-019 / AC-009). Does **not** block A0–A3.
+- **OQ-010** — **Resolved (2026-07-19):** Claude Code exposes no supported, credential-free,
+  deterministic headless command that lists installed skills without invoking the model. CI
+  asserts **install integrity + discoverability preconditions** (installed frontmatter parses;
+  `name` matches the skill directory; non-empty `description`) and never claims host
+  discoverability. Normative in FR-019 / NFR-009 / AC-009.
 - **OQ-011** — **Resolved (2026-07-11):** Per-case attribution on `EngineError`/`DiffEntry`;
   fail-fast between stages, report every failure within `dry_run`/`match`; root `Verdict.writes`
   never emitted in v1. Normative in §11.2.
@@ -1731,9 +1747,11 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   `dry_run`). Normative in §11.1.
 - **OQ-019** — **Resolved (2026-07-11):** Python floor `>=3.10` in `pyproject.toml`; pin-reading
   scripts must not import `tomllib`.
-- **OQ-020** — *(open; A4)* Distribution channel for the Python package itself (PyPI name
-  `transon-authoring` vs private index). §11.9 covers skill-file install only; UC-004's install
-  story depends on this. Does **not** block A0–A3.
+- **OQ-020** — **Resolved (2026-07-19):** the runtime package ships on **public PyPI** as
+  `transon-authoring` (same index as the pinned engine); no private index. Skill files install
+  from a checkout/release archive via `install/` (§11.9); the installed skill needs only
+  `pip install transon-authoring` for its module recipe. Normative in §11.9; first publish is
+  an A5 release-checklist item (NFR-008).
 - **OQ-021** — **Resolved (2026-07-11):** Sidecar consistency is part of `check_snapshot`
   (dangling keys fail; uncovered examples allowed with count report). Normative in FR-010 /
   NFR-004.
@@ -1868,5 +1886,5 @@ excluded from active coverage.
 | **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
-| A4 | After A3; needs OQ-010 + OQ-020 decisions | Non-blocking for A0–A3. NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
+| A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
 | A5 | After A4 | Optional editor sink demo. |
