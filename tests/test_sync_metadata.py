@@ -161,6 +161,10 @@ def test_fr_011_missing_engine_exits_2(tmp_root: Path, monkeypatch, capsys):
     import importlib.metadata
     import importlib.util
 
+    # The script does `from _shared import ...`, which resolves via sys.path
+    # when run as a subprocess (script dir is prepended automatically) but not
+    # under spec_from_file_location — prepend it so this file passes in isolation.
+    monkeypatch.syspath_prepend(str(SCRIPT.parent))
     spec = importlib.util.spec_from_file_location("sync_metadata_script", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
