@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "tool": "claude",
+  "scopes": ["project", "personal"],
+  "files": ["SKILL.md"],
+  "exclusions": []
+}
