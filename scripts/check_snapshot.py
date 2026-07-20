@@ -29,6 +29,10 @@ Checks:
    snapshot examples WITHOUT sidecar entries are allowed — the gate stays
    green but reports the uncovered count on stderr (full sorted name list
    under ``--verbose``).
+6. Language Reference (FR-036): ``resources/language-reference.json`` is
+   byte-equal to ``canonical_bytes(get_language_reference())`` under the pin;
+   its provenance ``reference_sha256`` matches the file bytes; and the
+   provenance ``reference_version`` is present with a supported major.
 
 Exit codes: 0 all green, 1 any check failed.
 """
@@ -45,9 +49,11 @@ from _shared import ensure_src, report_failures
 
 ensure_src()
 from transon_authoring._snapshot import (  # noqa: E402
+    SUPPORTED_REFERENCE_MAJOR,
     canonical_bytes,
     parse_provenance,
     read_pin,
+    reference_major,
     sha256_hex,
 )
 
@@ -84,12 +90,15 @@ def main(argv: list[str] | None = None) -> int:
         fail(pin_error)
 
     live_bytes: bytes | None = None
+    live_reference_bytes: bytes | None = None
     installed: str | None = None
     try:
         from transon.metadata import get_editor_metadata
+        from transon.reference import get_language_reference
 
         installed = installed_version("transon")
         live_bytes = canonical_bytes(get_editor_metadata())
+        live_reference_bytes = canonical_bytes(get_language_reference())
     except Exception as exc:  # pragma: no cover - engine not installed
         fail(f"pinned engine unavailable: {exc}")
     if pin is not None and installed is not None and installed != pin:
@@ -223,6 +232,45 @@ def main(argv: list[str] | None = None) -> int:
             if args.verbose:
                 for name in uncovered:
                     print(f"check-snapshot:   uncovered: {name}", file=sys.stderr)
+
+    # --- Check 6: Language Reference snapshot drift + provenance (FR-036). --
+    reference_path = root / "resources" / "language-reference.json"
+    reference_bytes: bytes | None = None
+    if not reference_path.is_file():
+        fail(f"missing {reference_path}; run scripts/sync_metadata.py (FR-036)")
+    else:
+        reference_bytes = reference_path.read_bytes()
+        if live_reference_bytes is not None and reference_bytes != live_reference_bytes:
+            fail(
+                "resources/language-reference.json drifted: the bundle no "
+                "longer matches get_language_reference() from the pinned "
+                "engine; run scripts/sync_metadata.py to re-sync (NFR-004 / "
+                "FR-036 / AC-039)"
+            )
+    if provenance is not None:
+        if reference_bytes is not None and provenance.get(
+            "reference_sha256"
+        ) != sha256_hex(reference_bytes):
+            fail(
+                "provenance reference_sha256 does not match the actual "
+                "language-reference.json bytes; run scripts/sync_metadata.py "
+                "(FR-036)"
+            )
+        prov_reference_version = provenance.get("reference_version")
+        if prov_reference_version is None:
+            fail(
+                "provenance is missing reference_version; run "
+                "scripts/sync_metadata.py (FR-036)"
+            )
+        else:
+            prov_major = reference_major(prov_reference_version)
+            if prov_major is None or prov_major > SUPPORTED_REFERENCE_MAJOR:
+                fail(
+                    "provenance reference_version "
+                    f"{prov_reference_version!r} has an unsupported major "
+                    f"(supported major {SUPPORTED_REFERENCE_MAJOR}); consumers "
+                    "MUST fail loudly (FR-036 / AC-039)"
+                )
 
     return report_failures("check-snapshot", failures, "check(s) failed")
 

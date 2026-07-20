@@ -1,0 +1,27 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "GitHub push webhook payload with a `refs/heads/` ref — constructed from the public GitHub API reference (AD-023 real-world pack §6)",
+  "template": {
+    "$": "object",
+    "fields": {
+      "repo": {
+        "$": "attr",
+        "names": [
+          "repository",
+          "full_name"
+        ]
+      },
+      "branch": {
+        "$": "call",
+        "name": "removeprefix",
+        "values": [
+          {
+            "$": "attr",
+            "name": "ref"
+          },
+          "refs/heads/"
+        ]
+      }
+    }
+  }
+}

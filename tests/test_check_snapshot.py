@@ -1,7 +1,7 @@
 """NFR-004 / AC-006 / OQ-021 — `check_snapshot` drift gate.
 
 `check_snapshot` must fail when the bundled snapshot differs from
-`get_editor_metadata()` under the pinned `transon==0.1.7` (SPEC §8 NFR-004,
+`get_editor_metadata()` under the pinned `transon==0.2.3` (SPEC §8 NFR-004,
 §9 AC-006, §11.7 pin/drift) and must enforce the OQ-021 sidecar consistency
 rules (SPEC §15). It never tracks unpinned newer releases (AD-007) and never
 compares `synced_at` (determinism, FR-011).
@@ -30,7 +30,7 @@ PYPROJECT_PINNED = """\
 [project]
 name = "tmp-check-target"
 version = "0.0.0"
-dependencies = ["transon==0.1.7"]
+dependencies = ["transon==0.2.3"]
 """
 
 
@@ -150,17 +150,77 @@ def test_nfr_004_oq_021_uncovered_examples_stay_green_with_count(synced_root: Pa
         assert name in verbose.stderr
 
 
+def test_fr_036_reference_drift_red(synced_root: Path):
+    # FR-036 / AC-039(b) — one changed byte in the bundled Language Reference
+    # → gate red with the drift diagnostic (same discipline as the metadata
+    # snapshot).
+    reference_path = synced_root / "resources" / "language-reference.json"
+    original = reference_path.read_bytes()
+    drifted = original.replace(
+        b'"engine_version": "0.2.3"', b'"engine_version": "0.2.4"', 1
+    )
+    assert drifted != original
+    reference_path.write_bytes(drifted)
+
+    result = run_check(synced_root)
+    assert result.returncode == 1
+    assert "language-reference.json" in result.stderr
+    assert "drift" in result.stderr
+
+
+def test_ac_039_reference_provenance_stale_red(synced_root: Path):
+    # FR-036 / AC-039(b) — provenance reference_sha256 must match the actual
+    # language-reference.json bytes.
+    provenance_path = synced_root / "resources" / "metadata-snapshot.md"
+    md_text = provenance_path.read_text(encoding="utf-8")
+    prov = provenance_block(md_text)
+    stale = md_text.replace(prov["reference_sha256"], "0" * 64)
+    assert stale != md_text
+    provenance_path.write_text(stale, encoding="utf-8")
+
+    result = run_check(synced_root)
+    assert result.returncode == 1
+    assert "reference_sha256" in result.stderr
+
+
+def test_ac_039_unsupported_reference_major_red(synced_root: Path):
+    # FR-036 / AC-039(b) — a bundled reference_version whose major exceeds the
+    # supported major (1) is red; consumers MUST fail loudly on an unsupported
+    # major.
+    reference_path = synced_root / "resources" / "language-reference.json"
+    provenance_path = synced_root / "resources" / "metadata-snapshot.md"
+
+    reference = json.loads(reference_path.read_bytes().decode("utf-8"))
+    reference["reference_version"] = "2.0"
+    new_bytes = (json.dumps(reference, **CANONICAL_KWARGS) + "\n").encode("utf-8")
+    reference_path.write_bytes(new_bytes)
+
+    md_text = provenance_path.read_text(encoding="utf-8")
+    prov = provenance_block(md_text)
+    md_text = md_text.replace(
+        prov["reference_sha256"], hashlib.sha256(new_bytes).hexdigest()
+    )
+    md_text = md_text.replace(
+        '"reference_version": "1.0"', '"reference_version": "2.0"'
+    )
+    provenance_path.write_text(md_text, encoding="utf-8")
+
+    result = run_check(synced_root)
+    assert result.returncode == 1
+    assert "major" in result.stderr
+
+
 def test_nfr_004_off_pin_root_is_red(synced_root: Path):
     # NFR-004 — installed engine != pyproject pin is red; the gate never
     # tracks unpinned newer releases (AD-007), only the pin itself.
     pyproject = synced_root / "pyproject.toml"
     pyproject.write_text(
-        PYPROJECT_PINNED.replace("transon==0.1.7", "transon==9.9.9"), encoding="utf-8"
+        PYPROJECT_PINNED.replace("transon==0.2.3", "transon==9.9.9"), encoding="utf-8"
     )
     result = run_check(synced_root)
     assert result.returncode == 1
     assert "9.9.9" in result.stderr
-    assert "0.1.7" in result.stderr
+    assert "0.2.3" in result.stderr
 
 
 def test_nfr_004_repo_root_is_green():

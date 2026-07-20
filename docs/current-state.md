@@ -8,14 +8,18 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `b5469fa` — ci: run check_parity + check_install in the tests matrix; NFR-008 manifest citation |
-| Branch | `a4-distribution` |
-| Engine pin | `transon==0.1.7` (see [pyproject.toml](../pyproject.toml)) |
+| Repo HEAD | `941ceb6` — docs: absorb RFC-003 into SPEC — repin 0.2.3, Language Reference grounding (FR-036/AC-039/AD-026) |
+| Branch | `rfc-003-engine-repin-language-reference` |
+| Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
 
-_**A4 distribution slice (branch `a4-distribution`, 2026-07-19).** OQ-010 resolved (no headless skill listing in Claude Code — verified against the current CLI; gate asserts install integrity + discoverability preconditions) and OQ-020 resolved (public PyPI `transon-authoring`). Landed: `adapters/` (single-source, no body copies), `install/claude.py`/`install/cursor.py` (idempotent, manifest-scoped uninstall, NFR-008 triplet in `.install-manifest.json`), `scripts/check_parity.py` (parity + NFR-012 self-sufficiency lint), `scripts/check_install.py` (temp-dir rehearsal + OQ-010 frontmatter lint + Cursor smoke), CI wiring on both matrix OSes. Full suite 647 passed; all gates green. **Note:** the NFR-012 lint forced two small rendered-text edits to `SKILL.md` — re-run the real-host eval baseline before the A5 release._
+_**RFC-003 in progress (branch `rfc-003-engine-repin-language-reference`, 2026-07-20).** Re-pin engine `0.1.7`→`0.2.3` + ground the shipped skill in the packaged Language Reference via `get_language_reference()` instead of the engine-repo `docs/SPECIFICATION.md`. **Committed:** T1 SPEC absorption (`941ceb6`) — FR-036/AC-039/AD-026, pin bump across AD-007/§11.7/§11.9/AGENTS, AD-018 authority swap, NFR-012/AC-032 drop the SPECIFICATION.md exemption, §11.8 pin+corpus baseline-reset policy, AD-023 refuse-capability claim made pin-neutral; RFC marked Accepted. **Uncommitted in working tree:** T2 repin mechanics — pyproject pin bumped, `.venv` on 0.2.3, snapshot regenerated (121→163 examples), all hard-coded `0.1.7` test/src literals updated, brittle example-count assertion de-frozen. `check_snapshot` + `check_evals --lint` + unit suites green; the `NO_CONTENT` deep-copy fix and new functions broke NO existing behavior. **One red:** `test_fr_029_v1_wave_covers_all_tag_families` — 0.2.3 adds a `split` tag family needing one new synthetic fixture (AD-021 intent pending user)._
+
+_**RFC-003 implementation complete + committed (user accepted intents 2026-07-20).** Repin 0.2.3, FR-036 language subcommand + snapshot/drift (`resources/language-reference.json`, engine-free), authority swap (SKILL.md → `language` recipe; `check_parity` drops the SPECIFICATION.md exemption), and corpus regen. Corpus: 3 now-satisfiable refuses converted to constructed matched fixtures (`order-uppercase-currency`, `stripe-epoch-to-iso`, `github-branch-from-ref` — engine-verified); split-family synthetic `syn-split-string` minted (covers the new `split` tag family); 3 genuine-gap refuses added (`refuse-sha256-checksum`, `refuse-random-winner`, `refuse-recursive-flatten` — sha256/random/arbitrary-recursion confirmed absent at 0.2.3). Adversarial bucket = 5. **`evals/baseline.json` reset to empty (§11.8 pin+corpus reset)** — repopulates only from the next green live run. Full suite 664 passed; all gates green._
+
+_**Still pending:** spec-reviewer pass → PR. **STOP before the ~$17 credentialed live real-host gate** — it is the A5-entry baseline dispatch (§11.8), user-run, and doubles as the RFC-003 baseline repopulation. SKILL.md rendered text changed (authority swap) so the eval baseline rerun is doubly required before A5 release._
 
 _**Prior behavioral closure (2026-07-15, from former traceability essays).** First green §11.8 real-host gate (run 29381271246) — authoring 0.977 (43/44) ≥ 0.80, adversarial 1.000, correction 1.000; baseline accepted (`f672bcf`)._
 
@@ -28,12 +32,13 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Next steps (ordered)
 
-1. Merge PR #19 (`a4-distribution`; spec-reviewer verdict: merge — review nits 5–8 left open by decision).
-2. A5: versioned release notes with pin, first PyPI publish (OQ-020), optional editor sink demo — after re-running the real-host eval baseline (SKILL.md rendered text changed in A4).
+1. RFC-003: collect the user's split-family + 3 refuse `intent_nl` texts (AD-021), then finish deterministic work — FR-036 language subcommand (in flight), convert 3 satisfiable refuses to matched + mint split fixture + 3 new genuine-gap refuses, T5 authority swap (SKILL.md → `language` recipe, drop `check_parity` SPECIFICATION.md exemption, add `language` to allowlist). Land green, spec-reviewer, PR. STOP before the ~$17 credentialed live gate (A5 entry).
+2. A4 PRs #20/#21/#22 already merged into main; RFC-003 branched off the merged main.
+3. A5: versioned release notes with pin, first PyPI publish (OQ-020), distribution-verification ladder, optional editor sink — after the RFC-003 baseline rerun (which doubles as the A5 entry, §11.8).
 
 ## Open blockers / waiting-on
 
-- None.
+- **RFC-003:** awaiting user AD-021 intent texts (split fixture + 3 refuse fixtures). FR-036 implementer running in background. Live gate is user-dispatched spend.
 
 ## Do-not-relitigate (pointers, not copies)
 

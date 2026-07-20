@@ -3,7 +3,7 @@ engine and records provenance (SPEC §7 Grounding & corpus, §11.7 pin/drift,
 OQ-021 sidecar/provenance interplay).
 
 The script under test is run via subprocess with the same interpreter pytest
-runs under (the repo .venv, which has the pinned ``transon==0.1.7``), so exit
+runs under (the repo .venv, which has the pinned ``transon==0.2.3``), so exit
 codes are observed exactly as CI would see them.
 """
 
@@ -25,10 +25,10 @@ PYPROJECT_PINNED = """\
 [project]
 name = "tmp-sync-target"
 version = "0.0.0"
-dependencies = ["transon==0.1.7"]
+dependencies = ["transon==0.2.3"]
 """
 
-PYPROJECT_MISMATCHED = PYPROJECT_PINNED.replace("transon==0.1.7", "transon==9.9.9")
+PYPROJECT_MISMATCHED = PYPROJECT_PINNED.replace("transon==0.2.3", "transon==9.9.9")
 
 
 def run_sync(root: Path) -> subprocess.CompletedProcess:
@@ -78,19 +78,56 @@ def test_fr_011_sync_is_canonical_and_records_provenance(tmp_root: Path):
     recanonical = (json.dumps(snapshot, **CANONICAL_KWARGS) + "\n").encode("utf-8")
     assert first_bytes == recanonical
 
-    # Snapshot comes from the pinned engine (SPEC §11.7 A0 pin).
-    assert snapshot["engine_version"] == "0.1.7"
+    # Snapshot comes from the pinned engine (SPEC §11.7 pin).
+    assert snapshot["engine_version"] == "0.2.3"
     assert snapshot["metadata_version"] == "3.0"
 
     # Provenance records content hashes over the exact file bytes.
     prov = provenance_block(provenance_path.read_text(encoding="utf-8"))
     assert prov["schema_version"] == "1.0"
-    assert prov["engine_version"] == "0.1.7"
+    assert prov["engine_version"] == "0.2.3"
     assert prov["metadata_version"] == "3.0"
     assert prov["algorithm"] == "sha256"
     assert prov["snapshot_sha256"] == hashlib.sha256(first_bytes).hexdigest()
     assert prov["sidecar_sha256"] == hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
     # synced_at is informational only (never gate-compared) but must be UTC ISO-8601 Z.
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", prov["synced_at"])
+
+
+def test_fr_036_dumps_language_reference_with_provenance(tmp_root: Path):
+    # FR-036 / AC-039 — sync additionally dumps get_language_reference() to
+    # resources/language-reference.json (canonical) and records its sha256 +
+    # reference_version in the provenance, treated exactly like the metadata
+    # snapshot.
+    from transon.reference import get_language_reference
+
+    result = run_sync(tmp_root)
+    assert result.returncode == 0, result.stderr
+
+    reference_path = tmp_root / "resources" / "language-reference.json"
+    reference_bytes = reference_path.read_bytes()
+
+    # Canonical, deterministic serialization of the pinned engine reference.
+    assert reference_bytes.endswith(b"\n")
+    assert b"\r" not in reference_bytes
+    expected = (
+        json.dumps(get_language_reference(), **CANONICAL_KWARGS) + "\n"
+    ).encode("utf-8")
+    assert reference_bytes == expected
+
+    reference = json.loads(reference_bytes.decode("utf-8"))
+    assert reference["reference_version"] == "1.0"
+    assert reference["engine_version"] == "0.2.3"
+    assert reference["format"] == "markdown"
+    assert reference["content"]
+    assert reference["sections"]
+
+    prov = provenance_block(
+        (tmp_root / "resources" / "metadata-snapshot.md").read_text(encoding="utf-8")
+    )
+    assert prov["reference_sha256"] == hashlib.sha256(reference_bytes).hexdigest()
+    assert prov["reference_version"] == "1.0"
+    # synced_at stays informational and last (never gate-compared).
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", prov["synced_at"])
 
 
@@ -139,7 +176,7 @@ def test_fr_011_pin_mismatch_exits_2(tmp_path: Path):
     result = run_sync(tmp_path)
     assert result.returncode == 2
     assert "9.9.9" in result.stderr
-    assert "0.1.7" in result.stderr
+    assert "0.2.3" in result.stderr
     # Nothing gets written on pin mismatch.
     assert not (tmp_path / "resources").exists()
 
@@ -176,5 +213,5 @@ def test_fr_011_missing_engine_exits_2(tmp_root: Path, monkeypatch, capsys):
     assert module.main(["--root", str(tmp_root)]) == 2
     stderr = capsys.readouterr().err
     assert "not installed" in stderr
-    assert "0.1.7" in stderr
+    assert "0.2.3" in stderr
     assert not (tmp_root / "resources").exists()

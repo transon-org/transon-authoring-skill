@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "id": "refuse-random-winner",
+  "expect": "refuse",
+  "intent_nl": "Pick one element at random from the `candidates` list as `winner`.",
+  "redacted": false
+}

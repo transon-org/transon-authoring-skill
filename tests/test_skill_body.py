@@ -90,10 +90,12 @@ def test_fr_001_skill_body_documents_grounded_flow():
     assert "python -m transon_authoring metadata" in body
     assert "python -m transon_authoring examples search" in body
 
-    # AD-018 authority order: engine pin -> engine spec -> snapshot -> sidecar
-    # hints, in that order, in one statement.
+    # AD-018 authority order (AD-026 authority swap): engine pin -> the
+    # engine's Language Reference (via the `language` module recipe, not the
+    # engine-repo SPECIFICATION.md) -> snapshot -> sidecar hints, in that
+    # order, in one statement.
     assert _has(
-        r"pinned\s+running\s+engine.{0,200}?SPECIFICATION\.md"
+        r"pinned\s+running\s+engine.{0,200}?[Ll]anguage\s+[Rr]eference"
         r".{0,200}?snapshot.{0,200}?sidecar.{0,60}?hints\s+only",
         body,
     ), "AD-018 authority precedence order not stated in SKILL.md"
@@ -157,6 +159,28 @@ def test_fr_001_skill_body_documents_grounded_flow():
     # profile-rejected covers the skill half of AC-027: stop without verify.
     assert _has(
         r"profile-rejected.{0,300}?without\s+calling\s+verify", result_section
+    )
+
+
+def test_ad_026_skill_cites_language_reference_not_specification_md():
+    """AD-026 / NFR-012 authority swap: the shipped SKILL.md cites the engine's
+    Language Reference through the `python -m transon_authoring language`
+    module recipe (with `--list-sections` / `--section <id>`) and never names
+    the engine-repo `docs/SPECIFICATION.md` (a maintainer-only design-time
+    authority, no longer the shipped skill's authority)."""
+    body = _body()
+    assert "docs/SPECIFICATION.md" not in body, (
+        "SKILL.md must not cite the engine-repo docs/SPECIFICATION.md "
+        "(AD-026 authority swap)"
+    )
+    assert "python -m transon_authoring language" in body, (
+        "SKILL.md must cite the `language` module recipe as the authority"
+    )
+    assert "--list-sections" in body and "--section" in body, (
+        "SKILL.md must document `language --list-sections` / `--section <id>`"
+    )
+    assert _has(r"[Ll]anguage\s+[Rr]eference", body), (
+        "SKILL.md must name the engine's Language Reference"
     )
 
 

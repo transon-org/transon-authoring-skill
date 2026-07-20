@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "id": "order-uppercase-currency",
+  "expect": "matched",
+  "intent_nl": "Uppercase the three-letter `currency` field of the order — turn \"usd\" into \"USD\".",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Uppercase the three-letter `currency` field of the order — turn \"usd\" into \"USD\".",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Uppercase the lowercase currency code of an order record.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "id": "order_9F3K2ZlQ",
+          "object": "order",
+          "amount_total": 8900,
+          "currency": "usd",
+          "status": "paid"
+        },
+        "output": {
+          "orderId": "order_9F3K2ZlQ",
+          "currency": "USD"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "69828a258e5aa2214edc6fceec1d63bce54638587f3114675b664d9e8823badb"
+    }
+  },
+  "redacted": false
+}

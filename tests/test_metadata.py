@@ -26,14 +26,16 @@ def test_fr_009_bundled_snapshot_is_grounding_catalog():
     metadata = get_metadata()
     assert metadata == committed
 
-    # §11.7 A0 pin: transon==0.1.7, metadata_version "3.0".
+    # §11.7 pin: transon==0.2.3, metadata_version "3.0".
     assert metadata["metadata_version"] == "3.0"
-    assert metadata["engine_version"] == "0.1.7"
+    assert metadata["engine_version"] == "0.2.3"
 
-    # FR-010 / AC-022 — docs.examples is the authoritative flat corpus.
+    # FR-010 / AC-022 — docs.examples is the authoritative flat corpus,
+    # served verbatim from the committed snapshot (count is pin-derived, not frozen).
     examples = metadata["docs"]["examples"]
     assert isinstance(examples, list)
-    assert len(examples) == 121
+    assert examples == committed["docs"]["examples"]
+    assert len(examples) > 0
     for item in examples:
         assert set(item) == EXAMPLE_KEYS
     names = [item["name"] for item in examples]

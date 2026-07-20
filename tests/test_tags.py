@@ -2,7 +2,7 @@
 §11.4 ``dec``; resolved OQ-012 in §15; feeds AC-023/AC-024).
 
 Engine-behavior expectations here are derived by *running* the pinned engine
-(``transon==0.1.7``), never from memory (AD-018 / NFR-001): nested
+(``transon==0.2.3``), never from memory (AD-018 / NFR-001): nested
 ``NO_CONTENT`` sentinels are produced by real transforms.
 """
 

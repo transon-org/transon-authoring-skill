@@ -3,7 +3,7 @@ the §11.2 "Diff construction (normative)" / "Array order (normative)" walk
 (resolved OQ-011/OQ-012/OQ-013 in §15). Covers AC-023 and AC-024.
 
 Engine-behavior expectations (sentinel-producing results) are derived by
-*running* the pinned engine (``transon==0.1.7``), never from memory
+*running* the pinned engine (``transon==0.2.3``), never from memory
 (AD-018 / NFR-001). Actual values handed to the matcher are always already in
 the encoded domain (§11.0 ``enc``), exactly as the verify worker supplies them.
 """

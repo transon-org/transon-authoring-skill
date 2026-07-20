@@ -14,8 +14,8 @@ def test_package_importable():
 
 
 def test_engine_pin_installed():
-    # AD-007 — A0 baseline pin transon==0.1.7
-    assert version("transon") == "0.1.7"
+    # AD-007 — current engine pin transon==0.2.3
+    assert version("transon") == "0.2.3"
 
 
 def test_engine_metadata_export_present():

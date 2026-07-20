@@ -6,7 +6,7 @@ Worker protocol and error-mapping tests. Sandbox-invariant tests (AC-015)
 live in ``tests/test_sandbox.py``.
 
 Engine-behavior expectations are derived by *running* the pinned engine
-(``transon==0.1.7``) in-process, never from memory (AD-018 / NFR-001).
+(``transon==0.2.3``) in-process, never from memory (AD-018 / NFR-001).
 """
 
 import importlib

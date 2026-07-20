@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "id": "github-branch-from-ref",
+  "expect": "matched",
+  "intent_nl": "Derive the branch name from a GitHub push `ref` by stripping the \"refs/heads/\" prefix, so \"refs/heads/main\" becomes \"main\".",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Derive the branch name from a GitHub push `ref` by stripping the \"refs/heads/\" prefix, so \"refs/heads/main\" becomes \"main\".",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Strip the refs/heads/ prefix from a push ref to get the branch name.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "ref": "refs/heads/main",
+          "before": "9d8f7a",
+          "after": "1a2b3c4d5e6f",
+          "repository": {
+            "id": 555000111,
+            "name": "payments-api",
+            "full_name": "acme/payments-api",
+            "default_branch": "main"
+          },
+          "pusher": {
+            "name": "ada",
+            "email": "ada@acme.io"
+          }
+        },
+        "output": {
+          "repo": "acme/payments-api",
+          "branch": "main"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "3352fc9268dba64a0a68dc5bd41f7d6041a7b3aa00276f92dc419558b940c376"
+    }
+  },
+  "redacted": false
+}

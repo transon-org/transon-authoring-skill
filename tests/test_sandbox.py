@@ -4,7 +4,7 @@ capture (last write wins), includes resolved from the request map only,
 engine-verbatim include-miss errors.
 
 Engine-behavior expectations are derived by *running* the pinned engine
-(``transon==0.1.7``) in-process, never from memory (AD-018 / NFR-001).
+(``transon==0.2.3``) in-process, never from memory (AD-018 / NFR-001).
 """
 
 import socket

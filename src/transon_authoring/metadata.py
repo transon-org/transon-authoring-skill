@@ -2,7 +2,7 @@
 grounding catalog (FR-009, SPEC §7; §10 packaging; §11.7 pin).
 
 ``get_metadata()`` serves the committed ``resources/metadata-snapshot.json``
-(engine ``transon==0.1.7``, ``metadata_version "3.0"``) without touching the
+(engine ``transon==0.2.3``, ``metadata_version "3.0"``) without touching the
 live engine. Resolution order (§10): the packaged copy under
 ``transon_authoring/resources/`` (hatchling force-include in wheels), then the
 repo-root ``resources/`` for src-layout checkouts / editable installs.

@@ -2,9 +2,11 @@
 FR-014 / AC-021; §14 A1 DoD; AD-006).
 
 Surface: ``metadata`` (A0 behavior kept verbatim — bundled pinned snapshot
-bytes on stdout, exit 0), ``examples search``, ``check-samples``, ``verify``
-(single-shot; **no** ``--repair-attempts``, FR-007), ``validate``,
-``dry-run``, and ``init-config`` (A2, FR-022/AC-014: writes the §11.9
+bytes on stdout, exit 0), ``examples search``, ``language`` (FR-036/AC-039:
+bundled Language Reference envelope, engine-free like ``metadata``),
+``check-samples``, ``verify`` (single-shot; **no** ``--repair-attempts``,
+FR-007), ``validate``, ``dry-run``, and ``init-config`` (A2, FR-022/AC-014:
+writes the §11.9
 ``.transon-authoring.json`` to the current working directory and emits the
 ProjectConfig on stdout; prompts for layout only when stdin is a TTY and
 ``--non-interactive`` is absent).
@@ -42,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from transon_authoring import metadata
+from transon_authoring._snapshot import SUPPORTED_REFERENCE_MAJOR, reference_major
 from transon_authoring._ingress import (
     IngressError,
     load_document,
@@ -140,6 +143,80 @@ def _cmd_metadata(_args: argparse.Namespace) -> int:
 
 def _cmd_examples_search(args: argparse.Namespace) -> int:
     _emit({"schema_version": "1.0", "hits": search_examples(args.query, limit=args.limit)})
+    return 0
+
+
+def _cmd_language(args: argparse.Namespace) -> int:
+    """FR-036 / AC-039 — serve the bundled Language Reference (AD-026).
+
+    Reads ``resources/language-reference.json`` through the engine-free
+    resource reader shared with ``metadata`` (never imports the engine, FR-009
+    symmetry / NFR-003) and emits a library envelope carrying ``schema_version``:
+    the full byte-exact ``content``, the ordered ``{id, title}`` index, or one
+    section. ``--section`` and ``--list-sections`` are mutually exclusive; an
+    unknown section id, both selectors together, or a bundled
+    ``reference_version`` whose major exceeds the supported major → §11.6
+    ``schema-error`` CliError, exit 2 (consumers MUST fail loudly)."""
+    if args.section is not None and args.list_sections:
+        raise IngressError(
+            [
+                preflight_error(
+                    "language: --section and --list-sections are mutually"
+                    " exclusive (SPEC §11.6 / AC-039)"
+                )
+            ]
+        )
+    reference = json.loads(
+        metadata._resource_bytes("language-reference.json").decode("utf-8")
+    )
+    reference_version = reference.get("reference_version")
+    major = reference_major(reference_version)
+    if major is None or major > SUPPORTED_REFERENCE_MAJOR:
+        raise IngressError(
+            [
+                preflight_error(
+                    "language: bundled reference_version"
+                    f" {json.dumps(reference_version, ensure_ascii=False)} has an"
+                    f" unsupported major (supported major {SUPPORTED_REFERENCE_MAJOR});"
+                    " regenerate with scripts/sync_metadata.py (FR-036 / AC-039)"
+                )
+            ]
+        )
+    envelope = {
+        "schema_version": "1.0",
+        "reference_version": reference_version,
+        "engine_version": reference.get("engine_version"),
+    }
+    sections = reference["sections"]
+    if args.list_sections:
+        envelope["sections"] = [
+            {"id": section["id"], "title": section["title"]} for section in sections
+        ]
+        _emit(envelope)
+        return 0
+    if args.section is not None:
+        for section in sections:
+            if section["id"] == args.section:
+                envelope["section"] = {
+                    "id": section["id"],
+                    "title": section["title"],
+                    "heading_level": section["heading_level"],
+                    "content": section["content"],
+                }
+                _emit(envelope)
+                return 0
+        raise IngressError(
+            [
+                preflight_error(
+                    "language: unknown section id"
+                    f" {json.dumps(args.section, ensure_ascii=False)}"
+                    " (list ids with --list-sections)"
+                )
+            ]
+        )
+    envelope["format"] = reference.get("format")
+    envelope["content"] = reference["content"]
+    _emit(envelope)
     return 0
 
 
@@ -495,6 +572,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="maximum number of hits (>= 1, default 10)",
     )
     search_parser.set_defaults(handler=_cmd_examples_search)
+
+    language_parser = subcommands.add_parser(
+        "language",
+        help=(
+            "serve the bundled Language Reference"
+            " (resources/language-reference.json) offline: full content,"
+            " one --section ID, or the --list-sections index (FR-036)"
+        ),
+    )
+    language_parser.add_argument(
+        "--section",
+        metavar="ID",
+        help="emit the section with this id (mutually exclusive with"
+        " --list-sections)",
+    )
+    language_parser.add_argument(
+        "--list-sections",
+        action="store_true",
+        help="emit the ordered {id, title} section index in document order",
+    )
+    language_parser.set_defaults(handler=_cmd_language)
 
     check_parser = subcommands.add_parser(
         "check-samples",
