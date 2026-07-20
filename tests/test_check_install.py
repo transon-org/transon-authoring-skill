@@ -22,7 +22,7 @@ PYPROJECT = """\
 name = "transon-authoring"
 version = "0.0.1"
 dependencies = [
-    "transon==0.1.7",
+    "transon==0.2.3",
 ]
 """
 

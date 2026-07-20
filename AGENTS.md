@@ -19,10 +19,12 @@ in SPEC §17.
    place; new items take the next free number. Bound by `docs/id-ledger.json` +
    `harness/scripts/check_append_only_ids.py`.
 3. **Authority precedence (AD-018 / NFR-001).** Transon semantics come only from: (1) the behavior
-   of the **pinned running engine** (`transon==0.1.7`, local checkout at `../transon`); (2) the
-   engine `docs/SPECIFICATION.md` for that version; (3) the pinned `get_editor_metadata()`
-   snapshot; (4) the NL intent sidecar (hints only). **Never** model memory, web docs, or Context7
-   for Transon semantics. Context7 is allowed only for host-tooling APIs.
+   of the **pinned running engine** (`transon==0.2.3`, local checkout at `../transon`); (2) the
+   engine's packaged **Language Reference** via `get_language_reference()` / the `language`
+   subcommand for the shipped skill surface (the engine repo `docs/SPECIFICATION.md` remains a
+   maintainer-only design-time authority); (3) the pinned `get_editor_metadata()` snapshot; (4) the
+   NL intent sidecar (hints only). **Never** model memory, web docs, or Context7 for Transon
+   semantics. Context7 is allowed only for host-tooling APIs.
 4. **Verify-before-return (AD-004 / G3).** Never report or return a template as success unless
    `verify` yields `ok: true` and `assurance: "matched"`. Failures use the §11.5 taxonomy.
 5. **Samples before draft (AD-014 / AD-016).** No draft until `coverage_complete` **and**
@@ -51,7 +53,7 @@ in SPEC §17.
 ## Stack
 
 - Python ≥ 3.10, `src/` layout, hatchling build; package `transon_authoring`.
-- Pinned engine dependency: `transon==0.1.7` (AD-007; PyPI — same version as `../transon`).
+- Pinned engine dependency: `transon==0.2.3` (AD-007; PyPI — same version as `../transon`).
 - Tests: pytest. Library is the contract; agents/CI invoke `python -m transon_authoring` (AD-006).
 - License/packaging details are settled at release (NFR-008); record pin + snapshot hash then.
 

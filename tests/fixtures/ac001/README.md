@@ -4,7 +4,7 @@ Static, committed inputs for `tests/test_ac001_path.py` — the §14 A1 DoD item
 with fixed SampleSet (no skill body)". They demonstrate the full authoring-verification path
 end-to-end for the AC-001 intent, *"flatten each order's line items with the customer name"*,
 through both the library API (`check_samples`, `verify`) and the §11.6 CLI verbs. Everything here
-was hand-authored (no skill body) and **engine-verified against the pinned `transon==0.1.7`
+was hand-authored (no skill body) and **engine-verified against the pinned `transon==0.2.3`
 at fixture-authoring time** (AD-018/NFR-001) — the template semantics were established by running
 the engine, never assumed.
 

@@ -189,7 +189,7 @@ reviews:
         Tests are the traceability anchor: each test should cite the
         requirement ID it covers (in the test name or a comment). Expected
         values for engine behavior must come from the pinned engine
-        (transon==0.1.7) or the SPEC's normative text — flag assertions that
+        (transon==0.2.3) or the SPEC's normative text — flag assertions that
         weaken a §11 contract (e.g. approximate matching where §11.4 requires
         type-sensitive deep equality). Flag changelog-style comments; keep
         requirement-ID citations.

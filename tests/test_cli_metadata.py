@@ -44,7 +44,7 @@ def test_a0_dod_metadata_subcommand():
     committed = json.loads(snapshot_bytes.decode("utf-8"))
     assert emitted == committed
     assert emitted["metadata_version"] == "3.0"
-    assert emitted["engine_version"] == "0.1.7"
+    assert emitted["engine_version"] == "0.2.3"
 
     # §11.6 exit 2 = usage error: bogus subcommand → exit 2, empty stdout
     # (never a partial machine result on stdout).

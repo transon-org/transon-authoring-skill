@@ -22,7 +22,7 @@ PYPROJECT = """\
 name = "transon-authoring"
 version = "0.0.1"
 dependencies = [
-    "transon==0.1.7",
+    "transon==0.2.3",
 ]
 """
 
@@ -161,14 +161,14 @@ def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):
     dest = repo / ".claude" / "skills" / "transon-authoring"
     manifest = json.loads((dest / ".install-manifest.json").read_text(encoding="utf-8"))
     assert manifest["skill_version"] == "0.0.1"
-    assert manifest["engine_pin"] == "transon==0.1.7"
+    assert manifest["engine_pin"] == "transon==0.2.3"
     assert manifest["snapshot_sha256"] == hashlib.sha256(SNAPSHOT_BYTES).hexdigest()
 
     # Different pin in pyproject => different engine_pin (proves textual parse).
     other = make_repo(
         tmp_path,
         name="other",
-        pyproject=PYPROJECT.replace("transon==0.1.7", "transon==9.9.9").replace(
+        pyproject=PYPROJECT.replace("transon==0.2.3", "transon==9.9.9").replace(
             'version = "0.0.1"', 'version = "1.2.3"'
         ),
     )

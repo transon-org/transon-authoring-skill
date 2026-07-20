@@ -1,7 +1,0 @@
-{
-  "schema_version": "1.0",
-  "id": "refuse-strip-ref-branch",
-  "expect": "refuse",
-  "intent_nl": "Derive the branch name from a GitHub push `ref` by stripping the \"refs/heads/\" prefix, so \"refs/heads/main\" becomes \"main\".",
-  "redacted": false
-}

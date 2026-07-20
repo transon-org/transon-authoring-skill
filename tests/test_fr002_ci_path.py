@@ -11,7 +11,7 @@ hangs against DEVNULL and trips the timeout instead of silently passing.
 
 Fixtures are the committed AC-001 artifacts under tests/fixtures/ac001/
 (see tests/test_ac001_path.py); all engine expectations in them were derived
-by running the pinned ``transon==0.1.7`` (AD-018 / NFR-001).
+by running the pinned ``transon==0.2.3`` (AD-018 / NFR-001).
 """
 
 import copy

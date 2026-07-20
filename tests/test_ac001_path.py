@@ -16,7 +16,7 @@ this file covers the hand path up to the embedded Verdict — `ok: true`,
 `assurance: "matched"` (AD-004/AC-013) — with no skill body involved.
 
 All engine expectations in the fixtures were derived by running the pinned
-`transon==0.1.7` at fixture-authoring time, never from memory (AD-018 /
+`transon==0.2.3` at fixture-authoring time, never from memory (AD-018 /
 NFR-001); the fixture fingerprint was acquired via
 `transon_authoring.samples.content_fingerprint` (OQ-015 acquisition path).
 """

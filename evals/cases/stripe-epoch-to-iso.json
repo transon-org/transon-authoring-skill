@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "id": "stripe-epoch-to-iso",
+  "expect": "matched",
+  "intent_nl": "Convert the Stripe event's `created` Unix epoch timestamp into an ISO-8601 UTC datetime string, e.g. 1752364800 becomes \"2025-07-13T00:00:00Z\".",
+  "samples": {
+    "schema_version": "1.0",
+    "intent_nl": "Convert the Stripe event's `created` Unix epoch timestamp into an ISO-8601 UTC datetime string, e.g. 1752364800 becomes \"2025-07-13T00:00:00Z\".",
+    "coverage": [
+      {
+        "id": "ob-happy",
+        "kind": "happy_path",
+        "description": "Convert a Unix epoch timestamp to an ISO-8601 UTC datetime string.",
+        "acceptance": "accepted"
+      }
+    ],
+    "cases": [
+      {
+        "id": "c",
+        "input": {
+          "id": "evt_1PabcXYZdef456",
+          "object": "event",
+          "type": "checkout.session.completed",
+          "created": 1752364800,
+          "livemode": false
+        },
+        "output": {
+          "eventId": "evt_1PabcXYZdef456",
+          "createdAt": "2025-07-13T00:00:00Z"
+        },
+        "satisfies": [
+          "ob-happy"
+        ]
+      }
+    ],
+    "waivers": [],
+    "confirmation": {
+      "confirmed": true,
+      "confirmed_by": "ci",
+      "content_fingerprint": "ec5d215fcf8ed6c9989498d1092ac0c32facf0cbe29936d3162ccb641cc26549"
+    }
+  },
+  "redacted": false
+}

@@ -8,11 +8,15 @@ Behavior:
    ``<root>/pyproject.toml`` (no ``tomllib`` — Python floor is 3.10, OQ-019).
 2. Exit 2 if the installed ``transon`` version differs from the pin.
 3. Write ``resources/metadata-snapshot.json`` as the canonical serialization
-   of ``transon.metadata.get_editor_metadata()``.
+   of ``transon.metadata.get_editor_metadata()`` and
+   ``resources/language-reference.json`` as the canonical serialization of
+   ``transon.reference.get_language_reference()`` (FR-036); a reference whose
+   ``reference_version`` major is unsupported fails loudly (exit 2).
 4. Create the ``resources/nl-intents.json`` sidecar skeleton only if absent —
    an existing sidecar is NEVER overwritten (FR-010/OQ-021).
-5. Write ``resources/metadata-snapshot.md`` with SHA-256 provenance for both
-   files. ``synced_at`` is informational only (never compared by gates).
+5. Write ``resources/metadata-snapshot.md`` with SHA-256 provenance for all
+   three files plus the reference ``reference_version``. ``synced_at`` is
+   informational only (never compared by gates).
 
 Exit codes: 0 success, 2 pin/config error.
 """
@@ -31,8 +35,10 @@ from _shared import ensure_src
 
 ensure_src()
 from transon_authoring._snapshot import (  # noqa: E402
+    SUPPORTED_REFERENCE_MAJOR,
     canonical_bytes,
     read_pin,
+    reference_major,
     render_provenance,
     sha256_hex,
 )
@@ -101,14 +107,32 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     from transon.metadata import get_editor_metadata
+    from transon.reference import get_language_reference
 
     metadata = get_editor_metadata()
+    reference = get_language_reference()
+
+    # Unsupported-major guard (FR-036): a reference the skill cannot serve must
+    # not land silently — fail loudly here just as consumers must.
+    reference_version = reference["reference_version"]
+    major = reference_major(reference_version)
+    if major is None or major > SUPPORTED_REFERENCE_MAJOR:
+        print(
+            f"sync-metadata: get_language_reference() reference_version "
+            f"{reference_version!r} has an unsupported major (supported major "
+            f"{SUPPORTED_REFERENCE_MAJOR}); consumers MUST fail loudly (FR-036).",
+            file=sys.stderr,
+        )
+        return 2
 
     resources = root / "resources"
     resources.mkdir(parents=True, exist_ok=True)
 
     snapshot_path = resources / "metadata-snapshot.json"
     _publish(snapshot_path, canonical_bytes(metadata))
+
+    reference_path = resources / "language-reference.json"
+    _publish(reference_path, canonical_bytes(reference))
 
     # Skeleton only on first sync; atomic first-writer-wins creation so
     # authored intents are never clobbered and no reader (including a
@@ -124,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
         "algorithm": "sha256",
         "snapshot_sha256": sha256_hex(snapshot_path.read_bytes()),
         "sidecar_sha256": sha256_hex(sidecar_path.read_bytes()),
+        "reference_sha256": sha256_hex(reference_path.read_bytes()),
+        "reference_version": reference_version,
         "synced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     provenance_path = resources / "metadata-snapshot.md"

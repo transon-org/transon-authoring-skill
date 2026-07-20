@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "id": "refuse-sha256-checksum",
+  "expect": "refuse",
+  "intent_nl": "Compute the SHA-256 hex digest of the record's `payload` string and return it as `checksum`.",
+  "redacted": false
+}

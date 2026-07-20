@@ -142,13 +142,16 @@ No console-script product; no MCP.
 - **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
   `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
   `python -m transon_authoring` (§11.6).
-- **AD-007 — Pin + drift + upgrade.** Depend on **`transon==0.1.7`** initially. Bundle
-  `get_editor_metadata()` snapshot with provenance (`engine_version`, `metadata_version`, content
-  hash, sync date). **Drift gate** compares the bundle to metadata produced by the **pinned**
-  install — it does **not** detect newer PyPI releases. **Staleness/upgrade:** a scheduled or
-  manual check against PyPI/latest engine opens a pin-bump PR; humans run `sync-metadata`, update
-  `pyproject.toml` pin, refresh NL sidecar as needed, and merge deliberately (OQ-004 still applies
-  for automation shape).
+- **AD-007 — Pin + drift + upgrade.** Depend on **`transon==0.2.3`**. Bundle the
+  `get_editor_metadata()` snapshot **and the `get_language_reference()` Language Reference
+  snapshot (AD-026)** with provenance (`engine_version`, `metadata_version`, `reference_version`,
+  content hashes, sync date). **Drift gate** compares the bundles to the metadata and Language
+  Reference produced by the **pinned** install — it does **not** detect newer PyPI releases.
+  **Staleness/upgrade:** a scheduled or manual check against PyPI/latest engine opens a pin-bump
+  PR; humans run `sync-metadata` (resyncing both the metadata snapshot and the Language Reference
+  snapshot, FR-036/AD-026), update the `pyproject.toml` pin, refresh the NL sidecar, re-mint the
+  FR-029 synthetic corpus and re-audit the refuse bucket (§11.8), reset `evals/baseline.json`
+  (§11.8), and merge deliberately (OQ-004 still applies for automation shape).
 - **AD-008 — Ordinary JSON output.** No IR/DSL; no verifier-owned key-order canonicalization.
 - **AD-009 — Convention-first install.** Native Claude/Cursor paths (§11.9); no MCP.
 - **AD-010 — Eval-driven improvement.** Changes gated by NFR-010 / AD-020.
@@ -174,8 +177,8 @@ No console-script product; no MCP.
   - default marker `"$"` (`Transformer.DEFAULT_MARKER`);
   - `max_include_depth=50` (engine default);
   - sandboxed `file_writer` + `template_loader` (AD-015);
-  - the engine’s R-32 **one core recursion frame per template node** (pinned `0.1.7`; over-depth
-    surfaces as include `TransformationError`, never raw `RecursionError`);
+  - the engine’s R-32 **one core recursion frame per template node** (at the pinned engine;
+    over-depth surfaces as include `TransformationError`, never raw `RecursionError`);
   - per-case wall-clock timeout **5s**, enforced by running each dry-run case in a **local worker
     subprocess** that imports the pinned package, applies the same sandbox delegates, and returns
     `{result, writes, errors}` over IPC. On timeout the worker is killed → `TimeoutError`,
@@ -185,17 +188,20 @@ No console-script product; no MCP.
     class, or registries in v1; explicit requests for those are rejected with `ProfileError` before
     any engine call (AC-027). Trust boundary: trusted local agents/CI only.
 - **AD-018 — Authority precedence.** (1) behavior of the **pinned running engine**;
-  (2) engine `docs/SPECIFICATION.md` for that version; (3) pinned `get_editor_metadata()` snapshot
-  for catalog/examples structure; (4) NL intent sidecar (hints only). Never LLM memory / web /
-  Context7 for Transon semantics (NFR-001).
+  (2) the engine's author-facing Language Reference — packaged in the pinned wheel, exported by
+  `get_language_reference()` and surfaced by the `language` subcommand (AD-026) — for the
+  **shipped skill surface**, with the engine repo `docs/SPECIFICATION.md` remaining a
+  **maintainer-only** design-time authority for that version; (3) pinned `get_editor_metadata()`
+  snapshot for catalog/examples structure; (4) NL intent sidecar (hints only). Never LLM memory /
+  web / Context7 for Transon semantics (NFR-001).
 - **AD-019 — `verify` re-checks SampleSet.** No unforgeable token. `verify` runs `check_samples`
   on the provided SampleSet and requires `ok_for_verify` before validate/dry_run/match.
 - **AD-020 — Eval runner policy (resolves OQ-009).** See §11.8. Committed `evals/runner.json`
   pins provider/model/settings; 3 runs/fixture majority-of-3; population = all committed fixtures;
   ratchet and privacy rules normative.
 - **AD-021 — Synthetic eval corpus from `docs.examples`; small-model primary gate (resolves
-  OQ-024; absorbs RFC-001).** The pinned snapshot's flat `docs.examples` corpus (121 templates at
-  `transon==0.1.7`) is an allowed **fixture factory** for the FR-017 improvement loop:
+  OQ-024; absorbs RFC-001).** The pinned snapshot's flat `docs.examples` corpus is an allowed
+  **fixture factory** for the FR-017 improvement loop:
   any example MAY seed exactly one EvalFixture (v1 commits only the FR-029 tagged subset of
   ~25–30 selected seeds; later waves may extend toward all 121). A seeded fixture's SampleSet
   outputs come **only** from executing the
@@ -231,15 +237,14 @@ No console-script product; no MCP.
   **pinned engine's actual output** for an author-verified template, never a hand-written expected;
   the reference template is **provenance-only** (committed under `evals/seeds/`, FR-033 shape) and
   is **never** placed in the fixture object, the harness prompt, or the tools path (leakage rule,
-  AD-021). Because `transon==0.1.7` is a **structural** transformer — its only functions are
-  `str`/`int`/`float`/`type`; it has no date/time, string-case, string split/replace/slice, or
-  length/count function (count, one-level flatten, and string concat are reachable only via the
-  `expr` `reduce(op, values)` recipe — engine `SPECIFICATION.md` `expr`) — an intent that needs a
-  genuinely absent capability (epoch→ISO date, `upper`, `refs/heads/`-strip, separator-aware join)
-  is authored as an `expect: "refuse"` fixture (AC-003), turning each engine gap into realistic
-  adversarial coverage rather than an unsatisfiable matched fixture. Structural transforms (nested
-  flatten, tag/array pivot, null-defaulting projection, minor-unit division, reduce-count/flatten)
-  are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
+  AD-021). An intent that needs a capability **genuinely absent from the pinned engine's
+  function/operator surface** — as defined by the pinned metadata catalog and Language Reference
+  (AD-018) — is authored as an `expect: "refuse"` fixture (AC-003), turning each engine gap into
+  realistic adversarial coverage rather than an unsatisfiable matched fixture; because the engine's
+  capability surface changes across pins (a repin can make a former gap authorable), an AD-007 repin
+  **re-audits** which asks are still genuinely unsatisfiable and refills the refuse bucket with the
+  new engine's real gaps (§11.8). Intents the pinned engine can satisfy — structural transforms and
+  any authorable computation — are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
   pack is ongoing improvement-loop work (FR-017) and gates no milestone.
 - **AD-024 — Real-host eval harness (Agent SDK reference; resolves OQ-027, absorbs RFC-002).** The NFR-010 gate measures `SKILL.md` **where it ships** — inside a real host
   agent harness with a rich tool suite (Read/Write/Edit/Bash/Glob/Grep, plus the host's `Skill`
@@ -276,6 +281,20 @@ No console-script product; no MCP.
   a run's full transcript and stats land in the working tree but never in git. A `--only ID[,…]`
   selector scopes the **provider run** to named fixtures for a cost/diagnostic probe while the
   NFR-011 lint still covers the full committed corpus.
+- **AD-026 — Language Reference grounding + authority swap.** The engine's author-facing Language
+  Reference (packaged `LANGUAGE.md`, exported by `get_language_reference()`) is a **second
+  engine-derived grounding artifact**, snapshotted and treated **identically to the
+  `get_editor_metadata()` catalog** (AD-007): `sync-metadata` dumps it to
+  `resources/language-reference.json` with sha256 + `reference_version` provenance, `check_snapshot`
+  drift-gates it against the pinned engine, and the read path is engine-import-free (FR-009/FR-036).
+  Snapshotting over a live passthrough is deliberate: every authority change is a reviewable diff on
+  the upgrade PR (AD-007 "not silent"), one mental model for all engine-derived grounding, and the
+  whole grounding surface stays offline (NFR-003). This is the authority the **shipped skill** cites
+  (AD-018 item 2, surfaced by the `language` subcommand), replacing the engine repo
+  `docs/SPECIFICATION.md` — reachable on every install (§11.9) where no engine checkout exists. The
+  engine `docs/SPECIFICATION.md` remains a **maintainer-only** design-time authority. `reference_version`
+  is the reference's own semver (minor = additive, major = breaking); consumers MUST fail loudly on
+  an unsupported major (§11.6 `language`, enforced at sync time).
 
 ---
 
@@ -349,7 +368,21 @@ No console-script product; no MCP.
   keyed by stable example `name`. `search_examples` retrieves by NL/sidecar + tags/name over the
   snapshot examples. Provenance for the snapshot covers examples; sidecar has its own content hash
   in provenance. **No editor-only corpus entries in v1.** (Revises OQ-003.)
-- **FR-011** — `sync-metadata` regenerates snapshot from the pinned engine and records provenance.
+- **FR-011** — `sync-metadata` regenerates the metadata snapshot **and the Language Reference
+  snapshot** (`resources/language-reference.json`, FR-036/AD-026) from the pinned engine and
+  records provenance (snapshot + sidecar + reference sha256, the reference carrying its
+  `reference_version`).
+- **FR-036** — **Language Reference grounding artifact + `language` subcommand (AD-026).**
+  `sync-metadata` additionally dumps `get_language_reference()` to `resources/language-reference.json`
+  (canonical serialization, FR-011) and records its sha256 + `reference_version` in the snapshot
+  provenance; `check_snapshot` drift-checks it against the pinned engine identically to the metadata
+  snapshot (NFR-004). The module CLI exposes `python -m transon_authoring language [--section ID |
+  --list-sections]` (§11.6), reading the **bundled resource, never importing the engine** (FR-009
+  symmetry): no arguments → the full byte-exact `content`; `--list-sections` → the ordered
+  `{id, title}` index; `--section ID` → that section's `content`; an unknown `id`, both selectors at
+  once, or a bundled `reference_version` **major** above the supported major → §11.6 `schema-error`,
+  exit 2 (the major guard is enforced at sync time too, so it cannot land silently). The reference is
+  engine-derived grounding treated exactly like the `get_editor_metadata()` snapshot (AD-026).
 
 ### Distribution
 - **FR-012** — Canonical `SKILL.md` + Claude/Cursor adapters.
@@ -607,8 +640,11 @@ No console-script product; no MCP.
 - **NFR-003 — Offline after install.** No network required for verify/check/metadata once the
   pinned engine and package are installed (local package import and optional local worker
   subprocesses only).
-- **NFR-004 — Snapshot drift vs pin.** `check_snapshot` fails if bundle ≠ metadata from pinned
-  `transon==…`. Does not track unpinned newer releases (AD-007).
+- **NFR-004 — Snapshot drift vs pin.** `check_snapshot` fails if the bundled metadata snapshot
+  **or the bundled Language Reference** (`resources/language-reference.json`, FR-036/AD-026) ≠ the
+  pinned `transon==…` engine's `get_editor_metadata()` / `get_language_reference()`, or if either
+  provenance hash / the reference's `reference_version` is stale or its major unsupported. Does not
+  track unpinned newer releases (AD-007).
 - **NFR-005 — Honest failure.** §11.5 statuses distinguishable from success.
 - **NFR-006 — Bounded repair.** Per FR-007; sample loop unbounded until confirm/defer/abort.
   The interactive review loop (FR-030) is likewise unbounded until approve/stop; each revision
@@ -624,15 +660,14 @@ No console-script product; no MCP.
   `runner.json.harness` (real host + version) is part of gate identity alongside the model pin;
   a harness change is an eval-policy commit that resets the baseline (§11.8).
 - **NFR-011 — Privacy.** Real-use fixtures require redaction + consent before commit (FR-018).
-- **NFR-012 — Shipped-skill self-sufficiency.** The shipped skill body
-  (`SKILL.md`) and adapter files must be fully operable standalone: every behavior, schema
-  field, status, and gate they rely on is stated inline, and they contain **no references to
-  repo files that are not shipped alongside them** — no links or paths into `docs/`, `harness/`,
-  `scripts/`, `evals/`, `tests/`, `src/`, or repo-root `resources/` (bundled resources are
-  reached via `python -m transon_authoring` subcommands, never by repo path), and no `§`-section
-  references into `docs/SPEC.md`. Named external authorities that are not files of this repo —
-  the pinned engine and its `docs/SPECIFICATION.md` (AD-018) — remain allowed. Requirement-ID
-  annotations for reviewer traceability are allowed **only inside markdown comments**
+- **NFR-012 — Shipped-skill self-sufficiency.** The shipped skill body (`SKILL.md`) and adapter
+  files must be fully operable standalone: every behavior, schema field, status, and gate they rely
+  on is stated inline; they contain **no references to repo files at all** — no links or paths into
+  `docs/`, `harness/`, `scripts/`, `evals/`, `tests/`, `src/`, or repo-root `resources/`, and no
+  `§`-section references — and they name **no external file authority**: Transon authority is
+  reached only through `python -m transon_authoring` module recipes (the `metadata` / `examples` /
+  `language` subcommands over the bundled snapshots), never by repo path or engine-repo path.
+  Requirement-ID annotations for reviewer traceability are allowed **only inside markdown comments**
   (`<!-- … -->`), never in rendered/normative text. Enforced by `check_parity` (AC-032).
 
 ---
@@ -710,13 +745,12 @@ No console-script product; no MCP.
   flips `confirmed` (`fingerprint_mismatch`) and the flow re-enters the FR-023 sample loop
   before redrafting; stop → `deferred`/`aborted` with no template; never auto-approve.
   Non-interactive runs emit `matched` without review.
-- **AC-032** — `check_parity` is **red** (NFR-012 self-sufficiency lint)
-  when `SKILL.md` or any adapter file references an unshipped repo path (`docs/`, `harness/`,
-  `scripts/`, `evals/`, `tests/`, `src/`, repo-root `resources/`), contains a `§`-section
-  reference into `docs/SPEC.md`, or carries requirement-ID citations outside markdown comments;
-  a self-contained skill body and adapters lint **green**. Mentions of the engine's own
-  `docs/SPECIFICATION.md` (AD-018 authority) do not trip the lint — the exemption is the exact
-  string `docs/SPECIFICATION.md`; any other `docs/…` path trips it (deterministic discriminator).
+- **AC-032** — `check_parity` is **red** (NFR-012 self-sufficiency lint) when `SKILL.md` or any
+  adapter file references **any** unshipped repo path (`docs/`, `harness/`, `scripts/`, `evals/`,
+  `tests/`, `src/`, repo-root `resources/`) — including the engine's `docs/SPECIFICATION.md`, which
+  no longer has an exemption — contains a `§`-section reference, or carries requirement-ID citations
+  outside markdown comments; a self-contained skill body and adapters, citing Transon authority only
+  through `python -m transon_authoring` recipes (including the `language` subcommand), lint **green**.
 - **AC-033** — An `AuthoringResult` carrying `trace` validates (FR-031)
   against the §11.5 `TraceEntry` shape and changes no scoring or verify behavior; a result
   without `trace` remains valid; a malformed `trace` fails schema validation like any other
@@ -780,6 +814,17 @@ No console-script product; no MCP.
   episodes for fixtures `A` and `B` (an unknown id exits 2). None of it changes the stdout gate
   report, scoring, targets, baseline, or lint: the same run without `--transcripts-dir` is
   byte-identical (extends AC-034), and the scored `EpisodeTranscript` files are unchanged.
+- **AC-039** — **`language` serves the bundled Language Reference offline; drift and
+  unsupported-major are gated (FR-036 / AD-026).** (a) `python -m transon_authoring language` prints
+  `{schema_version, reference_version, engine_version, format, content}` whose `content` is
+  byte-exact `get_language_reference().content` for the pinned engine, with no engine import and no
+  network (NFR-003); `--list-sections` prints the ordered `{id, title}` index; `--section ID` prints
+  that section; an unknown `id`, `--section` with `--list-sections`, or a bundled `reference_version`
+  major above the supported major → §11.6 `schema-error` CliError, exit 2. (b) `check_snapshot` is
+  **red** when `resources/language-reference.json` differs from the pinned engine's
+  `get_language_reference()` canonical dump, when its provenance sha256/`reference_version` are
+  stale, or when its `reference_version` major is unsupported — the same drift discipline as the
+  metadata snapshot (NFR-004 / AC-006).
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
@@ -796,7 +841,7 @@ No console-script product; no MCP.
 ```
 transon-authoring/
 ├── SKILL.md
-├── pyproject.toml                 # depends on transon==0.1.7 (initial pin)
+├── pyproject.toml                 # depends on transon==0.2.3 (AD-007 pin)
 ├── src/transon_authoring/
 │   ├── __main__.py                # §11.6
 │   ├── verify.py
@@ -1148,7 +1193,7 @@ per case:
 | `file` | capture `(name, content)` in memory; never FS |
 | Custom rules/ops/fns | out of scope |
 | Include depth | engine `max_include_depth=50` |
-| Recursion budget (R-32) | one core frame per template node (pinned `0.1.7`); self-`include` reach ≥75 at CPython default recursion limit; over-depth → include `TransformationError`, never raw `RecursionError` |
+| Recursion budget (R-32) | one core frame per template node (at the pinned engine); self-`include` reach ≥75 at CPython default recursion limit; over-depth → include `TransformationError`, never raw `RecursionError` |
 | Timeout | 5s wall clock per case via **local worker subprocess** |
 | Profile overrides | none; reserved knobs → `ProfileError` / exit 2 |
 | Trust | trusted local agent/CI only |
@@ -1245,6 +1290,7 @@ primary machine result on stderr.
 |---|---|---|---|
 | `metadata` | none | snapshot JSON (`JsonValue`) | 0 |
 | `examples search <query>` | query string [`--limit N`, default 10 (OQ-022)] | `{ "schema_version": "1.0", "hits": [ example objects… ] }` | 0 |
+| `language` | none **or** `--section ID` **or** `--list-sections` | Language Reference envelope: full `content`, one `section`, or the ordered `{id, title}` list (see language notes) | 0, or 2 on unknown `--section` / both selectors / unsupported major |
 | `check-samples` | `--samples PATH` | `SampleCheck` on schema-valid input | 0 if `ok_for_verify` else 1 |
 | `verify` | `--template PATH --samples PATH` | `Verdict` on schema-valid inputs | 0 if ok else 1 |
 | `result` | `--template PATH --samples PATH [--repair-count N]` **or** `--refuse --status STATUS --explanation TEXT` | complete §11.5 `AuthoringResult`, machine-built (FR-034): verify-derived from the template (`repair_count = N`, default 0), or a template-less refusal (`STATUS ∈ {aborted, deferred, need-samples, repair-exhausted, profile-rejected}`) | 0 if matched, 1 on any failure/refusal envelope, 2 on bad args |
@@ -1263,6 +1309,19 @@ The `metadata` subcommand is exempt from `schema_version`: it emits the pinned s
 verbatim (an engine document with its own `metadata_version`), not a library envelope.
 `--includes PATH` is a bare JSON object of the `SampleSet.includes` shape (include name →
 template JSON), no `schema_version` wrapper; any other JSON value → exit 2 `schema-error`.
+
+The `language` subcommand serves the bundled Language Reference resource
+(`resources/language-reference.json`, the canonical dump of `get_language_reference()`) and, like
+`metadata`, **never imports the engine** (FR-009 symmetry, NFR-003). Unlike `metadata` it emits a
+**library envelope** (carries `schema_version`): no arguments →
+`{schema_version, reference_version, engine_version, format, content}` (full byte-exact reference);
+`--list-sections` → `{schema_version, reference_version, engine_version, sections: [{id, title}, …]}`
+in document order; `--section ID` →
+`{schema_version, reference_version, engine_version, section: {id, title, heading_level, content}}`.
+`--section` and `--list-sections` are mutually exclusive. An unknown section `id`, both selectors
+together, or a bundled document whose `reference_version` **major** exceeds the supported major (1)
+→ exit 2 `schema-error` CliError; the unsupported-major guard mirrors the engine's consumer contract
+and is enforced at sync time.
 
 **Schema vs semantic failures (FR-026):** If `--samples` or `--template` (or `--input` /
 `--includes`) cannot be parsed as JSON, fails SampleSet/template schema validation, or carries an
@@ -1323,14 +1382,19 @@ applicable; wrapped in the JSON envelope above (never paraphrased in `message`).
 
 ### 11.7 Pin, drift, upgrade
 
-- **A0 pin:** `transon==0.1.7`, expect `metadata_version == "3.0"`,
-  `engine_version == "0.1.7"` in snapshot.
-- **“Current metadata”** = metadata from that pin after `sync-metadata`, bundled in-repo.
-- **Drift:** bundle hash/content vs live `get_editor_metadata()` under the pinned install. Drift
-  also covers the NL sidecar: `check_snapshot` enforces the OQ-021 consistency rules (sidecar
-  keys ⊆ snapshot example names; provenance sidecar hash current).
-- **Newer releases:** not red by drift alone. Upgrade path: bump pin → sync → update NL sidecar →
-  PR. Optional scheduled notifier (OQ-004) opens that PR.
+- **Pin:** `transon==0.2.3`, expect `metadata_version == "3.0"`, `engine_version == "0.2.3"` in the
+  metadata snapshot, and `reference_version == "1.0"`, `engine_version == "0.2.3"` in the Language
+  Reference snapshot (FR-036/AD-026).
+- **“Current metadata”** = the metadata snapshot **and Language Reference snapshot** produced from
+  that pin by `sync-metadata`, bundled in-repo.
+- **Drift:** bundle hash/content vs live `get_editor_metadata()` **and** `get_language_reference()`
+  under the pinned install. Drift also covers the NL sidecar (OQ-021 consistency: sidecar keys ⊆
+  snapshot example names; provenance sidecar hash current) and the Language Reference
+  (`reference_version` major supported; provenance hash current).
+- **Newer releases:** not red by drift alone. Upgrade path: bump pin → `sync-metadata` (resyncs
+  metadata + Language Reference) → update NL sidecar → re-mint the FR-029 corpus and re-audit the
+  refuse bucket (§11.8) → reset `evals/baseline.json` (§11.8) → PR. Optional scheduled notifier
+  (OQ-004) opens that PR.
 
 ### 11.8 Evals (AD-020; resolves OQ-009)
 
@@ -1371,6 +1435,16 @@ transferable to another; the baseline repopulates via `check_evals --update-base
 next green run. `evals/targets.json` is **not** reset: `authoring_target` keeps its current
 ratchet value, and an expected sub-target rate after a gate-model swap surfaces as a red gate
 to fix by improving `SKILL.md`, never by lowering targets.
+
+**Pin + corpus reset (AD-007 repin):** an engine repin is gate identity. The commit that lands a
+new pin resyncs the metadata + Language Reference snapshots, re-mints the FR-029 synthetic corpus
+(AC-030), re-executes the FR-033 constructed seeds (AC-035), and re-audits the refuse bucket against
+the new engine (AD-023 probe discipline: now-satisfiable asks convert to `matched` fixtures with
+seeds; the adversarial bucket is refilled with genuine gaps of the new engine and stays non-empty —
+floor ≥ the pre-repin refuse count). In the **same commit** it resets `evals/baseline.json` to
+`{ "schema_version": "1.0", "passing": [] }`, mirroring the gate-model swap; `evals/targets.json` is
+never lowered. The baseline repopulates via `check_evals --update-baseline` on the next green
+real-host run — the credentialed A5-entry dispatch, not a per-PR deterministic gate.
 
 **EvalFixture** (`evals/cases/*.json`, schema_version `"1.0"`):
 ```
@@ -1615,7 +1689,7 @@ Supported platforms for install scripts: macOS and Linux (Windows best-effort; n
 
 **Runtime package distribution (OQ-020):** `install/claude.py` / `install/cursor.py` copy skill
 files only and never run `pip`. The runtime (`python -m transon_authoring`) is installed
-separately from public PyPI (`pip install transon-authoring`, which pins `transon==0.1.7`
+separately from public PyPI (`pip install transon-authoring`, which pins `transon==0.2.3`
 transitively). If `transon_authoring` is not importable at skill-file install time, the installer
 prints a stderr hint and still exits 0 (structural install is valid without the runtime).
 
@@ -1641,7 +1715,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | Gate | Enforces |
 |---|---|
 | Unit tests (library) | §11 schemas, match, sandbox, preflight |
-| `check_snapshot` | NFR-004 / AD-007 |
+| `check_snapshot` | NFR-004 / AD-007 — metadata snapshot + Language Reference drift (FR-036) |
 | `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
 | `check_install` | NFR-009 / FR-019 (integrity + smoke) |
@@ -1718,8 +1792,10 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
      repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
      publish), run both installers, confirm the skill activates in real Claude Code and
      real Cursor, author one template; outcome recorded in the release notes.
-  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md`; re-run it before
-  release. *Resolve during A5:* **OQ-028** (Cursor personal scope).
+  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
+  post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
+  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8). *Resolve during
+  A5:* **OQ-028** (Cursor personal scope).
   *DoD:* ladder steps 1–4 green/recorded; release notes cite skill version, engine pin,
   snapshot hash; first PyPI publish per OQ-020.
 
@@ -1904,6 +1980,7 @@ excluded from active coverage.
 | FR-033 | AC-035 | A3+ (improvement) | check_evals lint |
 | FR-034 | AC-037 | A3+ (improvement) | CLI unit + skill-body |
 | FR-035 | AC-038 | A3+ (improvement) | check_evals + host_harness unit |
+| FR-036 | AC-039 | A5 | CLI unit + snapshot gate |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |

@@ -10,7 +10,7 @@ array orders (OQ-013), and the success contract `ok === true` ⇒
 
 Engine-behavior expectations (validate/transform error texts, NO_CONTENT for
 a missing `attr` key) are derived by RUNNING the pinned engine
-(`transon==0.1.7`) inside the test helpers — never from memory (AD-018 /
+(`transon==0.2.3`) inside the test helpers — never from memory (AD-018 /
 NFR-001). Fingerprints are always acquired via `content_fingerprint(...)` —
 never hardcoded (OQ-015 acquisition-path rule).
 """

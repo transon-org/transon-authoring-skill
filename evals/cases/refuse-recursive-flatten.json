@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "id": "refuse-recursive-flatten",
+  "expect": "refuse",
+  "intent_nl": "Recursively flatten a tree of arbitrary, data-dependent depth into a single flat list of its leaf values.",
+  "redacted": false
+}

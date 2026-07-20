@@ -24,12 +24,13 @@ NFR-012 comment exemption):
 
 1. Unshipped-path rule: any token under ``docs/``, ``harness/``,
    ``scripts/``, ``evals/``, ``tests/``, ``src/``, or ``resources/`` is red;
-   a leading ``./`` does not defeat the rule. Sole exemption (after ``./``
-   normalization): ``docs/SPECIFICATION.md`` (the engine's external
-   authority doc, AD-018).
+   a leading ``./`` does not defeat the rule. There is NO external-file
+   exemption — the engine repo's ``docs/SPECIFICATION.md`` is a
+   maintainer-only design-time authority (AD-026 authority swap) and is red
+   like any other ``docs/`` path. The shipped skill cites the engine's
+   Language Reference through the ``language`` module recipe instead.
 2. Spec-section rule: the token ``SPEC.md`` is red (never false-positives on
-   ``SPECIFICATION.md``); a ``§`` character is red unless the same line
-   names ``SPECIFICATION.md``.
+   ``SPECIFICATION.md``); a ``§`` character is always red.
 3. ID-citation rule: requirement-ID citations (``FR-``/``NFR-``/``AC-``/
    ``AD-``/``OQ-``/``UC-`` + three digits) in rendered text are red.
 
@@ -52,6 +53,7 @@ SUBCOMMANDS = frozenset(
     {
         "metadata",
         "examples",
+        "language",
         "check-samples",
         "verify",
         "result",
@@ -60,10 +62,6 @@ SUBCOMMANDS = frozenset(
         "init-config",
     }
 )
-
-#: The sole unshipped-path exemption: the engine's own external authority
-#: doc (AD-018). Exact string; any other docs/… path trips the lint.
-EXEMPT_PATH = "docs/SPECIFICATION.md"
 
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 RECIPE_RE = re.compile(r"python3?\s+-m\s+transon_authoring\s+([A-Za-z0-9_-]+)")
@@ -114,16 +112,15 @@ def scan_self_sufficiency(rel: str, text: str, findings: list) -> None:
             token = match.group(0).rstrip(".")
             if token.startswith("./"):
                 token = token[2:]  # normalize `./docs/…` -> `docs/…`
-            if token == EXEMPT_PATH:
-                continue
             findings.append(
                 (
                     rel,
                     lineno,
                     f"reference to unshipped repo path {token!r} — shipped "
-                    "files must be self-sufficient; only "
-                    f"{EXEMPT_PATH!r} (the engine's external authority doc) "
-                    "is exempt (NFR-012 / AC-032)",
+                    "files must be self-sufficient with no repo-path "
+                    "references; cite Transon authority through the "
+                    "'python -m transon_authoring language' recipe, not "
+                    "docs/SPECIFICATION.md (NFR-012 / AC-032)",
                 )
             )
         for match in SPEC_MD_RE.finditer(line):
@@ -135,7 +132,7 @@ def scan_self_sufficiency(rel: str, text: str, findings: list) -> None:
                     "the skill (NFR-012 / AC-032)",
                 )
             )
-        if "§" in line and "SPECIFICATION.md" not in line:
+        if "§" in line:
             findings.append(
                 (
                     rel,

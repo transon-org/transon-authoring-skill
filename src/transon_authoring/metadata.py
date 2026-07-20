@@ -2,7 +2,7 @@
 grounding catalog (FR-009, SPEC §7; §10 packaging; §11.7 pin).
 
 ``get_metadata()`` serves the committed ``resources/metadata-snapshot.json``
-(engine ``transon==0.1.7``, ``metadata_version "3.0"``) without touching the
+(engine ``transon==0.2.3``, ``metadata_version "3.0"``) without touching the
 live engine. Resolution order (§10): the packaged copy under
 ``transon_authoring/resources/`` (hatchling force-include in wheels), then the
 repo-root ``resources/`` for src-layout checkouts / editable installs.
@@ -14,10 +14,11 @@ import json
 from importlib import resources
 from pathlib import Path
 
-# Read-only module-level cache for get_metadata(). Callers MUST NOT mutate
-# the returned mapping — it is shared across all callers for the process
-# lifetime.
+# Read-only module-level caches for get_metadata() / get_language_reference().
+# Callers MUST NOT mutate the returned mapping — it is shared across all callers
+# for the process lifetime.
 _METADATA_CACHE: dict | None = None
+_LANGUAGE_REFERENCE_CACHE: dict | None = None
 
 
 def _resource_bytes(name: str) -> bytes:
@@ -59,3 +60,19 @@ def get_metadata() -> dict:
             _resource_bytes("metadata-snapshot.json").decode("utf-8")
         )
     return _METADATA_CACHE
+
+
+def get_language_reference() -> dict:
+    """Return the bundled Language Reference snapshot (FR-036 / AD-026).
+
+    Parsed from the bundled ``resources/language-reference.json`` (the pinned
+    engine's ``get_language_reference()`` dump) and cached at module level, with
+    no engine import — the read-path counterpart of ``get_metadata()``. The
+    result is **read-only**; callers must not mutate it.
+    """
+    global _LANGUAGE_REFERENCE_CACHE
+    if _LANGUAGE_REFERENCE_CACHE is None:
+        _LANGUAGE_REFERENCE_CACHE = json.loads(
+            _resource_bytes("language-reference.json").decode("utf-8")
+        )
+    return _LANGUAGE_REFERENCE_CACHE

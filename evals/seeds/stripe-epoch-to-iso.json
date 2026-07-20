@@ -1,0 +1,26 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "Stripe event envelope with a `created` Unix epoch timestamp — constructed from the public Stripe API reference (AD-023 real-world pack §5)",
+  "template": {
+    "$": "object",
+    "fields": {
+      "eventId": {
+        "$": "attr",
+        "name": "id"
+      },
+      "createdAt": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "name": "created"
+          },
+          {
+            "$": "call",
+            "name": "from_epoch"
+          }
+        ]
+      }
+    }
+  }
+}

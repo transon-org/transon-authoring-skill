@@ -1330,7 +1330,7 @@ def test_fr_035_only_scopes_provider_run(monkeypatch, tmp_repo, capsys):
     # populated, so a corpus-all-pass plan stays green.
     selected = [
         "seed-matched-flatten-orders",   # matched
-        "refuse-uppercase-currency",     # refuse
+        "refuse-sha256-checksum",        # refuse
         "seed-correction-attr-misspelled",  # correction
     ]
     for fid in selected:

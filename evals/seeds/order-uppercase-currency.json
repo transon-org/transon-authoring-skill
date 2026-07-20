@@ -1,0 +1,26 @@
+{
+  "origin": "real-world-pack",
+  "source_ref": "Order record with a lowercase ISO-4217 currency code — constructed from the public Stripe API reference (AD-023 real-world pack §4)",
+  "template": {
+    "$": "object",
+    "fields": {
+      "orderId": {
+        "$": "attr",
+        "name": "id"
+      },
+      "currency": {
+        "$": "chain",
+        "funcs": [
+          {
+            "$": "attr",
+            "name": "currency"
+          },
+          {
+            "$": "call",
+            "name": "upper"
+          }
+        ]
+      }
+    }
+  }
+}

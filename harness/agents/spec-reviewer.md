@@ -18,7 +18,7 @@ code; you report findings.
 3. Check the meta-invariants:
    - traceability rows updated in the same change; tests cite the IDs they cover;
    - no invented Transon semantics — any engine-behavior claim must be reproducible against the
-     pinned engine (`transon==0.1.7`, `../transon`), not asserted from memory (AD-018);
+     pinned engine (`transon==0.2.3`, `../transon`), not asserted from memory (AD-018);
    - no scope creep into other milestones or §3 non-goals (MCP, DSLs, custom profiles);
    - gates not weakened: diffs to `harness/scripts/`, hooks, CI, or test assertions that relax a
      check are findings unless separately justified;

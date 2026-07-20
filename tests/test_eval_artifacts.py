@@ -133,21 +133,15 @@ def test_fr_001_ac_002_corpus_exercises_mode_variant_authoring():
     assert isinstance(first_output(list_mode), list)
 
 
-def test_fr_017_baseline_reflects_the_accepted_green_gate():
-    # OQ-016f: ids enter baseline.json ONLY via an explicit accepted green gate
-    # (the --update-baseline rule: majority-passing fixtures). The first green
-    # full real-host gate (2026-07-15, $16.86, authoring 0.977 / adversarial 1.0
-    # / correction 1.0) has been accepted, so the baseline is now the 49
-    # majority-passing fixtures; every id resolves to a committed fixture, and it
-    # excludes the one fixture that failed its majority (ec2-flatten-inventory,
-    # turn-budget). Ratchet: these 49 must keep passing.
+def test_fr_017_baseline_is_reset_after_the_repin():
+    # §11.8 / AD-007: a pin or corpus change invalidates the previous eval
+    # baseline (it is gate identity), so baseline.json is empty until a later
+    # accepted green real-host gate repopulates it.
     document = load_document(EVALS / "baseline.json", "eval_baseline.json")
-    ids = document["passing"]
-    assert ids, "baseline should be populated by the accepted first green gate"
-    assert ids == sorted(set(ids)), "passing ids must be sorted + unique"
-    stems = {p.stem for p in FIXTURE_PATHS}
-    assert set(ids) <= stems, "every baseline id must resolve to a committed fixture"
-    assert "ec2-flatten-inventory" not in ids  # failed its majority — not baselined
+    assert document["passing"] == [], (
+        "the transon==0.2.3 repin resets the baseline to empty (§11.8); it "
+        "repopulates only from the next accepted green real-host gate"
+    )
 
 
 # --- seed fixtures (§11.8 EvalFixture) ---------------------------------------

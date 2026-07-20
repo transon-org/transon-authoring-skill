@@ -22,7 +22,7 @@ Produce the plan an executor will implement. You do not write code or edit files
    intent, the target module (SPEC §10 layout), and the **test intent** (what the first pytest
    test should assert, citing the ID).
 4. Flag any blocker: SPEC ambiguity, an engine-behavior question that must be answered by running
-   the pinned engine (`../transon`, `transon==0.1.7`), or anything needing a spec change (next
+   the pinned engine (`../transon`, `transon==0.2.3`), or anything needing a spec change (next
    free ID — never renumber). If found, STOP and report it instead of guessing.
 
 ## Guardrails

@@ -10,9 +10,12 @@ module subcommand.
 Self-sufficiency half (NFR-012 / AC-032): the rendered text of `SKILL.md` and
 every file under `adapters/` (HTML comments stripped first — the NFR-012
 comment exemption) carries no unshipped repo paths (`docs/`, `harness/`,
-`scripts/`, `evals/`, `tests/`, `src/`, `resources/` — sole exact-string
-exemption `docs/SPECIFICATION.md`), no `SPEC.md` / `§`-section references,
-and no requirement-ID citations.
+`scripts/`, `evals/`, `tests/`, `src/`, `resources/` — with NO external-file
+exemption, so the engine repo's `docs/SPECIFICATION.md` is red like any other
+`docs/` path per the AD-026 authority swap), no `SPEC.md` / `§`-section
+references (a bare `§` is always red), and no requirement-ID citations.
+Transon authority is cited only through `python -m transon_authoring` module
+recipes (including the `language` subcommand).
 
 The gate is run via subprocess so exit codes are observed exactly as CI
 would see them. Pure offline text/tree scan — deterministic output.
@@ -33,9 +36,10 @@ SKILL_BODY = """\
 
 <!-- authority: AD-018 / NFR-001 -->
 
-Ground every operator against the engine `docs/SPECIFICATION.md` for the
-pinned version. Run `python -m transon_authoring verify --template t.json
---samples s.json` and `python -m transon_authoring metadata` as needed.
+Ground every operator against the engine's Language Reference via
+`python -m transon_authoring language --section expressions-and-calls`. Run
+`python -m transon_authoring verify --template t.json --samples s.json` and
+`python -m transon_authoring metadata` as needed.
 """
 
 CLAUDE_ADAPTER = {
@@ -225,17 +229,42 @@ def test_ac032_red_on_id_in_adapter_readme(shipped_tree: Path):
     assert "NFR-007" in result.stderr
 
 
-def test_ac032_green_on_specification_md_exemption(shipped_tree: Path):
-    # NFR-012 / AC-032 — the engine's own docs/SPECIFICATION.md (external
-    # authority) is exempt; § on the same line as SPECIFICATION.md is too.
-    # The exemption is consistent for the `./`-prefixed spelling.
+def test_ac032_red_on_specification_md_reference(shipped_tree: Path):
+    # NFR-012 / AC-032 / AD-026 — the engine repo's docs/SPECIFICATION.md is a
+    # maintainer-only design-time authority, never cited by the shipped skill.
+    # A reference to it in rendered text is red like any other docs/ path, and a
+    # bare `§` on the same line is red too (no SPECIFICATION.md allowance).
     append_to_skill(
         shipped_tree,
-        "\nConsult §3 of the engine `docs/SPECIFICATION.md` when unsure.\n"
-        "Or open `./docs/SPECIFICATION.md` directly.\n",
+        "\nConsult §3 of the engine `docs/SPECIFICATION.md` when unsure.\n",
+    )
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    assert "docs/SPECIFICATION.md" in result.stderr
+    assert "§" in result.stderr
+
+
+def test_ac032_green_on_language_recipe(shipped_tree: Path):
+    # NFR-012 / AC-032 / AD-026 — the shipped authority is the engine's
+    # Language Reference reached through the `language` module recipe. A body
+    # whose only Transon-authority reference is
+    # `python -m transon_authoring language --section <id>` lints green, and
+    # `language` is a real subcommand in the recipe allowlist.
+    append_to_skill(
+        shipped_tree,
+        "\nDiscover sections with `python -m transon_authoring language "
+        "--list-sections`, then ground a specific one with "
+        "`python -m transon_authoring language --section context-and-scoping`.\n",
     )
     result = run_check(shipped_tree)
     assert result.returncode == 0, result.stderr
+
+    # `language` is in the module-recipe allowlist (SPEC §11.6 closed set), so
+    # the recipe lint does not flag it as an unknown subcommand.
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import check_parity
+
+    assert "language" in check_parity.SUBCOMMANDS
 
 
 def test_ac032_green_on_id_inside_html_comment(shipped_tree: Path):

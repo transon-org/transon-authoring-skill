@@ -15,8 +15,10 @@ only after the pinned engine has verified it against a user-confirmed SampleSet 
 
 Precedence for Transon semantics, highest first:
 
-1. Behavior of the **pinned running engine** (`transon==0.1.7`);
-2. The engine `docs/SPECIFICATION.md` for that version;
+1. Behavior of the **pinned running engine** (`transon==0.2.3`);
+2. The engine's **Language Reference** for that version, read via
+   `python -m transon_authoring language` (discover sections with
+   `--list-sections`, then a specific one with `--section <id>`);
 3. The pinned `get_editor_metadata()` snapshot (catalog/examples structure);
 4. The NL intent sidecar — **hints only**, never authority.
 
@@ -24,7 +26,7 @@ Precedence for Transon semantics, highest first:
 
 ## Pin
 
-`transon==0.1.7`, `metadata_version` `"3.0"`. The pinned snapshot is bundled with the
+`transon==0.2.3`, `metadata_version` `"3.0"`. The pinned snapshot is bundled with the
 `transon_authoring` package — print it with `python -m transon_authoring metadata`.
 
 ## Procedure
@@ -69,10 +71,15 @@ ONLY when no samples path was given and you must find where SampleSet files live
    - `python -m transon_authoring metadata` — the full pinned catalog. It is LARGE: do NOT dump it
      wholesale or pipe it to `head` (truncation loses the part you need). Reach for it only to
      confirm a specific operator/rule/mode name exists.
+   - `python -m transon_authoring language` — the engine's author-facing **Language Reference**,
+     the authoritative source for language SEMANTICS (what an operator, rule, or mode means). Run
+     `python -m transon_authoring language --list-sections` to discover the sections, then
+     `python -m transon_authoring language --section <id>` to read a specific one.
 2. Authority order, highest first: (1) behavior of the pinned running engine;
-   (2) the engine `docs/SPECIFICATION.md` for that version; (3) the pinned snapshot;
-   (4) the NL sidecar — hints only. Never use model memory, web docs, or Context7 for Transon
-   semantics.
+   (2) the engine's **Language Reference** for that version, read via
+   `python -m transon_authoring language` (`--list-sections`, then `--section <id>`); (3) the
+   pinned snapshot; (4) the NL sidecar — hints only. Never use model memory, web docs, or Context7
+   for Transon semantics.
 3. If the request needs a capability that cannot be grounded in the pinned snapshot — an
    operator, rule, or mode that does not exist there — REFUSE. Your refusal is an `AuthoringResult`
    with `ok: false` and `status: "aborted"` naming the missing capability — but do NOT hand-write

@@ -20,6 +20,156 @@
         "input": "any",
         "name": "type",
         "output": "string"
+      },
+      {
+        "input": "any",
+        "name": "bool",
+        "output": "boolean"
+      },
+      {
+        "input": "string",
+        "name": "upper",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "lower",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "capitalize",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "replace",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "removeprefix",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "removesuffix",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "strip",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "lstrip",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "rstrip",
+        "output": "string"
+      },
+      {
+        "input": "string, array",
+        "name": "slice",
+        "output": "string, array"
+      },
+      {
+        "input": "number",
+        "name": "from_epoch",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "to_epoch",
+        "output": "int"
+      },
+      {
+        "input": "string, array, object",
+        "name": "length",
+        "output": "int"
+      },
+      {
+        "input": "array",
+        "name": "flatten",
+        "output": "array"
+      },
+      {
+        "input": "array",
+        "name": "sum",
+        "output": "number"
+      },
+      {
+        "input": "array",
+        "name": "min",
+        "output": "any"
+      },
+      {
+        "input": "array",
+        "name": "max",
+        "output": "any"
+      },
+      {
+        "input": "array",
+        "name": "sorted",
+        "output": "array"
+      },
+      {
+        "input": "string, array",
+        "name": "reversed",
+        "output": "string, array"
+      },
+      {
+        "input": "array",
+        "name": "unique",
+        "output": "array"
+      },
+      {
+        "input": "number",
+        "name": "abs",
+        "output": "number"
+      },
+      {
+        "input": "number",
+        "name": "floor",
+        "output": "int"
+      },
+      {
+        "input": "number",
+        "name": "ceil",
+        "output": "int"
+      },
+      {
+        "input": "number",
+        "name": "round",
+        "output": "number"
+      },
+      {
+        "input": "string",
+        "name": "b64encode",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "b64decode",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "uuid5",
+        "output": "string"
+      },
+      {
+        "input": "string",
+        "name": "regex_match",
+        "output": "array, null"
+      },
+      {
+        "input": "string",
+        "name": "regex_replace",
+        "output": "string"
       }
     ],
     "operators": [
@@ -120,6 +270,13 @@
         "name": "!",
         "result": "boolean",
         "types": "boolean"
+      },
+      {
+        "alternative": "in",
+        "kind": "binary",
+        "name": "in",
+        "result": "boolean",
+        "types": "any"
       }
     ],
     "rules": [
@@ -477,6 +634,26 @@
         ]
       },
       {
+        "name": "split",
+        "params": [
+          {
+            "kind": "dynamic",
+            "name": "sep"
+          }
+        ],
+        "variants": [
+          {
+            "id": "base",
+            "params": [
+              {
+                "name": "sep",
+                "required": true
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "chain",
         "params": [
           {
@@ -531,7 +708,8 @@
               "||",
               "or",
               "!",
-              "not"
+              "not",
+              "in"
             ]
           },
           {
@@ -591,7 +769,37 @@
               "str",
               "int",
               "float",
-              "type"
+              "type",
+              "bool",
+              "upper",
+              "lower",
+              "capitalize",
+              "replace",
+              "removeprefix",
+              "removesuffix",
+              "strip",
+              "lstrip",
+              "rstrip",
+              "slice",
+              "from_epoch",
+              "to_epoch",
+              "length",
+              "flatten",
+              "sum",
+              "min",
+              "max",
+              "sorted",
+              "reversed",
+              "unique",
+              "abs",
+              "floor",
+              "ceil",
+              "round",
+              "b64encode",
+              "b64decode",
+              "uuid5",
+              "regex_match",
+              "regex_replace"
             ]
           },
           {
@@ -2077,6 +2285,679 @@
         }
       },
       {
+        "data": "hello",
+        "doc": "Returns the length of a string with `length`.",
+        "name": "LengthOfString",
+        "result": 5,
+        "tags": [
+          "call",
+          "func:length"
+        ],
+        "template": {
+          "$": "call",
+          "name": "length"
+        }
+      },
+      {
+        "data": [
+          1,
+          2,
+          3
+        ],
+        "doc": "Returns the length of an array with `length`.",
+        "name": "LengthOfArray",
+        "result": 3,
+        "tags": [
+          "call",
+          "func:length"
+        ],
+        "template": {
+          "$": "call",
+          "name": "length"
+        }
+      },
+      {
+        "data": [
+          [
+            1,
+            2
+          ],
+          [
+            3
+          ],
+          [
+            4,
+            5
+          ]
+        ],
+        "doc": "Flattens one level of an array-of-arrays with `flatten`.",
+        "name": "FlattenOneLevel",
+        "result": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "tags": [
+          "call",
+          "func:flatten"
+        ],
+        "template": {
+          "$": "call",
+          "name": "flatten"
+        }
+      },
+      {
+        "data": [
+          1,
+          2,
+          3.5
+        ],
+        "doc": "Sums an array of numbers with `sum` (`sum([])` is `0`).",
+        "name": "SumNumbers",
+        "result": 6.5,
+        "tags": [
+          "call",
+          "func:sum"
+        ],
+        "template": {
+          "$": "call",
+          "name": "sum"
+        }
+      },
+      {
+        "data": [
+          3,
+          1,
+          2
+        ],
+        "doc": "Returns the minimum element of an array with `min`.",
+        "name": "MinOfArray",
+        "result": 1,
+        "tags": [
+          "call:values",
+          "func:min"
+        ],
+        "template": {
+          "$": "call",
+          "name": "min",
+          "values": [
+            {
+              "$": "this"
+            }
+          ]
+        }
+      },
+      {
+        "data": [],
+        "doc": "Returns the provided default when `max` is called on an empty array.",
+        "name": "MaxWithDefault",
+        "result": 0,
+        "tags": [
+          "call:values",
+          "func:max"
+        ],
+        "template": {
+          "$": "call",
+          "name": "max",
+          "values": [
+            {
+              "$": "this"
+            },
+            0
+          ]
+        }
+      },
+      {
+        "data": [
+          3,
+          1,
+          2
+        ],
+        "doc": "Returns a new ascending-sorted array of homogeneous scalars with `sorted`.",
+        "name": "SortedArray",
+        "result": [
+          1,
+          2,
+          3
+        ],
+        "tags": [
+          "call",
+          "func:sorted"
+        ],
+        "template": {
+          "$": "call",
+          "name": "sorted"
+        }
+      },
+      {
+        "data": [
+          "a",
+          "b",
+          "a",
+          "c",
+          "b"
+        ],
+        "doc": "Deduplicates an array while preserving first-occurrence order with `unique`.",
+        "name": "UniquePreserveOrder",
+        "result": [
+          "a",
+          "b",
+          "c"
+        ],
+        "tags": [
+          "call",
+          "func:unique"
+        ],
+        "template": {
+          "$": "call",
+          "name": "unique"
+        }
+      },
+      {
+        "data": -7,
+        "doc": "Returns the absolute value of a number with `abs`.",
+        "name": "AbsNumber",
+        "result": 7,
+        "tags": [
+          "call",
+          "func:abs"
+        ],
+        "template": {
+          "$": "call",
+          "name": "abs"
+        }
+      },
+      {
+        "data": 3.7,
+        "doc": "Returns the floor of a number with `floor`.",
+        "name": "FloorNumber",
+        "result": 3,
+        "tags": [
+          "call",
+          "func:floor"
+        ],
+        "template": {
+          "$": "call",
+          "name": "floor"
+        }
+      },
+      {
+        "data": 3.2,
+        "doc": "Returns the ceiling of a number with `ceil`.",
+        "name": "CeilNumber",
+        "result": 4,
+        "tags": [
+          "call",
+          "func:ceil"
+        ],
+        "template": {
+          "$": "call",
+          "name": "ceil"
+        }
+      },
+      {
+        "data": 3.14159,
+        "doc": "Rounds a number to a given number of digits with `round`.",
+        "name": "RoundWithDigits",
+        "result": 3.14,
+        "tags": [
+          "call:values",
+          "func:round"
+        ],
+        "template": {
+          "$": "call",
+          "name": "round",
+          "values": [
+            {
+              "$": "this"
+            },
+            2
+          ]
+        }
+      },
+      {
+        "data": null,
+        "doc": "Converts a value to a boolean by Python truthiness with `bool` (total).",
+        "name": "BoolOfNull",
+        "result": false,
+        "tags": [
+          "call",
+          "func:bool"
+        ],
+        "template": {
+          "$": "call",
+          "name": "bool"
+        }
+      },
+      {
+        "data": 1712345678,
+        "doc": "Converts epoch seconds to a fixed ISO-8601 UTC timestamp with `from_epoch`.",
+        "name": "FromEpochIso",
+        "result": "2024-04-05T19:34:38Z",
+        "tags": [
+          "call",
+          "func:from_epoch"
+        ],
+        "template": {
+          "$": "call",
+          "name": "from_epoch"
+        }
+      },
+      {
+        "data": 1712345678,
+        "doc": "Formats epoch seconds with an explicit whitelist format via `from_epoch`.",
+        "name": "FromEpochCustomFormat",
+        "result": "2024-04-05",
+        "tags": [
+          "call:values",
+          "func:from_epoch"
+        ],
+        "template": {
+          "$": "call",
+          "name": "from_epoch",
+          "values": [
+            {
+              "$": "this"
+            },
+            "%Y-%m-%d"
+          ]
+        }
+      },
+      {
+        "data": "2024-04-05T19:34:38Z",
+        "doc": "Parses a fixed ISO-8601 UTC timestamp to epoch seconds with `to_epoch`.",
+        "name": "ToEpochIso",
+        "result": 1712345678,
+        "tags": [
+          "call:values",
+          "func:to_epoch"
+        ],
+        "template": {
+          "$": "call",
+          "name": "to_epoch",
+          "values": [
+            {
+              "$": "this"
+            }
+          ]
+        }
+      },
+      {
+        "data": "2024-04-05T19:34:38",
+        "doc": "Parses a custom-format UTC date string to epoch seconds with `to_epoch`.",
+        "name": "ToEpochCustomFormat",
+        "result": 1712345678,
+        "tags": [
+          "call:values",
+          "func:to_epoch"
+        ],
+        "template": {
+          "$": "call",
+          "name": "to_epoch",
+          "values": [
+            {
+              "$": "this"
+            },
+            "%Y-%m-%dT%H:%M:%S"
+          ]
+        }
+      },
+      {
+        "data": "hi",
+        "doc": "Encodes a UTF-8 string as standard-alphabet base64 with `b64encode`.",
+        "name": "B64Encode",
+        "result": "aGk=",
+        "tags": [
+          "call",
+          "func:b64encode"
+        ],
+        "template": {
+          "$": "call",
+          "name": "b64encode"
+        }
+      },
+      {
+        "data": "aGk=",
+        "doc": "Decodes standard-alphabet base64 to a UTF-8 string with `b64decode`.",
+        "name": "B64Decode",
+        "result": "hi",
+        "tags": [
+          "call",
+          "func:b64decode"
+        ],
+        "template": {
+          "$": "call",
+          "name": "b64decode"
+        }
+      },
+      {
+        "data": null,
+        "doc": "Builds a deterministic UUID5 from a well-known namespace and a name.",
+        "name": "Uuid5Dns",
+        "result": "cfbff0d1-9375-5685-968c-48ce8b15ae17",
+        "tags": [
+          "call:values",
+          "func:uuid5"
+        ],
+        "template": {
+          "$": "call",
+          "name": "uuid5",
+          "values": [
+            "dns",
+            "example.com"
+          ]
+        }
+      },
+      {
+        "data": "user@host",
+        "doc": "Returns capture groups from `regex_match` on a successful match.",
+        "name": "RegexMatchGroups",
+        "result": [
+          "user",
+          "host"
+        ],
+        "tags": [
+          "call:values",
+          "func:regex_match"
+        ],
+        "template": {
+          "$": "call",
+          "name": "regex_match",
+          "values": [
+            {
+              "$": "this"
+            },
+            "(\\w+)@(\\w+)"
+          ]
+        }
+      },
+      {
+        "data": "abc",
+        "doc": "Returns `null` from `regex_match` when the pattern does not match.",
+        "name": "RegexMatchNone",
+        "result": null,
+        "tags": [
+          "call:values",
+          "func:regex_match"
+        ],
+        "template": {
+          "$": "call",
+          "name": "regex_match",
+          "values": [
+            {
+              "$": "this"
+            },
+            "^\\d+$"
+          ]
+        }
+      },
+      {
+        "data": "a1b22c",
+        "doc": "Replaces regex matches with `regex_replace`.",
+        "name": "RegexReplace",
+        "result": "a#b#c",
+        "tags": [
+          "call:values",
+          "func:regex_replace"
+        ],
+        "template": {
+          "$": "call",
+          "name": "regex_replace",
+          "values": [
+            {
+              "$": "this"
+            },
+            "\\d+",
+            "#"
+          ]
+        }
+      },
+      {
+        "data": "usd",
+        "doc": "Uppercases a string with the `upper` function.",
+        "name": "UpperString",
+        "result": "USD",
+        "tags": [
+          "call",
+          "func:upper"
+        ],
+        "template": {
+          "$": "call",
+          "name": "upper"
+        }
+      },
+      {
+        "data": "USD",
+        "doc": "Lowercases a string with the `lower` function.",
+        "name": "LowerString",
+        "result": "usd",
+        "tags": [
+          "call",
+          "func:lower"
+        ],
+        "template": {
+          "$": "call",
+          "name": "lower"
+        }
+      },
+      {
+        "data": "hello world",
+        "doc": "Capitalizes a string with the `capitalize` function.",
+        "name": "CapitalizeString",
+        "result": "Hello world",
+        "tags": [
+          "call",
+          "func:capitalize"
+        ],
+        "template": {
+          "$": "call",
+          "name": "capitalize"
+        }
+      },
+      {
+        "data": "foo-foo",
+        "doc": "Replaces all occurrences of a substring with `replace`.",
+        "name": "ReplaceSubstring",
+        "result": "bar-bar",
+        "tags": [
+          "call:values",
+          "func:replace"
+        ],
+        "template": {
+          "$": "call",
+          "name": "replace",
+          "values": [
+            {
+              "$": "this"
+            },
+            "foo",
+            "bar"
+          ]
+        }
+      },
+      {
+        "data": "refs/heads/main",
+        "doc": "Removes an exact prefix with `removeprefix` (unlike character-set `lstrip`).",
+        "name": "RemovePrefix",
+        "result": "main",
+        "tags": [
+          "call:values",
+          "func:removeprefix"
+        ],
+        "template": {
+          "$": "call",
+          "name": "removeprefix",
+          "values": [
+            {
+              "$": "this"
+            },
+            "refs/heads/"
+          ]
+        }
+      },
+      {
+        "data": "repo.git",
+        "doc": "Removes an exact suffix with `removesuffix`.",
+        "name": "RemoveSuffix",
+        "result": "repo",
+        "tags": [
+          "call:values",
+          "func:removesuffix"
+        ],
+        "template": {
+          "$": "call",
+          "name": "removesuffix",
+          "values": [
+            {
+              "$": "this"
+            },
+            ".git"
+          ]
+        }
+      },
+      {
+        "data": "  hello  ",
+        "doc": "Strips leading and trailing whitespace with `strip`.",
+        "name": "StripWhitespace",
+        "result": "hello",
+        "tags": [
+          "call",
+          "func:strip"
+        ],
+        "template": {
+          "$": "call",
+          "name": "strip"
+        }
+      },
+      {
+        "data": "00123",
+        "doc": "Strips a leading character set with `lstrip`.",
+        "name": "LstripChars",
+        "result": "123",
+        "tags": [
+          "call:values",
+          "func:lstrip"
+        ],
+        "template": {
+          "$": "call",
+          "name": "lstrip",
+          "values": [
+            {
+              "$": "this"
+            },
+            "0"
+          ]
+        }
+      },
+      {
+        "data": "12300",
+        "doc": "Strips a trailing character set with `rstrip`.",
+        "name": "RstripChars",
+        "result": "123",
+        "tags": [
+          "call:values",
+          "func:rstrip"
+        ],
+        "template": {
+          "$": "call",
+          "name": "rstrip",
+          "values": [
+            {
+              "$": "this"
+            },
+            "0"
+          ]
+        }
+      },
+      {
+        "data": "abcdef",
+        "doc": "Slices a string with `slice` using start and stop indices.",
+        "name": "SliceString",
+        "result": "bcd",
+        "tags": [
+          "call:values",
+          "func:slice"
+        ],
+        "template": {
+          "$": "call",
+          "name": "slice",
+          "values": [
+            {
+              "$": "this"
+            },
+            1,
+            4
+          ]
+        }
+      },
+      {
+        "data": [
+          10,
+          20,
+          30,
+          40
+        ],
+        "doc": "Slices an array with `slice` from a start index to the end.",
+        "name": "SliceArray",
+        "result": [
+          20,
+          30,
+          40
+        ],
+        "tags": [
+          "call:values",
+          "func:slice"
+        ],
+        "template": {
+          "$": "call",
+          "name": "slice",
+          "values": [
+            {
+              "$": "this"
+            },
+            1
+          ]
+        }
+      },
+      {
+        "data": "abc",
+        "doc": "Reverses a string with `reversed`.",
+        "name": "ReversedString",
+        "result": "cba",
+        "tags": [
+          "call",
+          "func:reversed"
+        ],
+        "template": {
+          "$": "call",
+          "name": "reversed"
+        }
+      },
+      {
+        "data": [
+          1,
+          2,
+          3
+        ],
+        "doc": "Reverses an array with `reversed`.",
+        "name": "ReversedArray",
+        "result": [
+          3,
+          2,
+          1
+        ],
+        "tags": [
+          "call",
+          "func:reversed"
+        ],
+        "template": {
+          "$": "call",
+          "name": "reversed"
+        }
+      },
+      {
         "data": {},
         "doc": "Returns no result when a named attribute is absent from the input.\nUsed as an included sub-template in ``IncludeWithDefault``.",
         "name": "LookupMissingAttr",
@@ -3185,6 +4066,58 @@
         }
       },
       {
+        "data": "b",
+        "doc": "`in` returns `true` when the left operand is an element of an array.\nTotal — never raises.",
+        "name": "OperatorInArray",
+        "result": true,
+        "tags": [
+          "op:in",
+          "expr:value"
+        ],
+        "template": {
+          "$": "expr",
+          "op": "in",
+          "value": [
+            "a",
+            "b",
+            "c"
+          ]
+        }
+      },
+      {
+        "data": "name",
+        "doc": "`in` returns `true` when the left operand is a key of an object.",
+        "name": "OperatorInObjectKey",
+        "result": true,
+        "tags": [
+          "op:in",
+          "expr:value"
+        ],
+        "template": {
+          "$": "expr",
+          "op": "in",
+          "value": {
+            "name": "Ada",
+            "role": "engineer"
+          }
+        }
+      },
+      {
+        "data": "son",
+        "doc": "`in` returns `true` when the left operand is a substring of a string.",
+        "name": "OperatorInString",
+        "result": true,
+        "tags": [
+          "op:in",
+          "expr:value"
+        ],
+        "template": {
+          "$": "expr",
+          "op": "in",
+          "value": "transon"
+        }
+      },
+      {
         "data": {
           "address": {
             "city": "London",
@@ -3796,6 +4729,89 @@
               "default": "isolated",
               "name": "item_var"
             }
+          ]
+        }
+      },
+      {
+        "data": "refs/heads/main",
+        "doc": "Splits a string on a separator into a list of strings — the inverse of `join`.",
+        "name": "SplitString",
+        "result": [
+          "refs",
+          "heads",
+          "main"
+        ],
+        "tags": [
+          "split",
+          "split:sep"
+        ],
+        "template": {
+          "$": "split",
+          "sep": "/"
+        }
+      },
+      {
+        "data": [
+          1,
+          0,
+          2,
+          0,
+          3
+        ],
+        "doc": "Splits an array into sub-arrays on elements equal to `sep`.",
+        "name": "SplitArrayOnElement",
+        "result": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            3
+          ]
+        ],
+        "tags": [
+          "split",
+          "split:sep"
+        ],
+        "template": {
+          "$": "split",
+          "sep": 0
+        }
+      },
+      {
+        "data": [
+          1,
+          0,
+          0,
+          2,
+          0,
+          0,
+          3
+        ],
+        "doc": "Splits an array on each contiguous occurrence of an array `sep` (subsequence).",
+        "name": "SplitArrayOnSubsequence",
+        "result": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            3
+          ]
+        ],
+        "tags": [
+          "split",
+          "split:sep"
+        ],
+        "template": {
+          "$": "split",
+          "sep": [
+            0,
+            0
           ]
         }
       },
@@ -4526,6 +5542,222 @@
           "TypeDispatchWithSwitch"
         ],
         "name": "type"
+      },
+      {
+        "doc": "Convert any value to a boolean by Python truthiness. Total — never raises. Useful to turn `regex_match` (groups-or-null) into a condition predicate.",
+        "examples": [
+          "BoolOfNull"
+        ],
+        "name": "bool"
+      },
+      {
+        "doc": "Return `s` uppercased. Non-string input raises `TransformationError`.",
+        "examples": [
+          "UpperString"
+        ],
+        "name": "upper"
+      },
+      {
+        "doc": "Return `s` lowercased. Non-string input raises `TransformationError`.",
+        "examples": [
+          "LowerString"
+        ],
+        "name": "lower"
+      },
+      {
+        "doc": "Return `s` with the first character uppercased and the rest lowercased. Non-string input raises `TransformationError`.",
+        "examples": [
+          "CapitalizeString"
+        ],
+        "name": "capitalize"
+      },
+      {
+        "doc": "`values: [s, old, new]` — replace all occurrences of `old` with `new` in `s`.",
+        "examples": [
+          "ReplaceSubstring"
+        ],
+        "name": "replace"
+      },
+      {
+        "doc": "`values: [s, prefix]` — remove `prefix` from the start of `s` if present. Unlike `lstrip`, this is exact-prefix removal, not character-set trimming.",
+        "examples": [
+          "RemovePrefix"
+        ],
+        "name": "removeprefix"
+      },
+      {
+        "doc": "`values: [s, suffix]` — remove `suffix` from the end of `s` if present. Unlike `rstrip`, this is exact-suffix removal, not character-set trimming.",
+        "examples": [
+          "RemoveSuffix"
+        ],
+        "name": "removesuffix"
+      },
+      {
+        "doc": "Strip leading/trailing whitespace, or `values: [s, chars]` for a character set. Not a substitute for `removeprefix`/`removesuffix`.",
+        "examples": [
+          "StripWhitespace"
+        ],
+        "name": "strip"
+      },
+      {
+        "doc": "Strip leading whitespace, or `values: [s, chars]` for a character set.",
+        "examples": [
+          "LstripChars"
+        ],
+        "name": "lstrip"
+      },
+      {
+        "doc": "Strip trailing whitespace, or `values: [s, chars]` for a character set.",
+        "examples": [
+          "RstripChars"
+        ],
+        "name": "rstrip"
+      },
+      {
+        "doc": "`values: [x, start]` or `[x, start, stop]` — Python slice of a string or array. Negative indices and out-of-range clamps apply. Non-int indices raise `TransformationError`.",
+        "examples": [
+          "SliceString",
+          "SliceArray"
+        ],
+        "name": "slice"
+      },
+      {
+        "doc": "Convert epoch **seconds** (int/float; fractional truncated) to a UTC string. Unary form uses fixed ISO-8601 `YYYY-MM-DDThh:mm:ssZ`. `values: [n, fmt]` uses an explicit format restricted to `%Y %m %d %H %M %S %j %z %%` plus literal text. Non-finite or out-of-range inputs and disallowed directives raise `TransformationError`.",
+        "examples": [
+          "FromEpochIso",
+          "FromEpochCustomFormat"
+        ],
+        "name": "from_epoch"
+      },
+      {
+        "doc": "Parse a UTC date/time string to epoch seconds (int). `values: [s]` accepts fixed ISO-8601 `YYYY-MM-DDThh:mm:ssZ`; `values: [s, fmt]` uses an explicit format with the same whitelist as `from_epoch`. Parse failure raises `TransformationError`.",
+        "examples": [
+          "ToEpochIso",
+          "ToEpochCustomFormat"
+        ],
+        "name": "to_epoch"
+      },
+      {
+        "doc": "Return the length of a string, array, or object. Other types raise `TransformationError`.",
+        "examples": [
+          "LengthOfString",
+          "LengthOfArray"
+        ],
+        "name": "length"
+      },
+      {
+        "doc": "Flatten one level of an array-of-arrays. Non-array input or a non-array element raises `TransformationError`.",
+        "examples": [
+          "FlattenOneLevel"
+        ],
+        "name": "flatten"
+      },
+      {
+        "doc": "Sum an array of numbers. `sum([])` is `0`. Booleans and non-numeric elements raise `TransformationError`.",
+        "examples": [
+          "SumNumbers"
+        ],
+        "name": "sum"
+      },
+      {
+        "doc": "`values: [array]` or `[array, default]` — minimum element. Empty array without `default` raises `TransformationError`.",
+        "examples": [
+          "MinOfArray"
+        ],
+        "name": "min"
+      },
+      {
+        "doc": "`values: [array]` or `[array, default]` — maximum element. Empty array without `default` raises `TransformationError`.",
+        "examples": [
+          "MaxWithDefault"
+        ],
+        "name": "max"
+      },
+      {
+        "doc": "Return a new array of homogeneous scalars sorted ascending. Mixed types raise `TransformationError`.",
+        "examples": [
+          "SortedArray"
+        ],
+        "name": "sorted"
+      },
+      {
+        "doc": "Reverse an array or a string. Other types raise `TransformationError`.",
+        "examples": [
+          "ReversedString",
+          "ReversedArray"
+        ],
+        "name": "reversed"
+      },
+      {
+        "doc": "Deduplicate an array preserving first-occurrence order. Object or array elements raise `TransformationError`.",
+        "examples": [
+          "UniquePreserveOrder"
+        ],
+        "name": "unique"
+      },
+      {
+        "doc": "Absolute value of a number. Non-number raises `TransformationError`.",
+        "examples": [
+          "AbsNumber"
+        ],
+        "name": "abs"
+      },
+      {
+        "doc": "Floor of a number (`math.floor`). Non-number raises `TransformationError`.",
+        "examples": [
+          "FloorNumber"
+        ],
+        "name": "floor"
+      },
+      {
+        "doc": "Ceiling of a number (`math.ceil`). Non-number raises `TransformationError`.",
+        "examples": [
+          "CeilNumber"
+        ],
+        "name": "ceil"
+      },
+      {
+        "doc": "Round a number; optional `values: [x, ndigits]`. Non-number raises `TransformationError`.",
+        "examples": [
+          "RoundWithDigits"
+        ],
+        "name": "round"
+      },
+      {
+        "doc": "UTF-8 encode a string and return standard-alphabet base64.",
+        "examples": [
+          "B64Encode"
+        ],
+        "name": "b64encode"
+      },
+      {
+        "doc": "Decode standard-alphabet base64 to a UTF-8 string. Invalid base64 or non-UTF-8 payload raises `TransformationError`.",
+        "examples": [
+          "B64Decode"
+        ],
+        "name": "b64decode"
+      },
+      {
+        "doc": "`values: [namespace, name]` — deterministic UUID5. `namespace` is one of `dns`/`url`/`oid`/`x500` or a UUID string. Pure and reproducible (no random `uuid4`).",
+        "examples": [
+          "Uuid5Dns"
+        ],
+        "name": "uuid5"
+      },
+      {
+        "doc": "`values: [s, pattern]` — Python `re.search`. On match returns capture groups as an array (unmatched optionals are `null`); with no groups returns `[full match]`. On no match returns `null`. Use `bool(...)` in conditions. Invalid pattern raises `TransformationError`. Dialect is Python `re`; ReDoS is a host responsibility.",
+        "examples": [
+          "RegexMatchGroups",
+          "RegexMatchNone"
+        ],
+        "name": "regex_match"
+      },
+      {
+        "doc": "`values: [s, pattern, repl]` — Python `re.sub`. Invalid pattern raises `TransformationError`. Dialect is Python `re`; ReDoS is a host responsibility.",
+        "examples": [
+          "RegexReplace"
+        ],
+        "name": "regex_replace"
       }
     ],
     "operators": [
@@ -4629,6 +5861,15 @@
           "ExprUnary2"
         ],
         "name": "!"
+      },
+      {
+        "doc": "Membership: `true` when the left operand is a member of the right. Array → element membership; string → substring (left must be a string, else `false`); object → key presence (left must be a string, else `false`); any other container → `false`. Total — never raises.",
+        "examples": [
+          "OperatorInArray",
+          "OperatorInObjectKey",
+          "OperatorInString"
+        ],
+        "name": "in"
       }
     ],
     "recipes": [
@@ -4658,7 +5899,7 @@
         "params": []
       },
       {
-        "description": "Returns the value stored in previous context.",
+        "description": "Returns the value stored in previous context.\nUsing `parent` in the root context (where no previous scope exists) raises\n`DefinitionError`.",
         "examples": [
           "ExprSimpleMonads2",
           "ExprMonadsComplex"
@@ -4667,7 +5908,7 @@
         "params": []
       },
       {
-        "description": "Works inside `map`/`filter` when iterating over lists.\nReturns current item.",
+        "description": "Works inside `map`/`filter` when iterating over lists.\nReturns current item.\nUsing it outside such an iteration scope raises `DefinitionError`.",
         "examples": [
           "FilterList",
           "MapListToNestedListWithItem",
@@ -4678,7 +5919,7 @@
         "params": []
       },
       {
-        "description": "Works inside `map`/`filter` when iterating over dicts.\nReturns the key of current element.",
+        "description": "Works inside `map`/`filter` when iterating over dicts.\nReturns the key of current element.\nUsing it outside such an iteration scope raises `DefinitionError`.",
         "examples": [
           "MapDictToList",
           "MapDictToDictItems",
@@ -4688,7 +5929,7 @@
         "params": []
       },
       {
-        "description": "Works inside `map`/`filter`.\nReturns 0-based index of iteration.",
+        "description": "Works inside `map`/`filter`.\nReturns 0-based index of iteration.\nUsing it outside an iteration scope raises `DefinitionError`.",
         "examples": [
           "FilterListByOddIndex",
           "FormatWithValue",
@@ -4698,7 +5939,7 @@
         "params": []
       },
       {
-        "description": "Works inside `map`/`filter` when iterating over dicts.\nReturns the value of current element.",
+        "description": "Works inside `map`/`filter` when iterating over dicts.\nReturns the value of current element.\nUsing it outside such an iteration scope raises `DefinitionError`.",
         "examples": [
           "FilterDict",
           "MapDictToList",
@@ -4709,7 +5950,7 @@
         "params": []
       },
       {
-        "description": "Stores `context.this` under the given name in the *current* context scope.\nReturns `context.this` unchanged (pass-through), so it can sit inside a\n`chain` without altering the piped value.\n\n**Scoping** — where a `set` is visible depends on which context object it\nruns in:\n\n- **Descendant scopes**: visible in any context derived *after* the `set`\n  (child scopes resolve ancestor variables through the parent chain; the first\n  `set` in a child materializes inherited variables for write isolation).\n- **Later siblings, same scope**: when a `set` runs directly at a literal-dict\n  key or list element, later-evaluated siblings in that dict/list share the\n  same context and can `get` the variable. Earlier siblings cannot — visibility\n  follows dict key / list index order.\n- **First `chain` func**: runs in the caller's context, so a `set` there is\n  visible to later `chain` funcs and to sibling templates outside the `chain`.\n- **Later `chain` funcs, `map`/`filter` items, etc.**: run in derived contexts;\n  their `set` values stay inside that scope and do not escape to parents or\n  already-evaluated siblings.\n\n`include` starts a separate transformation — variables do not cross that\nboundary.",
+        "description": "Stores `context.this` under the given name in the *current* context scope.\nReturns `context.this` unchanged (pass-through), so it can sit inside a\n`chain` without altering the piped value.\n\nVisibility follows the language's downward-only scoping model (Language\nReference, \"Context and scoping\"): the variable is visible to scopes derived\n*after* the `set` and to later-evaluated siblings sharing the same scope —\nnever to parent scopes once a derived scope ends, and never across an\n`include` boundary (a separate transformation). Note the refactoring\npitfall: wrapping a step in `chain`, reordering dict keys, or moving a `set`\ncan change visibility with no error.",
         "examples": [
           "AttrDynamicReferenceMultipleNames",
           "FilterListNoContent",
@@ -4772,7 +6013,7 @@
         ]
       },
       {
-        "description": "Returns values of attribute or item from current value in context.\nCan search in deeply nested structures with path.\nIf attribute is not present returns no value.\nIf the dynamic name or any path segment evaluates to `NO_CONTENT`, returns\nno value (uniformly for all container types).\n\nParameters are mutually exclusive.",
+        "description": "Returns values of attribute or item from current value in context.\nCan search in deeply nested structures with path.\n\n- A missing key or an index out of range → no value (`NO_CONTENT`), or the\n  `default` when provided. Looking further into a missing value stays\n  missing — a deep path over an absent branch does not raise.\n- If the dynamic name or any path segment evaluates to `NO_CONTENT` → no\n  value (uniformly for all container types).\n- Any other lookup failure (e.g. indexing a string with a string) raises\n  `TransformationError`.\n\nParameters are mutually exclusive.",
         "examples": [
           "AttrWithDefault",
           "ExprOrNoContentFallback",
@@ -4861,7 +6102,7 @@
         ]
       },
       {
-        "description": "Iterates over `list` or `dict` and produces new `dict` or `list` with items based on template.",
+        "description": "Iterates over `list` or `dict` and produces new `dict` or `list` with items based on template.\n\nEach iteration derives a sub-context whose `this` is the element, with the\niteration accessors available (`item`/`index` over lists; `key`/`value`/`index`\nover dicts). Modes (mutually exclusive):\n\n- `item`: one output element per input element → list.\n- `items`: the template yields a *list* of elements per input element; the\n  lists are concatenated → list (the flatten-while-mapping mode).\n- `key`+`value`: one output entry per input element → dict.\n\nResults that evaluate to `NO_CONTENT` are skipped — the item (or the whole\nkey/value pair) is omitted from the output rather than emitted as `null`.\nIterating a value that is neither a list nor a dict raises\n`TransformationError`.",
         "examples": [
           "MapListToNestedListWithItem"
         ],
@@ -4914,7 +6155,7 @@
         ]
       },
       {
-        "description": "Iterates over `list` or `dict` and filters out items regarding condition calculation.",
+        "description": "Iterates over `list` or `dict` and filters out items regarding condition calculation.\n\nKeeps the elements whose `cond` evaluates truthy; a condition that evaluates\nto `NO_CONTENT` excludes the element. The container type is preserved:\nlist → list, dict → dict (entries keep their original keys and values).\nFiltering a value that is neither a list nor a dict raises\n`TransformationError`.",
         "examples": [
           "FilterDict",
           "FilterList",
@@ -4933,7 +6174,7 @@
         ]
       },
       {
-        "description": "Transposes iterables like Python's `zip`: rows become columns and columns become rows.\nEach output row is a **list** (JSON-friendly), not a Python tuple.",
+        "description": "Transposes iterables like Python's `zip`: rows become columns and columns become rows.\nEach output row is a **list** (JSON-friendly), not a Python tuple.\nThe result is as long as the shortest input. A non-iterable item raises\n`TransformationError`.",
         "examples": [
           "MapListsToDict",
           "ZipLists",
@@ -4951,7 +6192,7 @@
         ]
       },
       {
-        "description": "Writes a file using `write_file` delegate (a parameter to `Transformer` constructor).\nThis rule produces no result.\nFile will not be written if `name` or `content` returns no result.",
+        "description": "Writes a file using `write_file` delegate (a parameter to `Transformer` constructor).\nThis rule always produces no result (`NO_CONTENT`) — so a `map` over `file`\nyields `[]`, and a template that only writes files transforms to `None`.\nFile will not be written if `name` or `content` returns no result.",
         "examples": [
           "FileWriteViaMap"
         ],
@@ -4974,7 +6215,7 @@
         ]
       },
       {
-        "description": "Joins (concatenates) together several dicts, lists of strings.\nIf items to be concatenated have different types an exception will be thrown.\nItems that evaluate to `NO_CONTENT` are omitted before concatenation.\nWhen no items remain, returns `NO_CONTENT` unless `default` is provided.",
+        "description": "Type-homogeneous concatenation — all items must share one JSON type:\n\n- all **strings** → joined with `sep` (default empty string);\n- all **lists** → flattened one level into a single list;\n- all **dicts** → merged into a single dict (later keys win);\n- mixed types → `TransformationError`.\n\nItems that evaluate to `NO_CONTENT` are omitted before concatenation.\nWhen no items remain, returns `NO_CONTENT` unless `default` is provided.",
         "examples": [
           "JoinWithStaticNoOverrides",
           "JoinWithStaticWithOverrides",
@@ -5016,6 +6257,26 @@
         ]
       },
       {
+        "description": "Splits a string or an array on a separator — the inverse of string/list `join`.\n\n- String input → list of strings. `sep` must be a non-empty string.\n- Array input → list of lists. `sep` is either a single non-array element\n  (split where elements equal `sep`) or a non-empty array (split on each\n  contiguous occurrence of that subsequence). Because an array `sep` means\n  subsequence, you cannot split on a separator *element* that is itself an\n  array.\n- `NO_CONTENT` input → `NO_CONTENT`.\n- Any other input type → `TransformationError`.",
+        "examples": [
+          "SplitString",
+          "SplitArrayOnElement",
+          "SplitArrayOnSubsequence"
+        ],
+        "name": "split",
+        "params": [
+          {
+            "description": "Separator used to split the current context value. Can be dynamic. For a string input must evaluate to a non-empty string. For an array input may be a single non-array element (split on `==`) or a non-empty array (split on each contiguous subsequence). Empty string/array `sep` raises `TransformationError`.",
+            "examples": [
+              "SplitString",
+              "SplitArrayOnElement",
+              "SplitArrayOnSubsequence"
+            ],
+            "name": "sep"
+          }
+        ]
+      },
+      {
         "description": "Function composition operation.\nBuild function composition and executes it against value in current context.\n`chain(f1, f2, f3)(x) === f3(f2(f1(x)))`\n\nEach function execution creates new context that will be passed to next function.\nThe **first** func runs in the caller's context (so a `set` there is visible\noutside the `chain`); each subsequent func runs in a derived context.\n```plantuml\n@startuml\nleft to right direction\nrectangle this\nrectangle \"intermediate context\" as i1\nrectangle \"intermediate context\" as i2\nrectangle result\nthis --> i1: f1\ni1 --> i2: f2\ni2 --> result: f3\n@enduml\n```",
         "examples": [
           "AttrDynamicReferenceMultipleNames",
@@ -5044,7 +6305,7 @@
         ]
       },
       {
-        "description": "Executes unary or binary operation.\nThere are 3 modes of running this rule:\n\n1. **No attributes were specified:**\nResult is unary operation calculation against current context value.\n2. **Single `value` was specified:**\nResult is binary operation calculation where the\nfirst argument is current values of context and\nthe second is specified value.\n3. **Multiple `values` were specified:**\nResult is calculated by applying operation to all values in pairs (reduction).\nIn this case current context value is ignored.\n\nParameters are mutually exclusive.",
+        "description": "Executes unary or binary operation.\nThere are 3 modes of running this rule:\n\n1. **No attributes were specified:**\nResult is unary operation calculation against current context value.\n2. **Single `value` was specified:**\nResult is binary operation calculation where the\nfirst argument is current values of context and\nthe second is specified value.\n3. **Multiple `values` were specified:**\nResult is calculated by applying operation to all values in pairs (reduction).\nIn this case current context value is ignored.\n`values` must be a non-empty list — an empty reduction has no seed and\nraises `DefinitionError`.\n\nParameters are mutually exclusive. An operator applied to incompatible\noperand types raises `TransformationError`. The application semantics shared\nby all operators (modes, reduction, type coercion, `NO_CONTENT` interaction)\nare specified in the Language Reference (\"Expressions and calls\").",
         "examples": [
           "CondFirstTruthyArm",
           "CondDefaultBranch",
@@ -5055,7 +6316,7 @@
         "name": "expr",
         "params": [
           {
-            "description": "Defines name of operation. This is always constant.\n\n###### Possible values:\n\n| operator     | alternative | kind   | types          | result         |\n|--------------|-------------|--------|----------------|----------------|\n| <            | lt          | binary | any            | boolean        |\n| <=           | le          | binary | any            | boolean        |\n| ==           | eq          | binary | any            | boolean        |\n| !=           | ne          | binary | any            | boolean        |\n| >=           | ge          | binary | any            | boolean        |\n| &gt;         | gt          | binary | any            | boolean        |\n| +            | add         | binary | string, number | string, number |\n| -            | sub         | binary | number         | number         |\n| *            | mul         | binary | number         | number         |\n| /            | div         | binary | number         | number         |\n| %            | mod         | binary | number         | number         |\n| &&           | and         | binary | any            | any            |\n| &#124;&#124; | or          | binary | any            | any            |\n| !            | not         | unary  | boolean        | boolean        |\n\nYou can use code-style or mnemonic name (i.e. operator or alternative). ",
+            "description": "Defines name of operation. This is always constant.\n\n###### Possible values:\n\n| operator     | alternative | kind   | types          | result         |\n|--------------|-------------|--------|----------------|----------------|\n| <            | lt          | binary | any            | boolean        |\n| <=           | le          | binary | any            | boolean        |\n| ==           | eq          | binary | any            | boolean        |\n| !=           | ne          | binary | any            | boolean        |\n| >=           | ge          | binary | any            | boolean        |\n| &gt;         | gt          | binary | any            | boolean        |\n| +            | add         | binary | string, number | string, number |\n| -            | sub         | binary | number         | number         |\n| *            | mul         | binary | number         | number         |\n| /            | div         | binary | number         | number         |\n| %            | mod         | binary | number         | number         |\n| &&           | and         | binary | any            | any            |\n| &#124;&#124; | or          | binary | any            | any            |\n| !            | not         | unary  | boolean        | boolean        |\n| in           | in          | binary | any            | boolean        |\n\nYou can use code-style or mnemonic name (i.e. operator or alternative). ",
             "examples": [
               "ExprLogicalAnd",
               "ExprLogicalOr",
@@ -5082,7 +6343,10 @@
               "OperatorSubtract",
               "OperatorMultiply",
               "OperatorDivide",
-              "OperatorModulo"
+              "OperatorModulo",
+              "OperatorInArray",
+              "OperatorInObjectKey",
+              "OperatorInString"
             ],
             "name": "value"
           },
@@ -5100,10 +6364,29 @@
         ]
       },
       {
-        "description": "Runs function registered in `Transformer`.\nUsually, that is used to convert values into different type, but you can also use it to call any function.\n\nThere are 3 modes of running this rule:\n\n1. **No attributes were specified:**\nRuns conversion function with single parameter - value of current context.\n2. **Single `value` was specified:**\nRuns conversion function with single parameter - provided value.\nCurrent context is ignored in this case.\n3. **Multiple `values` were specified:**\nRuns conversion function with multiple parameters.\nCurrent context is ignored in this case.\n\nParameters are mutually exclusive.",
+        "description": "Runs function registered in `Transformer`.\nUsually, that is used to convert values into different type, but you can also use it to call any function.\n\nThere are 3 modes of running this rule:\n\n1. **No attributes were specified:**\nRuns conversion function with single parameter - value of current context.\n2. **Single `value` was specified:**\nRuns conversion function with single parameter - provided value.\nCurrent context is ignored in this case.\n3. **Multiple `values` were specified:**\nRuns conversion function with multiple parameters (`values` must be a list;\na non-list raises `DefinitionError`).\nCurrent context is ignored in this case.\n\nParameters are mutually exclusive. Built-in functions convert their\ndocumented failure modes into `TransformationError`. The application\nsemantics shared by all functions (modes, argument passing, totality,\n`NO_CONTENT` interaction) are specified in the Language Reference\n(\"Expressions and calls\").",
         "examples": [
           "ConvertNoParameters",
           "ConvertToFloat",
+          "LengthOfString",
+          "LengthOfArray",
+          "FlattenOneLevel",
+          "SumNumbers",
+          "SortedArray",
+          "UniquePreserveOrder",
+          "AbsNumber",
+          "FloorNumber",
+          "CeilNumber",
+          "BoolOfNull",
+          "FromEpochIso",
+          "B64Encode",
+          "B64Decode",
+          "UpperString",
+          "LowerString",
+          "CapitalizeString",
+          "StripWhitespace",
+          "ReversedString",
+          "ReversedArray",
           "TypeOfObject",
           "TypeOfArray",
           "TypeOfString",
@@ -5116,7 +6399,7 @@
         "name": "call",
         "params": [
           {
-            "description": "Defines the name of function. This is always constant.\n\n###### Possible values:\n\n| name  | input | output |\n|-------|:-----:|:------:|\n| str   |  any  |  str   | \n| int   |  str  |  int   | \n| float |  str  | float  | \n| type  |  any  | string | ",
+            "description": "Defines the name of function. This is always constant.\n\n###### Possible values:\n\n| name          | input                | output         |\n|---------------|:--------------------:|:--------------:|\n| str           | any                  | str            |\n| int           | str                  | int            |\n| float         | str                  | float          |\n| type          | any                  | string         |\n| bool          | any                  | boolean        |\n| upper         | string               | string         |\n| lower         | string               | string         |\n| capitalize    | string               | string         |\n| replace       | string               | string         |\n| removeprefix  | string               | string         |\n| removesuffix  | string               | string         |\n| strip         | string               | string         |\n| lstrip        | string               | string         |\n| rstrip        | string               | string         |\n| slice         | string, array        | string, array  |\n| from_epoch    | number               | string         |\n| to_epoch      | string               | int            |\n| length        | string, array, object| int            |\n| flatten       | array                | array          |\n| sum           | array                | number         |\n| min           | array                | any            |\n| max           | array                | any            |\n| sorted        | array                | array          |\n| reversed      | string, array        | string, array  |\n| unique        | array                | array          |\n| abs           | number               | number         |\n| floor         | number               | int            |\n| ceil          | number               | int            |\n| round         | number               | number         |\n| b64encode     | string               | string         |\n| b64decode     | string               | string         |\n| uuid5         | string               | string         |\n| regex_match   | string               | array, null    |\n| regex_replace | string               | string         |",
             "examples": [
               "ConvertNoParameters"
             ],
@@ -5132,14 +6415,31 @@
           {
             "description": "Defines template for multiple parameters values",
             "examples": [
-              "ConvertValues"
+              "ConvertValues",
+              "MinOfArray",
+              "MaxWithDefault",
+              "RoundWithDigits",
+              "FromEpochCustomFormat",
+              "ToEpochIso",
+              "ToEpochCustomFormat",
+              "Uuid5Dns",
+              "RegexMatchGroups",
+              "RegexMatchNone",
+              "RegexReplace",
+              "ReplaceSubstring",
+              "RemovePrefix",
+              "RemoveSuffix",
+              "LstripChars",
+              "RstripChars",
+              "SliceString",
+              "SliceArray"
             ],
             "name": "values"
           }
         ]
       },
       {
-        "description": "Execute string formatting using current value.\n\nIf `value` is specified it is used for formatting otherwise current context value is used.\n\nSee [this page](https://docs.python.org/3/tutorial/inputoutput.html#the-string-format-method)\nfor examples of how formatting in python works.\n\nIf value for formatting is `dict` it will be unpacked to separate names.\nIf value is list if will be unpacked to separate items.\nOtherwise while value will be passed to formatting.\n\nReturns no value when the formatting value (or any unpacked list element or dict\nkey/value) is `NO_CONTENT`, unless `default` is provided.",
+        "description": "Execute string formatting using current value.\n\nIf `value` is specified it is used for formatting otherwise current context value is used.\n\nSee [this page](https://docs.python.org/3/tutorial/inputoutput.html#the-string-format-method)\nfor examples of how formatting in python works.\n\nIf value for formatting is `dict` it will be unpacked to separate names.\nIf value is list if will be unpacked to separate items.\nOtherwise while value will be passed to formatting.\n\nReturns no value when the formatting value (or any unpacked list element or dict\nkey/value) is `NO_CONTENT`, unless `default` is provided.\nA pattern referencing a key or index the value does not supply raises\n`TransformationError`.",
         "examples": [
           "FormatWithDefault",
           "FormatFromSingleValue",
@@ -5277,6 +6577,6 @@
       "WorkedExampleConditionalEnrichmentInsideMap"
     ]
   },
-  "engine_version": "0.1.7",
+  "engine_version": "0.2.3",
   "metadata_version": "3.0"
 }
