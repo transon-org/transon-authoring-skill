@@ -1695,7 +1695,33 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
   OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
-- **A5 — Editor sink + release.** UC-002 demo; versioned release notes with pin.
+- **A5 — Editor sink + release.** UC-002 demo (optional); versioned release notes with pin
+  (NFR-008); the **distribution-verification ladder** proving a fresh host works from the
+  shipped artifacts, not the checkout:
+  1. **Dist smoke (CI job):** build the wheel/sdist, `pip install` the **wheel** (never
+     editable) into a fresh venv, run the §11.6 surface offline against the committed
+     fixtures — catches packaging gaps (e.g. bundled `resources/` missing from the wheel)
+     that editable installs cannot see.
+  2. **Distribution-faithful eval provisioning:** the §11.8 harness workspace is installed
+     by `install/claude.py --target-root <workspace>` from a release-archive-shaped layout
+     before host auto-activation (OQ-027a), so the gate measures the installed-from-
+     distribution configuration; validated first by a targeted `--only` probe. Installed
+     bytes are byte-identical to canonical, so this alone forces no baseline reset — any
+     `harness.kind`/`version` change still follows §11.8 discipline.
+  3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008):**
+     `cursor-agent -p` in an ephemeral workspace whose skill was installed by
+     `install/cursor.py --target-root` — confirms a fresh headless Cursor actually
+     activates the shipped skill and grounds via the module recipe. Model-invoking,
+     therefore never a PR gate; non-gating report unless promoted by an eval-policy
+     commit.
+  4. **UC-004 human walkthrough (release checklist, NFR-008):** on a machine without the
+     repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
+     publish), run both installers, confirm the skill activates in real Claude Code and
+     real Cursor, author one template; outcome recorded in the release notes.
+  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md`; re-run it before
+  release. *Resolve during A5:* **OQ-028** (Cursor personal scope).
+  *DoD:* ladder steps 1–4 green/recorded; release notes cite skill version, engine pin,
+  snapshot hash; first PyPI publish per OQ-020.
 
 *Improvement-loop note (AD-021 / FR-029):* synthetic corpus growth and the small-model gate swap
 are **A3 deliverables** (folded into the A3 DoD above) — the harness they rely on is the A2
@@ -1720,7 +1746,11 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
 - **OQ-005** — **Resolved (2026-07-09):** no in-surface gate/disclosure (AD-013).
 - **OQ-006** — **Resolved (2026-07-09):** authoring ≥80%→95%; adversarial refuse =100%.
 - **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP.
-- **OQ-008** — **Resolved (2026-07-10):** Cursor = structural + runtime smoke; no ingest claim.
+- **OQ-008** — **Resolved (2026-07-19):** Cursor's deterministic CI claim
+  stays structural + runtime smoke — the Cursor CLI (`cursor-agent`) still exposes no
+  credential-free command to enumerate discovered skills. Its headless mode (`agent -p`) does
+  make a **model-invoking activation smoke** possible: allowed only at the credentialed
+  dispatch tier (A5 ladder), never as a PR gate, and only it may claim activation.
 - **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
 - **OQ-010** — **Resolved (2026-07-19):** Claude Code exposes no supported, credential-free,
   deterministic headless command that lists installed skills without invoking the model. CI
@@ -1780,6 +1810,11 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   skill auto-activates from shipped `SKILL.md`; raw loop demoted to non-gating smoke;
   host→EpisodeResult adapter; isolation contract (ephemeral workspace, no credentials in
   tool sandbox, network egress denied, artifact controls). Normative in AD-024 / §11.8.
+- **OQ-028** — *(open; A5)* Cursor personal scope: current Cursor docs document user-level
+  skill discovery (`~/.cursor/skills/`, `~/.agents/skills/`), so the §11.9 "project-only"
+  Cursor row and the adapter's documented NFR-007 exclusion are now a product choice, not a
+  platform limit. Decide at A5: add a Cursor personal scope (installer + adapter + parity
+  update) or keep project-only for v1 with the exclusion reworded as a deliberate choice.
 
 ---
 
@@ -1893,4 +1928,4 @@ excluded from active coverage.
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4 | Optional editor sink demo. |
+| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough) + release notes/publish; editor sink demo optional. |
