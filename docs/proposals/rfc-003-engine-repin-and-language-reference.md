@@ -69,20 +69,26 @@ update the hard-coded `0.1.7` literals in tests (`test_sync_metadata`, `test_pac
 `test_install`, …); confirm `metadata_version` (the `check_install` Cursor smoke asserts
 `"3.0"`). The local authority checkout `../transon` sits at the matching tag.
 
-**P2 — New §11.6 subcommand: `language`.**
-`python -m transon_authoring language [--section ID] [--list-sections]` — a thin
-passthrough over `get_language_reference()`:
+**P2 — Language Reference gets the exact metadata treatment: snapshot + sync + drift +
+engine-free read path.**
+The reference is a second engine-derived grounding artifact and is handled **identically
+to `get_editor_metadata()`**:
 
-- no arguments → the full `content`;
-- `--list-sections` → the ordered `{id, title}` list;
-- `--section ID` → that section's `content`; unknown ID → §11.6 schema-error, exit 2;
-- unsupported `reference_version` **major** → fail loudly (exit 2), per the engine's
-  consumer contract;
-- **no snapshot, no sync, no drift gate:** the content ships inside the pinned engine
-  wheel, so the pin *is* the drift gate — unlike `get_editor_metadata()`, which is
-  snapshotted so the `metadata` path never imports the engine (that FR-009 constraint is
-  untouched; `language` imports the engine like `verify` already does). Offline per
-  NFR-003 (local import only).
+- `sync_metadata.py` additionally dumps `get_language_reference()` to
+  `resources/language-reference.json` (canonical serialization), and the provenance block
+  records its sha256 + `reference_version` alongside the snapshot hash;
+- `check_snapshot` compares the bundled reference against the pinned engine's output —
+  same drift gate, same red-until-`sync-metadata` discipline (NFR-004 pattern);
+- new §11.6 subcommand `python -m transon_authoring language [--section ID]
+  [--list-sections]` reads the **bundled resource, never importing the engine** (FR-009
+  symmetry): no arguments → full `content`; `--list-sections` → ordered `{id, title}`;
+  `--section ID` → that section's `content`; unknown ID → §11.6 schema-error, exit 2;
+  unsupported `reference_version` **major** in the bundled document → exit 2, per the
+  engine's consumer contract (enforced at sync time too, so it cannot land silently);
+- the payoff of snapshotting over a live passthrough: **the authority delta is a
+  reviewable diff on every upgrade PR** (AD-007 "not silent"), one mental model for all
+  engine-derived grounding, and the whole grounding surface stays engine-import-free.
+  Offline per NFR-003.
 
 **P3 — Authority swap in the skill (the NFR-012 payoff).**
 - AD-018 item (2): `docs/SPECIFICATION.md` → the packaged Language Reference obtained via
@@ -116,9 +122,10 @@ passthrough over `get_language_reference()`:
 
 - **Cost:** one full 50×3 real-host gate (~$17 measured) plus targeted probes; human
   re-acceptance for any fixture whose outputs changed.
-- **`language` imports the engine** where `metadata` deliberately does not. Accepted: the
-  no-engine constraint exists to keep the A0 grounding path engine-free; `language` is an
-  authoring-time aid, and `verify` already imports the engine in the same process space.
+- **A committed copy of text that also ships in the wheel.** Accepted: the duplication is
+  the point — it is what makes authority changes reviewable diffs and keeps the read path
+  engine-free; drift between the copies is exactly what the gate exists to catch, and the
+  sync/drift/provenance machinery already exists (marginal code is small).
 - **Larger prompt surface risk:** the full reference dumped into context would bloat
   episodes; the sectioned lookup exists precisely so the skill can mandate targeted
   `--section` retrieval (mirror the OQ-022 minimal-contract discipline).
@@ -130,9 +137,9 @@ passthrough over `get_language_reference()`:
 
 1. RFC accepted → absorb into SPEC (governed edit; new IDs from the ledger as needed:
    subcommand FR/AC, AD revision for AD-018, NFR-012 wording, §11.6 table row, §13/§17
-   updates).
+   updates; FR-011/NFR-004 gain the reference artifact).
 2. P1 re-pin commit (SPEC literals + pyproject + snapshot resync + test literals).
-3. P2 `language` subcommand, test-first.
+3. P2 sync/drift extension + `language` subcommand over the bundled resource, test-first.
 4. P3 skill/authority swap + `check_parity` simplification, test-first (the AC-032
    fixture tests lose the exemption cases and gain a `language`-recipe green case).
 5. P4 corpus regen + refuse audit + human acceptance → eval-policy commit (baseline
@@ -144,9 +151,11 @@ passthrough over `get_language_reference()`:
 - **R1 — Target version.** 0.2.3 (latest; docs-only above 0.2.0) vs 0.2.0 (minimal
   behavior floor). Recommendation: **0.2.3** — same runtime behavior, newest packaged
   reference text.
-- **R2 — Passthrough vs snapshot.** Live `get_language_reference()` call (recommended;
-  pin is the drift gate) vs bundling a snapshot with sync/drift like metadata (rejected
-  as pure ceremony: same bytes, new failure mode).
+- **R2 — Passthrough vs snapshot — resolved in this draft: snapshot,** treated exactly
+  like the editor metadata (sync + drift + provenance + engine-free read path). The
+  deciding argument: a live call changes the shipped authority invisibly inside a wheel
+  bump, while the snapshot makes every authority change a reviewable diff on the upgrade
+  PR (AD-007). Uniformity and FR-009 symmetry come free.
 - **R3 — Section-lookup contract.** Exact `language` CLI envelope (mirror OQ-022's
   minimalism: exact-id first, bounded, deterministic order) — settle before P2.
 - **R4 — Refuse-bucket refill.** How many genuine 0.2.3 gaps must the adversarial bucket
@@ -157,5 +166,6 @@ passthrough over `get_language_reference()`:
 
 ## Recommendation
 
-Accept P1–P4 with R1=0.2.3 and R2=live passthrough. Run it as its own upgrade PR after the
-A4/A5-ladder merges, sequenced so the P4 gate run doubles as the A5 entry baseline.
+Accept P1–P4 with R1=0.2.3 and R2=snapshot (identical treatment to editor metadata). Run
+it as its own upgrade PR after the A4/A5-ladder merges, sequenced so the P4 gate run
+doubles as the A5 entry baseline.
