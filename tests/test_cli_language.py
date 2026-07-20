@@ -19,6 +19,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess:
         [sys.executable, "-m", "transon_authoring", *args],
         capture_output=True,
         timeout=60,
+        check=False,
     )
 
 
@@ -136,6 +137,6 @@ def test_ac_039_language_offline_no_engine_import():
         "sys.exit(1 if 'transon' in sys.modules else 0)\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, timeout=60
+        [sys.executable, "-c", probe], capture_output=True, timeout=60, check=False
     )
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")

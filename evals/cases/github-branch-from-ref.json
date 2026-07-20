@@ -28,8 +28,7 @@
             "default_branch": "main"
           },
           "pusher": {
-            "name": "ada",
-            "email": "ada@acme.io"
+            "name": "ada"
           }
         },
         "output": {
@@ -45,7 +44,7 @@
     "confirmation": {
       "confirmed": true,
       "confirmed_by": "ci",
-      "content_fingerprint": "3352fc9268dba64a0a68dc5bd41f7d6041a7b3aa00276f92dc419558b940c376"
+      "content_fingerprint": "b1e056465cd4d1c6e354e834f319d3d31ef5406d56d91154cf3eced8f49e7c6b"
     }
   },
   "redacted": false

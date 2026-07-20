@@ -134,11 +134,9 @@ def test_fr_001_ac_002_corpus_exercises_mode_variant_authoring():
 
 
 def test_fr_017_baseline_is_reset_after_the_repin():
-    # §11.8 pin+corpus reset (AD-007 repin): an engine repin is gate identity —
-    # majority-pass results under the old pin/corpus do not transfer, so the
-    # repin commit resets baseline.json to empty in the same commit (mirroring
-    # the gate-model swap). It repopulates via `check_evals --update-baseline`
-    # on the next green real-host run (the credentialed A5-entry dispatch).
+    # §11.8 / AD-007: a pin or corpus change invalidates the previous eval
+    # baseline (it is gate identity), so baseline.json is empty until a later
+    # accepted green real-host gate repopulates it.
     document = load_document(EVALS / "baseline.json", "eval_baseline.json")
     assert document["passing"] == [], (
         "the transon==0.2.3 repin resets the baseline to empty (§11.8); it "

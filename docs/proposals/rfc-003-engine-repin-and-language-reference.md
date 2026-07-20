@@ -173,6 +173,8 @@ to `get_editor_metadata()`**:
 
 ## Recommendation
 
-Accept P1–P4 with R1=0.2.3 and R2=snapshot (identical treatment to editor metadata). Run
-it as its own upgrade PR after the A4/A5-ladder merges, sequenced so the P4 gate run
-doubles as the A5 entry baseline.
+Accept P1–P4. All open questions are resolved in the absorbed SPEC: R1 = `transon==0.2.3`;
+R2 = snapshot (identical treatment to editor metadata); R3 = the `language` envelope in §11.6;
+R4 = refuse-bucket floor ≥ pre-repin count via the AD-023 probe audit; R5 = no external-file
+exemption remains. Runs as its own upgrade PR after the A4/A5-ladder merges, sequenced so the
+P4 gate run doubles as the A5 entry baseline.

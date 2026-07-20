@@ -166,9 +166,7 @@ def _cmd_language(args: argparse.Namespace) -> int:
                 )
             ]
         )
-    reference = json.loads(
-        metadata._resource_bytes("language-reference.json").decode("utf-8")
-    )
+    reference = metadata.get_language_reference()
     reference_version = reference.get("reference_version")
     major = reference_major(reference_version)
     if major is None or major > SUPPORTED_REFERENCE_MAJOR:
