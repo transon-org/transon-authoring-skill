@@ -9,7 +9,7 @@ engine-authoritative metadata, backed by a user-confirmed SampleSet, and blessed
 - **Coverage tracker:** [`docs/traceability.md`](docs/traceability.md)
 - **Operating rules for agents:** [`AGENTS.md`](AGENTS.md); harness core in
   [`harness/`](harness/README.md)
-- **Engine pin (AD-007):** `transon==0.1.7`, `metadata_version` `"3.0"`
+- **Engine pin (AD-007):** `transon==0.2.3`, `metadata_version` `"3.0"`
 
 ## Status
 

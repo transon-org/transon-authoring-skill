@@ -230,11 +230,10 @@ def test_ac032_red_on_id_in_adapter_readme(shipped_tree: Path):
 
 
 def test_ac032_red_on_specification_md_reference(shipped_tree: Path):
-    # NFR-012 / AC-032 / AD-026 — the AD-026 authority swap removed the
-    # docs/SPECIFICATION.md exemption: the engine repo's SPECIFICATION.md is a
+    # NFR-012 / AC-032 / AD-026 — the engine repo's docs/SPECIFICATION.md is a
     # maintainer-only design-time authority, never cited by the shipped skill.
-    # A reference to it in rendered text is now red like any other docs/ path,
-    # and a bare `§` on the same line is red too (no SPECIFICATION.md allowance).
+    # A reference to it in rendered text is red like any other docs/ path, and a
+    # bare `§` on the same line is red too (no SPECIFICATION.md allowance).
     append_to_skill(
         shipped_tree,
         "\nConsult §3 of the engine `docs/SPECIFICATION.md` when unsure.\n",
