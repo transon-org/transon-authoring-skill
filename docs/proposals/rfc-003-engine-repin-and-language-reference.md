@@ -1,8 +1,15 @@
 # RFC-003: Re-pin the engine to 0.2.3 and ground the skill in `get_language_reference()`
 
-- **Status:** Draft — proposed 2026-07-20. Not yet absorbed into SPEC; on conflict the SPEC
-  wins. Absorption consumes next-free IDs as needed (ledger at time of writing: FR-036,
-  NFR-013, AC-039, AD-026, OQ-029 are next).
+- **Status:** **Accepted & absorbed into SPEC (2026-07-20).** Normative wording lives in
+  `docs/SPEC.md`: **FR-036** (Language Reference grounding artifact + `language` subcommand),
+  **AC-039** (offline serving + drift/major gating), **AD-026** (snapshot-like treatment +
+  authority swap), plus the pin bump (AD-007 / §11.7 / §11.9), the AD-018 authority-precedence
+  revision, the NFR-012 / AC-032 self-sufficiency tightening (no external-file exemption), the
+  NFR-004 / FR-011 reference-drift extension, the §11.6 `language` row, and the §11.8 pin+corpus
+  baseline-reset paragraph. This file is historical rationale only; on conflict the SPEC wins.
+  Resolved open questions: **R1** = `transon==0.2.3`; **R2** = snapshot (treated like editor
+  metadata); **R3** = `language` envelope in §11.6; **R4** = refuse-bucket floor ≥ pre-repin count,
+  AD-023 probe audit; **R5** = no external-file exemption remains.
 - **Type:** Engine-pin upgrade (AD-007 upgrade-PR policy) + authority-source swap for the
   shipped skill. Changes what the skill cites as Transon authority; does **not** change
   verify/match/sandbox semantics, the SampleSet schema, or the §11.8 scoring rules.
