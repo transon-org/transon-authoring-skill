@@ -245,6 +245,7 @@ transon-authoring/
 ├── resources/
 │   ├── metadata-snapshot.json     # get_editor_metadata() pin
 │   ├── metadata-snapshot.md       # provenance
+│   ├── language-reference.json    # get_language_reference() pin (FR-036 / AD-026)
 │   └── nl-intents.json            # NL sidecar by example name (FR-010)
 ├── adapters/claude/ … cursor/
 ├── .claude-plugin/

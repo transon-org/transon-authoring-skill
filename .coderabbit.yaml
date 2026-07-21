@@ -68,11 +68,15 @@ reviews:
           The pairing rule takes effect when docs/id-ledger.json exists on the
           base branch: if it does not, the project is pre-A0 and this check
           passes — including the PR that first introduces the ledger.
+          Compare the COMBINED requirement-ID set across all three contract
+          docs (base branch vs this PR), never per file: moving a retained ID
+          between contract docs is a relocation, not an addition or a removal,
+          and must pass.
           Otherwise fail if:
-          - any contract doc introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
-            that did not appear in that file before, and docs/id-ledger.json in
-            this same PR does not add exactly that number to the matching
-            family array; or
+          - the combined contract-doc ID set gains a requirement ID
+            (FR/NFR/AC/UC/AD/OQ-<n>) that was not in the combined base set, and
+            docs/id-ledger.json in this same PR does not add exactly that
+            number to the matching family array; or
           - docs/id-ledger.json removes any number from any family array; or
           - docs/id-ledger.json changes without any corresponding contract-doc
             change in the PR.
@@ -84,8 +88,11 @@ reviews:
           The ID lock takes effect
           when docs/id-ledger.json exists: if the base branch has no
           docs/id-ledger.json, the project is pre-A0 and this check passes.
+          Evaluate against the COMBINED requirement-ID set across all three
+          contract docs, never per file: an ID moved from one contract doc to
+          another with its text intact is a relocation and must pass.
           Otherwise fail if a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>) that
-          existed in the base version of the file is deleted, renumbered,
+          existed in the combined base set is deleted, renumbered,
           reassigned to a different requirement/decision, or reused for new
           content — even when the same set of ID numbers remains present.
           Deprecation must keep the ID and its entry in place as a one-line
