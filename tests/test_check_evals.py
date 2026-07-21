@@ -4,7 +4,7 @@ Two surfaces:
 
 - `--lint` (NFR-011 / AC-025 plus the FR-029 / AC-030 seed checks): the
   credential-free, network-free, deterministic fixture lint per-PR CI runs
-  (SPEC §15 OQ-017e; the §13 check_evals row carries it; the AC-030 regen
+  (ROADMAP §15 OQ-017e; the §13 check_evals row carries it; the AC-030 regen
   check exercises the pinned local engine): bundled-schema validation of
   the eval-policy files and every `evals/cases/*.json` (AD-020), id/filename
   agreement and baseline references (OQ-016f), `ok_for_verify` SampleSets

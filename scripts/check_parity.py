@@ -29,8 +29,9 @@ NFR-012 comment exemption):
    maintainer-only design-time authority (AD-026 authority swap) and is red
    like any other ``docs/`` path. The shipped skill cites the engine's
    Language Reference through the ``language`` module recipe instead.
-2. Spec-section rule: the token ``SPEC.md`` is red (never false-positives on
-   ``SPECIFICATION.md``); a ``§`` character is always red.
+2. Contract-doc rule: the tokens ``SPEC.md``, ``ARCHITECTURE.md`` and
+   ``ROADMAP.md`` are red (never false-positives on ``SPECIFICATION.md``);
+   a ``§`` character is always red.
 3. ID-citation rule: requirement-ID citations (``FR-``/``NFR-``/``AC-``/
    ``AD-``/``OQ-``/``UC-`` + three digits) in rendered text are red.
 
@@ -73,7 +74,7 @@ UNSHIPPED_PATH_RE = re.compile(
     r"(?:(?<![\w/.-])\./|(?<![\w/-]))"
     r"(?:docs|harness|scripts|evals|tests|src|resources)/[\w./-]*"
 )
-SPEC_MD_RE = re.compile(r"\bSPEC\.md\b")
+CONTRACT_MD_RE = re.compile(r"\b(?:SPEC|ARCHITECTURE|ROADMAP)\.md\b")
 ID_RE = re.compile(r"\b(?:FR|NFR|AC|AD|OQ|UC)-\d{3}\b")
 
 
@@ -123,13 +124,13 @@ def scan_self_sufficiency(rel: str, text: str, findings: list) -> None:
                     "docs/SPECIFICATION.md (NFR-012 / AC-032)",
                 )
             )
-        for match in SPEC_MD_RE.finditer(line):
+        for match in CONTRACT_MD_RE.finditer(line):
             findings.append(
                 (
                     rel,
                     lineno,
-                    "reference to SPEC.md — the spec is not shipped with "
-                    "the skill (NFR-012 / AC-032)",
+                    f"reference to {match.group(0)} — the contract docs are "
+                    "not shipped with the skill (NFR-012 / AC-032)",
                 )
             )
         if "§" in line:

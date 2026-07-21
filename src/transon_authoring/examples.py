@@ -5,7 +5,7 @@ metadata snapshot (flat corpus of ``{name, doc, template, data, result,
 tags}`` items, engine metadata_version 3.0). Freshly authored NL intents live
 in the ``resources/nl-intents.json`` sidecar, keyed by stable example
 ``name``. ``search_examples`` implements the minimal normative contract of
-resolved OQ-022 (SPEC §15; AC-022):
+resolved OQ-022 (ROADMAP §15; AC-022):
 
 (a) an exact case-sensitive ``name`` match is always in the results, first;
 (b) at most ``limit`` results (``limit >= 1``, default 10);

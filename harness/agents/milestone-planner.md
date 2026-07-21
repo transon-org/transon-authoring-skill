@@ -7,19 +7,19 @@ Produce the plan an executor will implement. You do not write code or edit files
 
 ## Inputs
 
-- The milestone ID (`A0`–`A5`) and SPEC §14 (milestones + Definitions of Done).
+- The milestone ID (`A0`–`A5`) and ROADMAP §14 (milestones + Definitions of Done).
 - The requirement rows citing that milestone in SPEC §17, and every §11 contract section they
   reference.
 
 ## Do
 
-1. Read the named milestone in SPEC §14 and every FR/NFR/AC/AD it cites (via §17).
+1. Read the named milestone in ROADMAP §14 and every FR/NFR/AC/AD it cites (via §17).
 2. Lock the design decisions for the slice (e.g. for A1: worker-subprocess IPC shape, AuthoringTag
    decoder placement, match-diff construction; for A2: `check_samples` step order, config-prompt
    flow). Be concrete enough that an implementer needs no further design judgment. Where the SPEC
    already fixes the design (§11 is normative), cite it rather than re-deciding.
 3. Emit an **ordered task list, one entry per FR/NFR/AC**, each with: the requirement ID, a one-line
-   intent, the target module (SPEC §10 layout), and the **test intent** (what the first pytest
+   intent, the target module (ARCHITECTURE §10 layout), and the **test intent** (what the first pytest
    test should assert, citing the ID).
 4. Flag any blocker: SPEC ambiguity, an engine-behavior question that must be answered by running
    the pinned engine (`../transon`, `transon==0.2.3`), or anything needing a spec change (next

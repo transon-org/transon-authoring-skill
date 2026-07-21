@@ -1,4 +1,4 @@
-"""Shared helpers for maintainer scripts under ``scripts/`` (SPEC §10).
+"""Shared helpers for maintainer scripts under ``scripts/`` (ARCHITECTURE §10).
 
 Stdlib-only — never imports ``transon_authoring`` — so dispatch-bundle
 consumers (``summarize_run``, ``scan_transcripts``) keep working without the
@@ -29,7 +29,7 @@ _REPO_ROOT = _SCRIPTS_DIR.parent
 
 def ensure_src() -> None:
     """Insert ``<repo>/src`` on ``sys.path`` only when ``transon_authoring`` is
-    not already importable (SPEC §10 source-checkout fallback).
+    not already importable (ARCHITECTURE §10 source-checkout fallback).
 
     Prefer an already-installed package (editable or wheel) over the checkout
     tree — same as the prior try/except ImportError pattern.

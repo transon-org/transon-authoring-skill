@@ -2,7 +2,7 @@
 """gen-fixtures — synthetic EvalFixture generator (FR-029 / AD-021 /
 OQ-025 / OQ-026).
 
-Maintainer script (SPEC §10 ``scripts/`` — never shipped in the package) that
+Maintainer script (ARCHITECTURE §10 ``scripts/`` — never shipped in the package) that
 mints EvalFixtures from pinned-snapshot ``docs.examples`` seeds. The pure core
 is :func:`generate`; the CLI (``main``) and the ``check_evals --lint`` AC-030
 regen check both call that SAME core, so a fixture regenerates bit-identically

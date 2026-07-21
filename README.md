@@ -5,7 +5,8 @@ engine-valid **[Transon](https://github.com/transon-org/transon)** JSON — grou
 engine-authoritative metadata, backed by a user-confirmed SampleSet, and blessed by the engine at
 `assurance: "matched"` before any template is returned.
 
-- **Contract:** [`docs/SPEC.md`](docs/SPEC.md) (SPEC-first; requirement IDs append-only from A0)
+- **Contract:** [`docs/SPEC.md`](docs/SPEC.md) + [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) +
+  [`docs/ROADMAP.md`](docs/ROADMAP.md) (SPEC-first; requirement IDs append-only from A0)
 - **Coverage tracker:** [`docs/traceability.md`](docs/traceability.md)
 - **Operating rules for agents:** [`AGENTS.md`](AGENTS.md); harness core in
   [`harness/`](harness/README.md)
@@ -14,7 +15,7 @@ engine-authoritative metadata, backed by a user-confirmed SampleSet, and blessed
 ## Status
 
 Pre-A0: SPEC locked for A0–A2 implementation readiness; implementation harness in place. Product
-milestones (SPEC §14): A0 grounding spine → A1 verification library → A2 measurement spine →
+milestones (ROADMAP §14): A0 grounding spine → A1 verification library → A2 measurement spine →
 A3 authoring loop → A4 distribution → A5 release.
 
 ## Development

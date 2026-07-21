@@ -1,6 +1,6 @@
 """SampleSet coverage/confirmation checking — `check_samples` (SPEC §11.1).
 
-Public module per SPEC §10. Implements the §11.1 normative algorithm
+Public module per ARCHITECTURE §10. Implements the §11.1 normative algorithm
 (steps 1–7) supporting FR-027 / AC-016 / AC-017:
 
 * step 1 — JSON Schema ``1.0`` validation via the bundled draft 2020-12
@@ -74,7 +74,7 @@ def content_fingerprint(sample_set: Any) -> str:
     """Hex sha256 fingerprint over the SampleSet content subset (§11.1).
 
     Normative canonicalization per the OQ-015 resolution (2026-07-11, A2
-    standup; SPEC §15). This single function is the only implementation and
+    standup; ROADMAP §15). This single function is the only implementation and
     the only place the byte-level rules live: ``json.dumps`` of the subset
     ``{schema_version, coverage, waivers, cases, includes}`` with
     ``sort_keys=True``, ``separators=(",", ":")``, ``ensure_ascii=False``,

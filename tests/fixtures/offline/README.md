@@ -14,7 +14,7 @@ these exact files inside a network-cut namespace (`unshare -rn`).
 
 `sample_set.json` embeds `confirmation.content_fingerprint`, produced by
 `transon_authoring.samples.content_fingerprint()`. The OQ-015 resolution (2026-07-11, A2 standup;
-SPEC §15) adopted the A1 canonicalization **unchanged** as normative, so no regeneration was
+ROADMAP §15) adopted the A1 canonicalization **unchanged** as normative, so no regeneration was
 needed — the recorded fingerprint remains valid. Should a future spec change ever alter the
 byte-level rule, the recorded fingerprint would stop matching, `check-samples` would fail with
 `fingerprint_mismatch`, and these fixtures MUST be regenerated. Recompute with the library (never

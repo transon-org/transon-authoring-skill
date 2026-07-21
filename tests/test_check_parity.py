@@ -244,6 +244,31 @@ def test_ac032_red_on_specification_md_reference(shipped_tree: Path):
     assert "§" in result.stderr
 
 
+def test_ac032_red_on_architecture_and_roadmap_reference(shipped_tree: Path):
+    # NFR-012 / AC-032 — the contract spans SPEC.md, ARCHITECTURE.md and
+    # ROADMAP.md; none is shipped, so naming any of them in rendered text is
+    # red. Bare filenames (no `docs/` prefix) are not caught by the
+    # unshipped-path rule, so this exercises the contract-doc rule alone.
+    append_to_skill(
+        shipped_tree,
+        "\nDecisions live in ARCHITECTURE.md and milestones in ROADMAP.md.\n",
+    )
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    assert "ARCHITECTURE.md" in result.stderr
+    assert "ROADMAP.md" in result.stderr
+
+
+def test_ac032_contract_doc_rule_does_not_match_specification_md(shipped_tree: Path):
+    # NFR-012 / AC-032 — widening the contract-doc rule must not make
+    # `SPECIFICATION.md` match it. That token is red via the unshipped-path
+    # rule when written as `docs/SPECIFICATION.md`; a bare mention is not a
+    # contract-doc finding.
+    append_to_skill(shipped_tree, "\nThe engine ships SPECIFICATION.md upstream.\n")
+    result = run_check(shipped_tree)
+    assert result.returncode == 0, result.stderr
+
+
 def test_ac032_green_on_language_recipe(shipped_tree: Path):
     # NFR-012 / AC-032 / AD-026 — the shipped authority is the engine's
     # Language Reference reached through the `language` module recipe. A body

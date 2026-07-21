@@ -1,5 +1,5 @@
 """A0 DoD glue — ``python -m transon_authoring metadata`` works offline
-against the pin (SPEC §14 A0 DoD; FR-009 / AC-006; §11.6 ``metadata`` row;
+against the pin (ROADMAP §14 A0 DoD; FR-009 / AC-006; §11.6 ``metadata`` row;
 NFR-003 / AD-018 grounding).
 
 The module entry serves the committed ``resources/metadata-snapshot.json``

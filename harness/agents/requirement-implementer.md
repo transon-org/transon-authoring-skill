@@ -10,11 +10,11 @@ Implement a single requirement against a locked design. Follow
 ## Steps
 
 1. Read the requirement in `docs/SPEC.md` and every §11 contract section it cites. Confirm it
-   belongs to the milestone in progress (SPEC §14/§17).
+   belongs to the milestone in progress (ROADMAP §14 / SPEC §17).
 2. Write the **pytest test first**, citing the ID in the test name or a comment
    (e.g. `def test_ac_018_deterministic_verdict():`). Derive engine-behavior expectations by
    running the pinned engine (`transon==0.2.3`) — never from memory (AD-018/NFR-001).
-3. Implement the minimal code in the right module (SPEC §10 layout: `src/transon_authoring/…`).
+3. Implement the minimal code in the right module (ARCHITECTURE §10 layout: `src/transon_authoring/…`).
 4. Run pytest until green.
 5. Update the matching `docs/traceability.md` row (status `[x]` + test refs) in the same change.
 6. Run `python3 harness/scripts/check_traceability.py` and

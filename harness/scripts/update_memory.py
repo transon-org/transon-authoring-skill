@@ -108,7 +108,7 @@ def _state_block() -> str:
 STATE_TEMPLATE = """# Current state — working handoff
 
 > **Non-authoritative working memory.** A session-to-session handoff, not part of the
-> contract. Where this and the contract docs (`SPEC.md`, `traceability.md`, `AGENTS.md`)
+> contract. Where this and the contract docs (`SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `traceability.md`, `AGENTS.md`)
 > disagree, **they win**. Update the narrative below at the end of a work session;
 > regenerate the header with `python3 harness/scripts/update_memory.py --state`.
 
@@ -120,9 +120,9 @@ _(Record what landed in this session.)_
 
 ## Status by milestone
 
-Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the living read.
+Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is the living read.
 
-- See SPEC §14 for A0–A5 definitions of done.
+- See ROADMAP §14 for A0–A5 definitions of done.
 
 ## Next steps (ordered)
 
@@ -134,7 +134,7 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Do-not-relitigate (pointers, not copies)
 
-- Product contract → [`SPEC.md`](SPEC.md).
+- Product contract → [`SPEC.md`](SPEC.md) + [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ROADMAP.md`](ROADMAP.md).
 - Coverage matrix → [`traceability.md`](traceability.md).
 - Golden rules → [`AGENTS.md`](../AGENTS.md).
 """

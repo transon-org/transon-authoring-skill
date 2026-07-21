@@ -5,14 +5,17 @@ engine-valid **Transon** JSON — grounded in the pinned engine metadata snapsho
 user-confirmed SampleSet, and blessed by the engine at `assurance: "matched"` before any template
 is returned.
 
-**The contract is [`docs/SPEC.md`](docs/SPEC.md)** — read the cited section before changing
+**The contract spans [`docs/SPEC.md`](docs/SPEC.md) (requirements, normative contracts,
+governance, traceability), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (architecture, decision
+records, package layout), and [`docs/ROADMAP.md`](docs/ROADMAP.md) (milestones, open questions,
+risks, readiness).** Section numbers are global and unique across all three — read the cited section before changing
 behavior. [`docs/traceability.md`](docs/traceability.md) tracks requirement → test coverage.
-Milestones and their Definitions of Done live in SPEC §14; the per-requirement gate/test mapping
+Milestones and their Definitions of Done live in ROADMAP §14; the per-requirement gate/test mapping
 in SPEC §17.
 
 ## Golden rules
 
-1. **SPEC-first (§12).** Behavior changes update `docs/SPEC.md` first, then code. If a required
+1. **SPEC-first (§12).** Behavior changes update the contract docs first, then code. If a required
    detail is missing or ambiguous, STOP and propose a spec change (use
    `harness/commands/propose-spec-change.md`) — never invent behavior inline.
 2. **IDs are append-only (A0 lock).** FR/NFR/AC/UC/AD/OQ IDs are never renumbered; deprecate in
@@ -40,7 +43,7 @@ in SPEC §17.
    matching `docs/traceability.md` update; tests cite their IDs
    (e.g. `def test_ac_018_deterministic_verdict():` or `# AC-018`).
 10. **Name discipline.** `transon-authoring` here is the **product** (its `SKILL.md` + adapters
-    under `adapters/` are deliverables, SPEC §10). Harness procedures use distinct names
+    under `adapters/` are deliverables, ARCHITECTURE §10). Harness procedures use distinct names
     (`run-milestone`, `implement-requirement`, `propose-spec-change`) — never name harness
     machinery after the product.
 11. **No narrative comments or doc history (hygiene).** Comments explain non-obvious intent, never
@@ -59,10 +62,11 @@ in SPEC §17.
 
 ## Where things live
 
-- Contract: `docs/SPEC.md` · matrix: `docs/traceability.md` · ID ledger: `docs/id-ledger.json`.
+- Contract: `docs/SPEC.md` + `docs/ARCHITECTURE.md` + `docs/ROADMAP.md` · matrix:
+  `docs/traceability.md` · ID ledger: `docs/id-ledger.json`.
 - Working handoff (non-authoritative): `docs/current-state.md` — regenerate header with
   `python3 harness/scripts/update_memory.py --state`.
-- Product code (SPEC §10): `src/transon_authoring/`, `resources/`, `scripts/`, `evals/`,
+- Product code (ARCHITECTURE §10): `src/transon_authoring/`, `resources/`, `scripts/`, `evals/`,
   `adapters/`, `install/` — built across milestones A0–A5.
 - AI-dev harness — **single-source, multi-tool**:
   - **Tool-neutral core** (canonical, edit here): `AGENTS.md`, `harness/` (agents, commands,
@@ -79,7 +83,7 @@ in SPEC §17.
 ## Development loop (per requirement)
 
 1. Read the requirement and its cited §11 contract text in `docs/SPEC.md`; confirm it belongs to
-   the milestone in progress (SPEC §14/§17).
+   the milestone in progress (ROADMAP §14 / SPEC §17).
 2. Write the pytest test first, citing the ID in the test name or a comment.
 3. Implement the minimal code in `src/transon_authoring/`.
 4. Run pytest until green.

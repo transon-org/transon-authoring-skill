@@ -1,19 +1,21 @@
 # Current state — working handoff
 
 > **Non-authoritative working memory.** A session-to-session handoff, not part of the
-> contract. Where this and the contract docs (`SPEC.md`, `traceability.md`, `AGENTS.md`)
+> contract. Where this and the contract docs (`SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `traceability.md`, `AGENTS.md`)
 > disagree, **they win**. Update the narrative below at the end of a work session;
 > regenerate the header with `python3 harness/scripts/update_memory.py --state`.
 
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `fb3bd77` — spec: add plugin + catalog distribution to A5 (FR-037, AC-040, OQ-029) |
-| Branch | `spec-plugin-catalog-distribution` |
+| Repo HEAD | `8c30a94` — Merge pull request #24 from transon-org/spec-plugin-catalog-distribution |
+| Branch | `docs-split-spec-architecture-roadmap` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**Contract split into SPEC + ARCHITECTURE + ROADMAP (branch `docs-split-spec-architecture-roadmap`).** Matches the `transon-blockly` convention. `docs/SPEC.md` keeps §0–4, §7–9, §11–13, §17; `docs/ARCHITECTURE.md` takes §5, §6, §10 (all 26 `AD-*`); `docs/ROADMAP.md` takes §14–16, §18 (all `OQ-*`). **Section numbers are preserved and globally unique across the three docs**, so the ~100 files citing bare `§N` stay correct — only file+section pointers were rewritten. The move itself was verbatim (scripted split with a line-conservation assert). Follow-up commits then corrected the contract text the move made false: §0's now-completed "extract ARCHITECTURE.md" instruction, SPEC's preamble still calling itself the whole contract, §12 now naming the three-document contract, and ARCHITECTURE §10's package layout — which gained the two new docs, `id-ledger.json`, and the AD-026 `resources/language-reference.json` it had been missing since the repin. `CONTRACT_DOCS` widened in both harness gates — without it the ID lock goes red on 55 migrated AD/OQ IDs, which it correctly did before the fix. Gate messages genericized off `docs/SPEC.md`. Pointers updated in AGENTS.md, CLAUDE.md, README.md, harness/ (README, commands, agents, hygiene), and the `update_memory.py` generator. All six gates green._
 
 _**Plugin + catalog distribution added to A5 (branch `spec-plugin-catalog-distribution`).** FR-037 splits the way FR-018 does: **(a) packaging — gating, A5** (`plugin.json` + self-hosted `marketplace.json`, §11.9 plugin layout) verified by `check_install` under new **AC-040**; **(b) external catalog submission — ongoing, non-gating**, begun only after the PyPI publish since a listed skill with an unpublished runtime is inert. AD-009 revised in place to name the plugin channel; the orphaned **OQ-007** ("plain skill then plugin") is now normative in AD-009/FR-037. New **OQ-029** (open) picks the plugin runtime-acquisition path — documented prereq vs `SessionStart` hook vs `uv run --with` — constrained to preserve NFR-003/OQ-020 and to not fork the §11.6 recipe. A5 gains ladder step 5; no A6. IDs registered: FR-037, AC-040, OQ-029. Marketplace hosts fetch the tree at `source`, so the plugin `SKILL.md` is a **committed generated artifact** held byte-identical to canonical by AC-040 — single source by enforced identity, not by absence; the repo is both plugin root and marketplace repo, and that tree sits outside the FR-015/016 install-manifest regime. Note `transon-authoring` is **not yet on PyPI** (404; engine `transon==0.2.3` is published) — that publish gates all outreach._
 
@@ -28,13 +30,13 @@ _**Prior behavioral closure (2026-07-15, from former traceability essays).** Fir
 
 ## Status by milestone
 
-Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the living read.
+Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is the living read.
 
-- See SPEC §14 for A0–A5 definitions of done.
+- See ROADMAP §14 for A0–A5 definitions of done.
 
 ## Next steps (ordered)
 
-1. Push the two stacked scope commits (`4bb48ca` editor sink, `fb3bd77`+fixups plugin/catalog) and open the PR(s). `spec-reviewer` returned **fix-first**; F1–F10 applied on branch.
+1. Merge the contract split (this branch), then resolve **OQ-029** (plugin runtime acquisition — prototype `uv run --with` against a locally built wheel first, since `transon-authoring` is not on PyPI) and **OQ-028** (Cursor personal scope) before `/run-milestone A5`.
 2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14). The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
 
 ## Open blockers / waiting-on
@@ -43,6 +45,6 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Do-not-relitigate (pointers, not copies)
 
-- Product contract → [`SPEC.md`](SPEC.md).
+- Product contract → [`SPEC.md`](SPEC.md) + [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ROADMAP.md`](ROADMAP.md).
 - Coverage matrix → [`traceability.md`](traceability.md).
 - Golden rules → [`AGENTS.md`](../AGENTS.md).

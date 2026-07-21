@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Traceability consistency checker for the Transon Authoring Skill.
 
-Keeps requirement IDs consistent across the contract doc, the traceability matrix,
+Keeps requirement IDs consistent across the contract docs, the traceability matrix,
 and the code/tests (SPEC §12, §17):
 
 1. No dead IDs — every FR/NFR/AC/UC/AD/OQ referenced in ``docs/traceability.md`` or in
-   code/tests must be defined in the contract doc (``docs/SPEC.md``).
+   code/tests must be defined in a contract doc (see CONTRACT_DOCS).
 2. No deprecated IDs cited by code/tests.
 3. Coverage — any FR/NFR/AC marked done (``[x]``) in ``docs/traceability.md`` must have
    at least one test citing its ID.
@@ -31,8 +31,9 @@ DOCS = PROJECT_ROOT / "docs"
 # Accept the compact slash-separated citation form too (e.g. "AC-005/007/009"),
 # same semantics as check_append_only_ids.py.
 ID_RE = re.compile(r"\b(FR|NFR|AC|UC|AD|OQ)-(\d+(?:/\d+)*)\b")
-CONTRACT_DOCS = ("SPEC.md",)
-# Product-code directories per SPEC §10 (evals/ holds fixtures that may cite ACs).
+CONTRACT_DOCS = ("SPEC.md", "ARCHITECTURE.md", "ROADMAP.md")
+CONTRACT_DESC = "the contract docs (SPEC.md / ARCHITECTURE.md / ROADMAP.md)"
+# Product-code directories per ARCHITECTURE §10 (evals/ holds fixtures that may cite ACs).
 CODE_DIRS = ("src", "tests", "scripts", "evals", "install", "adapters")
 CODE_EXTS = (".py",)
 COVERAGE_FAMILIES = {"FR", "NFR", "AC"}
@@ -130,7 +131,7 @@ def check() -> List[str]:
     problems: List[str] = []
     defined = defined_ids()
     if not defined:
-        return ["no requirement IDs found in docs/ — is docs/SPEC.md present?"]
+        return ["no requirement IDs found in docs/ — are the contract docs present?"]
 
     deprecated = deprecated_ids()
     trace_ids = _ids(_read(DOCS / "traceability.md"))
@@ -138,13 +139,15 @@ def check() -> List[str]:
 
     for ident in sorted(trace_ids - defined):
         problems.append(
-            f"{ident}: referenced in docs/traceability.md but not defined in docs/SPEC.md"
+            f"{ident}: referenced in docs/traceability.md but not defined in "
+            f"{CONTRACT_DESC}"
         )
 
     for ident in sorted(set(code_refs) - defined):
         where = ", ".join(sorted(set(code_refs[ident]))[:3])
         problems.append(
-            f"{ident}: cited in code/tests ({where}) but not defined in docs/SPEC.md"
+            f"{ident}: cited in code/tests ({where}) but not defined in "
+            f"{CONTRACT_DESC}"
         )
 
     for ident in sorted(set(code_refs) & deprecated):

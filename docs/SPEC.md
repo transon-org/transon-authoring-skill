@@ -6,8 +6,9 @@ correct, engine-valid **Transon** JSON — grounded in engine-authoritative meta
 template is returned. It lives in its own repository, **beside** (not inside) the
 `transon-blockly` editor and the `transon` engine.
 
-> **Status:** Draft (pre-A0). This document is the contract for the project — behavior changes
-> update this SPEC first, then code (see §12 governance).
+> **Status:** Draft (pre-A0). This document, with `ARCHITECTURE.md` and `ROADMAP.md`, is the
+> contract for the project — behavior changes update the contract docs first, then code
+> (see §12 governance).
 >
 > **Pre-A0 note:** Until A0 is approved/started, requirement and decision text may be rewritten in
 > place to keep the draft coherent. **From A0 onward**, FR/NFR/AC/UC/AD/OQ IDs are append-only:
@@ -17,6 +18,16 @@ template is returned. It lives in its own repository, **beside** (not inside) th
 (authoritative evidence: engine repo `pyproject.toml` version `0.1.7`;
 `transon-blockly/docs/metadata-snapshot.json` records `engine_version` `0.1.7` and
 `metadata_version` `3.0`). See AD-007 / §11.7.
+
+---
+
+> **Contract split.** The contract spans three documents: [`SPEC.md`](SPEC.md) (§0–4, §7–9,
+> §11–13, §17 — goals, requirements, normative contracts, governance, gates, traceability),
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) (§5, §6, §10 — architecture, decision records, package
+> layout), and [`ROADMAP.md`](ROADMAP.md) (§14–16, §18 — milestones, open questions, risks,
+> readiness). **Section numbers are global and unique across all three**, so a reference such as
+> §6 or §11.9 is unambiguous wherever it appears. Requirement IDs (FR/NFR/AC/UC/AD/OQ) are
+> append-only and never renumber (§12).
 
 ---
 
@@ -34,8 +45,8 @@ editor's numbering; the two documents are not cross-referenced by ID.
 The product name is **`transon-authoring`**. Any earlier editor-dev harness skill of the same name
 is temporary and is removed or redirected once this package ships (A4+).
 
-Architecture decisions live in **§6**. If the SPEC grows too large, extract `ARCHITECTURE.md`; if
-that grows too large, split ADs into `docs/adr/`. Do not create empty ADR files up front.
+Architecture decisions live in **§6** (`ARCHITECTURE.md`). If §6 grows too large, split ADs into
+`docs/adr/`. Do not create empty ADR files up front.
 
 ---
 
@@ -84,221 +95,6 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 |---|---|---|
 | Coding agent (Claude Code, Cursor) | shell | `python -m transon_authoring …` |
 | CI / migration bot | headless shell | same; pre-confirmed SampleSet fixtures |
-
----
-
-## 5. Architecture
-
-```mermaid
-flowchart TD
-    intent["NL intent"]
-    skill["transon-authoring skill"]
-    intent --> skill
-
-    meta["pinned metadata snapshot<br/>+ docs.examples"]
-    nl["NL intent sidecar<br/>keyed by example name"]
-    samples["SampleSet artifact"]
-
-    skill -->|grounds on| meta
-    skill -->|search_examples| meta
-    skill -->|NL hints| nl
-    skill -->|proposes obligations / cases / waivers| samples
-
-    check["check_samples(samples)"]
-    check -->|gaps| ask["user/CI: confirm / defer / abort"]
-    ask -->|revise| samples
-    samples --> check
-
-    ask -->|confirmed + coverage_complete| draft["draft template"]
-    draft --> verify["verify(template, samples)"]
-    verify -->|re-runs check_samples| check
-    verify --> engine["pinned Transformer profile<br/>validate + sandboxed dry_run + match"]
-
-    engine -->|error/diff| repair["repair; max repair_attempts"]
-    repair --> verify
-    engine -->|matched| review["interactive user review<br/>approve / revise / stop (FR-030)"]
-    review -->|approve| blessed["AuthoringResult success"]
-    review -->|revise: NL feedback| draft
-    review -->|revise: sample edits| samples
-    review -->|stop| stopped["deferred / aborted"]
-```
-
-Non-interactive/CI runs have no reviewer: `matched` is emitted directly after `verify` (FR-030).
-
-**Runtime (AD-006):** Python library is the contract; agents/CI use `python -m transon_authoring`.
-No console-script product; no MCP.
-
----
-
-## 6. Architecture decisions
-
-- **AD-001 — Skill package.** Standalone repo/package (`SKILL.md` + resources + library).
-- **AD-002 — Engine-dependent.** May/must embed the engine; does not inherit editor AD-008.
-- **AD-003 — Engine is authority.** See AD-018 for precedence among engine, SPECIFICATION, snapshot.
-- **AD-004 — Verify-before-return.** Success only if `verify` → `ok: true`, `assurance: "matched"`.
-  `verify` **re-validates** the SampleSet via `check_samples` and rejects unless
-  `ok_for_verify` (AD-019). Structured failure otherwise (§11.5).
-- **AD-005 — Single-source, multi-tool.** One **editable** `SKILL.md`; generated copies are
-  gate-enforced byte-identical to it (FR-037a / AC-040); Claude + Cursor adapters; parity gate.
-- **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
-  `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
-  `python -m transon_authoring` (§11.6).
-- **AD-007 — Pin + drift + upgrade.** Depend on **`transon==0.2.3`**. Bundle the
-  `get_editor_metadata()` snapshot **and the `get_language_reference()` Language Reference
-  snapshot (AD-026)** with provenance (`engine_version`, `metadata_version`, `reference_version`,
-  content hashes, sync date). **Drift gate** compares the bundles to the metadata and Language
-  Reference produced by the **pinned** install — it does **not** detect newer PyPI releases.
-  **Staleness/upgrade:** a scheduled or manual check against PyPI/latest engine opens a pin-bump
-  PR; humans run `sync-metadata` (resyncing both the metadata snapshot and the Language Reference
-  snapshot, FR-036/AD-026), update the `pyproject.toml` pin, refresh the NL sidecar, re-mint the
-  FR-029 synthetic corpus and re-audit the refuse bucket (§11.8), reset `evals/baseline.json`
-  (§11.8), and merge deliberately (OQ-004 still applies for automation shape).
-- **AD-008 — Ordinary JSON output.** No IR/DSL; no verifier-owned key-order canonicalization.
-- **AD-009 — Convention-first install; plugin distribution second.** Native Claude/Cursor paths
-  (§11.9) are the primary channel. A Claude Code plugin form plus a self-hosted marketplace
-  manifest is the secondary channel (FR-037); third-party catalogs are outreach, not a gate.
-  No MCP.
-- **AD-010 — Eval-driven improvement.** Changes gated by NFR-010 / AD-020.
-- **AD-011 — Measurement before skill body.** A2 before A3.
-- **AD-012 — Pinned engine package; local execution only.** Verification depends on the pinned
-  `transon` **Python package** loaded in the same environment — no hosted HTTP, WASM/Pyodide, or
-  MCP. Dry-run cases MAY run in a **short-lived local worker subprocess** that imports that same
-  package (AD-017 timeout isolation). That is still local/embedded execution, not a remote engine.
-- **AD-013 — Engine-valid under v1 profile; no editor-surface awareness.** Output may be any
-  template valid for the **v1 execution profile** (AD-017), not “any conceivable engine subclass.”
-  No in-surface check/disclosure.
-- **AD-014 — Samples before draft.** No draft until `coverage_complete` and user/CI confirmation
-  are both true (separate flags — AD-016). CI uses pre-confirmed fixtures.
-- **AD-015 — Sandboxed `file` / `include`.** In-memory write capture + explicit `includes` map;
-  forbid real FS/network in dry-run. Expected writes live on sample cases.
-- **AD-016 — Obligations in SampleSet; deterministic `check_samples`.** Model proposes coverage
-  obligations; user/CI accepts/rejects them and confirms the SampleSet. `check_samples` only
-  checks the artifact — it never parses NL. **`coverage_complete` ≠ `confirmed`.**
-- **AD-017 — v1 execution profile (how verify executes).** `verify` / dry-run **always construct**
-  `transon.Transformer` with:
-  - the base class only (never a subclass);
-  - built-in rule/operator/function registries as shipped in the pinned package;
-  - default marker `"$"` (`Transformer.DEFAULT_MARKER`);
-  - `max_include_depth=50` (engine default);
-  - sandboxed `file_writer` + `template_loader` (AD-015);
-  - the engine’s R-32 **one core recursion frame per template node** (at the pinned engine;
-    over-depth surfaces as include `TransformationError`, never raw `RecursionError`);
-  - per-case wall-clock timeout **5s**, enforced by running each dry-run case in a **local worker
-    subprocess** that imports the pinned package, applies the same sandbox delegates, and returns
-    `{result, writes, errors}` over IPC. On timeout the worker is killed → `TimeoutError`,
-    `failed_stage: "dry_run"`. Subprocess isolation does not change match semantics (NFR-002): same
-    SampleSet + template + pin ⇒ same Verdict. Sandbox invariants (AD-015) hold inside the worker
-    (no FS/network). The library/CLI **MUST NOT** expose knobs for non-default marker, transformer
-    class, or registries in v1; explicit requests for those are rejected with `ProfileError` before
-    any engine call (AC-027). Trust boundary: trusted local agents/CI only.
-- **AD-018 — Authority precedence.** (1) behavior of the **pinned running engine**;
-  (2) the engine's author-facing Language Reference — packaged in the pinned wheel, exported by
-  `get_language_reference()` and surfaced by the `language` subcommand (AD-026) — for the
-  **shipped skill surface**, with the engine repo `docs/SPECIFICATION.md` remaining a
-  **maintainer-only** design-time authority for that version; (3) pinned `get_editor_metadata()`
-  snapshot for catalog/examples structure; (4) NL intent sidecar (hints only). Never LLM memory /
-  web / Context7 for Transon semantics (NFR-001).
-- **AD-019 — `verify` re-checks SampleSet.** No unforgeable token. `verify` runs `check_samples`
-  on the provided SampleSet and requires `ok_for_verify` before validate/dry_run/match.
-- **AD-020 — Eval runner policy (resolves OQ-009).** See §11.8. Committed `evals/runner.json`
-  pins provider/model/settings; 3 runs/fixture majority-of-3; population = all committed fixtures;
-  ratchet and privacy rules normative.
-- **AD-021 — Synthetic eval corpus from `docs.examples`; small-model primary gate (resolves
-  OQ-024; absorbs RFC-001).** The pinned snapshot's flat `docs.examples` corpus is an allowed
-  **fixture factory** for the FR-017 improvement loop:
-  any example MAY seed exactly one EvalFixture (v1 commits only the FR-029 tagged subset of
-  ~25–30 selected seeds; later waves may extend toward all 121). A seeded fixture's SampleSet
-  outputs come **only** from executing the
-  seed template under the pinned engine's AD-017 profile (never model memory, never the snapshot
-  `result` taken on faith — the corpus pair is re-executed). The **seed template is
-  provenance-only**: committed under `evals/seeds/` (FR-029), never placed in the fixture object,
-  the eval prompt, or the tools path of the skill under test; scoring stays behavioral
-  (`assurance: "matched"` against the fixture SampleSet, §11.8), never seed-template recovery.
-  Synthetic `intent_nl` is LLM-drafted (grounded on the example `doc` and, when present, the
-  NL sidecar entry) but **human-accepted before commit** — never auto-committed. The primary
-  NFR-010 gate model is a **small model** (pin: `claude-haiku-4-5-20251001`), so `SKILL.md` is
-  driven to work without a frontier model; the gate-model swap and any later gate-model change
-  are explicit eval-policy commits per §11.8. Synthetic SampleSets are **evals/CI fixtures
-  only** — they never substitute for user confirmation in interactive authoring (AD-014/AD-016
-  untouched).
-- **AD-022 — Observability: mechanical records over self-report.** Two
-  layers. (1) The skill MAY self-report an ordered `trace` in `AuthoringResult` (§11.5,
-  FR-031) — **diagnostic only**: never an input to scoring, gating, or `verify`, and never
-  trusted as evidence a step actually ran (a model can misreport its own steps). (2) The
-  **authoritative** step record is mechanical: eval episodes persist full tool-call transcripts
-  and the `check_evals` report aggregates failure modes from submitted envelopes (§11.8,
-  FR-032). Effectiveness questions — *which step failed, how often, at what cost* — are
-  answered from layer 2; layer 1 adds narrative color in interactive sessions. Gates and
-  determinism (NFR-002) are untouched: traces and transcripts are artifacts, never gate inputs.
-- **AD-023 — Real-world structural fixture pack (constructed, engine-frozen).**
-  The eval corpus (§11.8) MAY grow beyond the AD-021 synthetic-from-`docs.examples` set with a
-  **third fixture class**: hand-authored EvalFixtures built from large, realistic-shape API
-  payloads (AWS EC2, Stripe, GitHub webhooks, JOLT/JMESPath suites — see
-  `docs/proposals/big-real-world-transform-samples.md`). These are **constructed** to match the
-  documented API schemas (fake ids/values), never captured from a live account, so they carry no
-  real-use data: `redacted: false`, **no** `consent` — the FR-018 / NFR-011 real-use capture path
-  is untouched. **Honesty rule** (mirrors the AD-021 corpus pair): a fixture's case `output` is the
-  **pinned engine's actual output** for an author-verified template, never a hand-written expected;
-  the reference template is **provenance-only** (committed under `evals/seeds/`, FR-033 shape) and
-  is **never** placed in the fixture object, the harness prompt, or the tools path (leakage rule,
-  AD-021). An intent that needs a capability **genuinely absent from the pinned engine's
-  function/operator surface** — as defined by the pinned metadata catalog and Language Reference
-  (AD-018) — is authored as an `expect: "refuse"` fixture (AC-003), turning each engine gap into
-  realistic adversarial coverage rather than an unsatisfiable matched fixture; because the engine's
-  capability surface changes across pins (a repin can make a former gap authorable), an AD-007 repin
-  **re-audits** which asks are still genuinely unsatisfiable and refills the refuse bucket with the
-  new engine's real gaps (§11.8). Intents the pinned engine can satisfy — structural transforms and
-  any authorable computation — are authored `expect: "matched"`. FR-033 fixes the provenance shape + engine-freeze gate; the
-  pack is ongoing improvement-loop work (FR-017) and gates no milestone.
-- **AD-024 — Real-host eval harness (Agent SDK reference; resolves OQ-027, absorbs RFC-002).** The NFR-010 gate measures `SKILL.md` **where it ships** — inside a real host
-  agent harness with a rich tool suite (Read/Write/Edit/Bash/Glob/Grep, plus the host's `Skill`
-  tool to load the skill body) and a mature loop — not
-  the OQ-017 bespoke 3-tool `messages.create` loop, which measured a configuration that never
-  ships and is strictly *harder* than production (false negatives; the gate did not predict
-  production). The reference host is the **Claude Agent SDK**, **version-pinned** in
-  `evals/runner.json` (`harness = { kind, version }`) exactly as the model is pinned, so the gate
-  stays reproducible. Scope of the change: **only the harness that produces an EpisodeResult**.
-  OQ-016 scoring (schema-valid + independent engine re-verify, AD-004), the SampleSet schema,
-  `verify`, `check_samples`, the §11.8 buckets/ratchet/baseline, and every rate rule are
-  **untouched** — a **deterministic host→EpisodeResult adapter** (OQ-027e) feeds the unchanged
-  scorer. The retired raw loop (`scripts/eval_harness.py`) is **demoted to a non-gating offline
-  smoke fixture** (OQ-027d), not deleted, so its fake-provider unit tests keep exercising loop
-  logic offline. Because a real host runs **Bash** over untrusted fixture input inside the
-  credential-holding dispatch workflow, adoption of the live run is **gated on the OQ-027f
-  isolation contract** (ephemeral per-episode workspace, no credentials in the tool-execution
-  sandbox, network egress denied, artifact controls) — the single biggest new risk. Changing the
-  pinned `harness.kind`/`harness.version` is an eval-policy commit that resets `evals/baseline.json`
-  (OQ-027b), mirroring the gate-model swap (§11.8 / OQ-024g). Determinism (NFR-002) is untouched:
-  the harness is a measurement instrument, never a gate input beyond the EpisodeResult it produces.
-- **AD-025 — Run-artifact observability: whole transcript + telemetry roll-up.**
-  Extends the AD-022 mechanical record so a run answers *which step failed, how often, at what cost*
-  (AD-022's own words) directly from artifacts. Beyond the scored `EpisodeTranscript` (FR-032), a
-  `check_evals` run given `--transcripts-dir` also persists, per episode, the **whole host message
-  transcript** (every turn's assistant text / thinking / tool-use / tool-result, including both
-  turns of the OQ-027 review-approval path) and, per run, a **`run_summary.json`** telemetry
-  roll-up — tokens, cost (`total_cost_usd` reported by the host), a tool-call histogram (steps by
-  category), step/turn counts, outcomes and errors, plus normalized per-fixture cost. Same status as
-  every FR-032 artifact: **additive, non-gating, never committed** (a run without `--transcripts-dir`
-  scores identically); the scorer, targets, baseline, and lint are untouched. Because these are pure
-  build artifacts they carry no `additionalProperties` schema pin and the scored `EpisodeTranscript`
-  (§11.8) stays frozen. The recommended project location is the **git-ignored `evals/_runs/`** — so
-  a run's full transcript and stats land in the working tree but never in git. A `--only ID[,…]`
-  selector scopes the **provider run** to named fixtures for a cost/diagnostic probe while the
-  NFR-011 lint still covers the full committed corpus.
-- **AD-026 — Language Reference grounding + authority swap.** The engine's author-facing Language
-  Reference (packaged `LANGUAGE.md`, exported by `get_language_reference()`) is a **second
-  engine-derived grounding artifact**, snapshotted and treated **identically to the
-  `get_editor_metadata()` catalog** (AD-007): `sync-metadata` dumps it to
-  `resources/language-reference.json` with sha256 + `reference_version` provenance, `check_snapshot`
-  drift-gates it against the pinned engine, and the read path is engine-import-free (FR-009/FR-036).
-  Snapshotting over a live passthrough is deliberate: every authority change is a reviewable diff on
-  the upgrade PR (AD-007 "not silent"), one mental model for all engine-derived grounding, and the
-  whole grounding surface stays offline (NFR-003). This is the authority the **shipped skill** cites
-  (AD-018 item 2, surfaced by the `language` subcommand), replacing the engine repo
-  `docs/SPECIFICATION.md` — reachable on every install (§11.9) where no engine checkout exists. The
-  engine `docs/SPECIFICATION.md` remains a **maintainer-only** design-time authority. `reference_version`
-  is the reference's own semver (minor = additive, major = breaking); consumers MUST fail loudly on
-  an unsupported major (§11.6 `language`, enforced at sync time).
 
 ---
 
@@ -870,50 +666,6 @@ No console-script product; no MCP.
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
 - **UC-004** — New engineer: `pip install transon-authoring`, installs adapters via `install/`,
   first-run layout prompt, authors successfully.
-
----
-
-## 10. Package layout
-
-```
-transon-authoring/
-├── SKILL.md
-├── pyproject.toml                 # depends on transon==0.2.3 (AD-007 pin)
-├── src/transon_authoring/
-│   ├── __main__.py                # §11.6
-│   ├── verify.py
-│   ├── samples.py
-│   ├── metadata.py
-│   ├── examples.py
-│   ├── match.py                   # §11.4
-│   └── schemas/                   # SampleSet, SampleCheck, Verdict, AuthoringResult, EvalFixture, …
-├── resources/
-│   ├── metadata-snapshot.json     # get_editor_metadata() pin
-│   ├── metadata-snapshot.md       # provenance
-│   └── nl-intents.json            # NL sidecar by example name (FR-010)
-├── adapters/claude/ … cursor/
-├── .claude-plugin/
-│   ├── plugin.json                # FR-037a plugin manifest
-│   └── marketplace.json           # FR-037a self-hosted marketplace catalog
-├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
-├── install/claude.py cursor.py
-├── scripts/sync_metadata.py sync_plugin.py check_snapshot.py check_parity.py check_evals.py check_install.py
-│                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
-├── evals/
-│   ├── runner.json                # AD-020 pin
-│   ├── targets.json               # NFR-010 rates (OQ-016e)
-│   ├── baseline.json              # fixture-regression record (OQ-016f)
-│   ├── cases/
-│   └── seeds/                     # synthetic-fixture provenance (AD-021 / FR-029)
-└── docs/
-    ├── SPEC.md
-    └── traceability.md            # generated or maintained matrix (§17)
-```
-
-Repo-root `resources/` is the canonical, human-edited source. The wheel build maps it into the
-package as `transon_authoring/resources/` (hatchling force-include) so the installed package
-satisfies NFR-003 / the §11.6 `metadata` subcommand offline; the library loads the snapshot via
-`importlib.resources` with a repo-root fallback for source checkouts.
 
 ---
 
@@ -1761,6 +1513,9 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 
 ## 12. Governance
 
+- **The contract spans `SPEC.md`, `ARCHITECTURE.md`, and `ROADMAP.md`.** Section numbers are
+  global and unique across all three; every rule in this section applies to all three, and "the
+  SPEC" below means the contract as a whole.
 - SPEC-first; ID lock at A0 start.
 - Maker ≠ checker on library/snapshot/adapters/evals.
 - Single-source adapters (NFR-007).
@@ -1770,7 +1525,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
   place (ID kept). Do not stack dated revision parentheticals or retain superseded designs beside
   the new text — history lives in git. Deprecated IDs remain as one-line stubs. Resolved OQs keep
   a one/two-line decision; superseded narratives are deleted. Session status goes to
-  `docs/current-state.md`, not into the SPEC or traceability cells.
+  `docs/current-state.md`, not into the contract docs or traceability cells.
 
 ---
 
@@ -1786,233 +1541,6 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
 | Sandbox evals | AC-015/023/024/028 |
-
----
-
-## 14. Milestones
-
-- **A0 — Grounding spine.** Repo, package skeleton, pin `transon==0.1.7`, snapshot + provenance +
-  drift gate, NL-intents sidecar skeleton, `SKILL.md` stub, §17 matrix stub. *Resolve at start:*
-  **OQ-019** (Python floor, needed for `pyproject.toml`), **OQ-021** (sidecar consistency gate),
-  **OQ-022** (`search_examples` minimal contract) — each resolved by a SPEC edit before the
-  corresponding artifact lands. *DoD:* `python -m transon_authoring metadata` works offline
-  against pin; `check_snapshot` green (including OQ-021 sidecar check); no open decisions
-  required to start A1. **ID lock on A0 approval.**
-- **A1 — Verification library.** Full §11.2–11.6 verify/match/sandbox/CLI (single-shot verify; no
-  repair flag); SampleSet schema validation; worker-subprocess timeout; AuthoringTag encoding.
-  *Resolve during design, before implementation of the affected part:* **OQ-011** (per-case
-  attribution + reporting policy), **OQ-012** (`NO_CONTENT` encoding outside expectations),
-  **OQ-013** (deterministic array ordering — prerequisite for AC-018 fixtures), **OQ-014**
-  (envelope closure). *DoD:* OQ-011–OQ-014 closed in SPEC; AC-015/016/018/021/023/024/027/028
-  green on fixtures (AC-027 = default-profile execution + rejection of reserved profile knobs —
-  not “detect custom marker in template JSON”); hand AC-001 path with fixed SampleSet (no skill
-  body).
-- **A2 — Measurement spine.** `check_samples` complete; config init; `evals/runner.json` +
-  targets + seed cases; `check_evals` red/green; trivial skill stub only. *Resolve at standup,
-  before the corresponding code:* **OQ-015** (fingerprint canonicalization + acquisition path —
-  before `check_samples`), **OQ-016** (eval bucket scoring) and **OQ-017** (eval harness shape) —
-  both before `check_evals`; **OQ-018** (`check_samples` edge semantics) and **OQ-023** (AC-011
-  traceability split, jointly with A3). *DoD:* OQ-015–OQ-018 closed in SPEC; AD-020 executable;
-  NFR-010 gate runs; AD-011 satisfied; A3 unblocked.
-- **A3 — Authoring loop.** Full skill body; repair counting per FR-007; §11.5 statuses;
-  interactive review loop per FR-030; observability per FR-031/FR-032 (`trace` schema field +
-  eval transcripts/attribution); AD-021/FR-029 synthetic-fixture generator + `evals/seeds/`
-  provenance + AC-030 regen lint; the v1 fixture wave (~25–30 human-accepted synthetic fixtures);
-  the §11.8 eval-policy commit swapping `evals/runner.json` to the small-model pin with the
-  baseline reset; the eval-policy commit pinning `runner.json.harness` to the real host (Claude
-  Agent SDK) with baseline reset discipline; AC-036 (harness pin + adapter, offline
-  deterministic). *Entry:* OQ-023 resolved (A2/A3 boundary for AC-011). *DoD:* FR-029 landed
-  (AC-030 green); **authoring target met under the small-model pin**
-  (`claude-haiku-4-5-20251001`) on the corpus including the v1 synthetic wave, measured under the
-  **real-host harness** pinned in `runner.json.harness`; AC-003/004/010–014/017/019/025/026/031/
-  033/034/036 green (AC-031's conversational half by skill-body tests + UC-001 walkthrough — the
-  non-interactive eval harness cannot exercise it; AC-025 is the FR-018a lint invariant,
-  satisfied vacuously — real-use corpus growth (FR-018b) is ongoing and gates nothing). The live
-  authoring-target run depends on the OQ-027f isolation contract being in force in the dispatch
-  workflow.
-- **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
-  OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
-  (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
-- **A5 — Release.** Versioned release notes with pin
-  (NFR-008); the **distribution-verification ladder** proving a fresh host works from the
-  shipped artifacts, not the checkout:
-  1. **Dist smoke (CI job):** build the wheel/sdist, `pip install` the **wheel** (never
-     editable) into a fresh venv, run the §11.6 surface offline against the committed
-     fixtures — catches packaging gaps (e.g. bundled `resources/` missing from the wheel)
-     that editable installs cannot see.
-  2. **Distribution-faithful eval provisioning:** the §11.8 harness workspace is installed
-     by `install/claude.py --target-root <workspace>` from a release-archive-shaped layout
-     before host auto-activation (OQ-027a), so the gate measures the installed-from-
-     distribution configuration; validated first by a targeted `--only` probe. Installed
-     bytes are byte-identical to canonical, so this alone forces no baseline reset — any
-     `harness.kind`/`version` change still follows §11.8 discipline.
-  3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008):**
-     `cursor-agent -p` in an ephemeral workspace whose skill was installed by
-     `install/cursor.py --target-root` — confirms a fresh headless Cursor actually
-     activates the shipped skill and grounds via the module recipe. Model-invoking,
-     therefore never a PR gate; non-gating report unless promoted by an eval-policy
-     commit.
-  4. **UC-004 human walkthrough (release checklist, NFR-008):** on a machine without the
-     repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
-     publish), run both installers, confirm the skill activates in real Claude Code and
-     real Cursor, author one template; outcome recorded in the release notes.
-  5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout, gated by
-     `check_install` (AC-040). Structural only — it needs no published package and makes no
-     catalog claim.
-  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
-  post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
-  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8). *Resolve during
-  A5:* **OQ-028** (Cursor personal scope), **OQ-029** (plugin runtime acquisition).
-  *DoD:* ladder steps 1–5 green/recorded; release notes cite skill version, engine pin,
-  snapshot hash; first PyPI publish per OQ-020; AC-040 green. **FR-037b (external catalog
-  submission) gates nothing** and begins only after the PyPI publish, since a listed skill whose
-  runtime is unpublished is inert.
-
-*Improvement-loop note (AD-021 / FR-029):* synthetic corpus growth and the small-model gate swap
-are **A3 deliverables** (folded into the A3 DoD above) — the harness they rely on is the A2
-deliverable, and the work proceeds in parallel with the skill body. Ordering within A3: SPEC →
-generator + seeds + regen lint (FR-029) → v1 fixture wave with human-accepted intents → the
-eval-policy commit that swaps `evals/runner.json` to the small model and resets
-`evals/baseline.json` (§11.8) → the eval-policy commit that pins `runner.json.harness` to the
-real host (deterministic parts offline; live authoring-target run once OQ-027f isolation is in
-force) → iterate `SKILL.md` until the authoring target is met under that pin. Later fixture waves
-beyond the v1 subset remain ongoing improvement-loop work and do not gate any milestone.
-
----
-
-## 15. Open questions
-
-- **OQ-001** — **Resolved (2026-07-09):** pinned local engine package only; no HTTP/WASM/MCP.
-  Dry-run may use local worker subprocesses for timeout (AD-012/017).
-- **OQ-002** — **Resolved (2026-07-09):** standalone repo (AD-001).
-- **OQ-003** — **Resolved (2026-07-09):** authoritative example JSON = snapshot `docs.examples`;
-  NL intents in sidecar by `name`; no editor codec corpus duplication (FR-010).
-- **OQ-004** — **Resolved (2026-07-09):** manual sync + drift now; scheduled PR bot later.
-- **OQ-005** — **Resolved (2026-07-09):** no in-surface gate/disclosure (AD-013).
-- **OQ-006** — **Resolved (2026-07-09):** authoring ≥80%→95%; adversarial refuse =100%.
-- **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP. Normative in
-  AD-009 / FR-037.
-- **OQ-008** — **Resolved (2026-07-19):** Cursor's deterministic CI claim
-  stays structural + runtime smoke — the Cursor CLI (`cursor-agent`) still exposes no
-  credential-free command to enumerate discovered skills. Its headless mode (`agent -p`) does
-  make a **model-invoking activation smoke** possible: allowed only at the credentialed
-  dispatch tier (A5 ladder), never as a PR gate, and only it may claim activation.
-- **OQ-009** — **Resolved (2026-07-10):** Eval runner normative in AD-020 / §11.8.
-- **OQ-010** — **Resolved (2026-07-19):** Claude Code exposes no supported, credential-free,
-  deterministic headless command that lists installed skills without invoking the model. CI
-  asserts **install integrity + discoverability preconditions** (installed frontmatter parses;
-  `name` matches the skill directory; non-empty `description`) and never claims host
-  discoverability. Normative in FR-019 / NFR-009 / AC-009.
-- **OQ-011** — **Resolved (2026-07-11):** Per-case attribution on `EngineError`/`DiffEntry`;
-  fail-fast between stages, report every failure within `dry_run`/`match`; root `Verdict.writes`
-  never emitted in v1. Normative in §11.2.
-- **OQ-012** — **Resolved (2026-07-11):** Library outputs use normative engine-value encoding
-  `enc` (`NoContentRef` / `LitRef` / recursive); non-JSON-representable engine values fail the
-  case at `dry_run`. Normative in §11.0 / §11.4.
-- **OQ-013** — **Resolved (2026-07-11):** Defined emission order for `gaps[]`/`errors[]`/`diff[]`;
-  AC-018 equality is plain structural equality. Normative in §11.0–§11.2.
-- **OQ-014** — **Resolved (2026-07-11):** Exit-3 `CliError` envelope; `schema_version` on all
-  library envelopes; `PreflightError` / `EngineError.type` closure; bare `--includes` map;
-  JSON Schema draft 2020-12 via `jsonschema`. Normative in §11.0 / §11.6.
-- **OQ-015** — **Resolved (2026-07-11):** `content_fingerprint` = SHA-256 of the canonical
-  hashed subset; agents obtain it only from `SampleCheck.content_fingerprint` via
-  `check-samples`. Normative in §11.1.
-- **OQ-016** — **Resolved (2026-07-11):** Mechanical scoring rules for matched / refuse /
-  matched_correction (reporting-only) / infra_error; `evals/targets.json` and fixture-regression
-  baseline shapes. Normative in §11.8.
-- **OQ-017** — **Resolved (2026-07-11; harness shape revised 2026-07-14 by OQ-027 / AD-024):**
-  Gate harness is the real host (Claude Agent SDK), not a raw API tool loop. The raw loop is a
-  non-gating offline smoke fixture. Shared conventions (prompting/tools/budget/CI split) are
-  normative in AD-020 / AD-024 / §11.8.
-- **OQ-018** — **Resolved (2026-07-11):** SampleSet edge semantics (placeholder fingerprint,
-  gap emission, waiver refs, ignored `target` on some kinds, invalid includes fail at
-  `dry_run`). Normative in §11.1.
-- **OQ-019** — **Resolved (2026-07-11):** Python floor `>=3.10` in `pyproject.toml`; pin-reading
-  scripts must not import `tomllib`.
-- **OQ-020** — **Resolved (2026-07-19):** the runtime package ships on **public PyPI** as
-  `transon-authoring` (same index as the pinned engine); no private index. Skill files install
-  from a checkout/release archive via `install/` (§11.9); the installed skill needs only
-  `pip install transon-authoring` for its module recipe. Normative in §11.9; first publish is
-  an A5 release-checklist item (NFR-008).
-- **OQ-021** — **Resolved (2026-07-11):** Sidecar consistency is part of `check_snapshot`
-  (dangling keys fail; uncovered examples allowed with count report). Normative in FR-010 /
-  NFR-004.
-- **OQ-022** — **Resolved (2026-07-11):** Minimal `search_examples` contract (exact-name first,
-  bound, deterministic corpus order, snapshot-verbatim hits + optional sidecar `nl`).
-  Normative in FR-010 / AC-022.
-- **OQ-023** — **Resolved (2026-07-11):** AC-011 split — AC-029 schema half (A2, FR-021);
-  AC-011 conversational half only (A3, FR-024).
-- **OQ-024** — **Resolved (2026-07-12; absorbs RFC-001):** Synthetic eval corpus from
-  `docs.examples` and small-model primary gate (`claude-haiku-4-5-20251001`); stratification
-  budget, corpus-pair rule, seed provenance/regen, baseline reset on gate-model swap.
-  Normative in AD-021 / FR-029 / §11.8.
-- **OQ-025** — **Resolved (2026-07-12):** FR-029 generator applicability predicates (optional
-  keys, array scope, empirical `NO_CONTENT`, includes population/eligibility, writes-capable).
-  Normative in FR-029.
-- **OQ-026** — **Resolved (2026-07-12):** FR-029 coverage extensions (list length variation,
-  root key add/delete, `NO_CONTENT` probe count, budget/drop order). Normative in FR-029.
-- **OQ-027** — **Resolved (2026-07-14; absorbs RFC-002):** NFR-010 gate runs the skill in the
-  real host agent harness (`runner.json.harness`, reference host = Claude Agent SDK);
-  skill auto-activates from shipped `SKILL.md`; raw loop demoted to non-gating smoke;
-  host→EpisodeResult adapter; isolation contract (ephemeral workspace, no credentials in
-  tool sandbox, network egress denied, artifact controls). Normative in AD-024 / §11.8.
-- **OQ-028** — *(open; A5)* Cursor personal scope: current Cursor docs document user-level
-  skill discovery (`~/.cursor/skills/`, `~/.agents/skills/`), so the §11.9 "project-only"
-  Cursor row and the adapter's documented NFR-007 exclusion are now a product choice, not a
-  platform limit. Decide at A5: add a Cursor personal scope (installer + adapter + parity
-  update) or keep project-only for v1 with the exclusion reworded as a deliberate choice.
-- **OQ-029** — *(open; A5)* **Plugin runtime acquisition (FR-037a).** Plugin hosts do not install
-  Python dependencies, so a plugin-installed skill still needs `transon-authoring` importable.
-  Candidates: (1) a documented `pip install` prerequisite; (2) a host `SessionStart` hook; (3) an
-  ephemeral `uv run --with transon-authoring python -m transon_authoring …` recipe, which needs no
-  console script and so stays inside AD-006. Decide before FR-037a lands. The choice MUST preserve
-  NFR-003 (offline after install) and OQ-020 (packaging never runs `pip`), and MUST NOT fork the
-  §11.6 grounding recipe between the native and plugin channels.
-
----
-
-## 16. Risks
-
-- Snapshot rot → drift vs pin (AD-007).
-- Pin staleness vs newer engine → upgrade PR policy (AD-007); not silent.
-- Verify bypass → AD-019 + samples stage (AC-016).
-- Self-approval → fingerprint + library never sets confirmed.
-- `file`/`include` → sandbox only (incl. worker); residual trust boundary (AD-017).
-- Weak obligations → user confirmation + evals.
-- Eval cost/flakiness → majority-of-3 + infra_skip cap.
-- Synthetic SampleSet leakage (wrong templates pass thin fixtures) → coverage-driven 3–6 case
-  budget + corpus-only fixtures forbidden (AD-021/FR-029).
-- Weak synthetic `intent_nl` → mandatory human acceptance before commit (AD-021).
-- Gate cliff on small-model swap → explicit baseline reset, targets never lowered (§11.8).
-- Seed/pin drift in synthetic fixtures → AC-030 regen lint, same discipline as `check_snapshot`.
-- Unsatisfiable or hand-faked big fixtures (a matched fixture no engine template can produce) →
-  AD-023 engine-freeze gate (AC-035): case outputs come only from re-executing the author's
-  provenance seed template through the pin; engine-absent asks become refuse fixtures.
-- Privacy leaks in fixtures → NFR-011.
-- Adapter drift → parity gate.
-- Dangling references in shipped skill/adapters → NFR-012 + parity lint (AC-032).
-- Fabricated/misreported self-trace taken as evidence → AD-022: trace is diagnostic only; the
-  mechanical §11.8 transcript is the authoritative record; neither gates.
-- Review-loop fatigue (user rubber-stamps or the loop never ends) → three explicit exits,
-  no auto-approve, honest `deferred`/`aborted` statuses (FR-030).
-- Repair blowup → FR-007 cap.
-- False discoverability claims → FR-019 wording.
-- Real-host gate harness widens the trust boundary (a full Read/Write/Edit/**Bash** host runs over
-  untrusted fixture input inside the credential-holding dispatch workflow: a prompt-injected or
-  adversarial fixture could read the provider key, reach the network, or touch repo data) →
-  OQ-027f isolation contract (AD-024): ephemeral per-episode workspace, no credentials in the tool
-  sandbox, network egress denied post-install, artifact controls — a blocker before the live run.
-- Gate cliff / non-transferable scores on a harness swap → harness pin is gate identity; a
-  `harness.kind`/`version` change is an eval-policy commit that resets the baseline, targets never
-  lowered (§11.8 / OQ-027b).
-- Harness measures a **non-shipped configuration** (the gate looks green/red for reasons that don't
-  reflect real use) → OQ-027a faithful engagement: install `SKILL.md` **as shipped** and let the
-  host **auto-activate** it under its own system prompt — no injected system prompt, no engagement
-  preamble, no tool coercion. An indicative run (2026-07-14) caught this: a hand-injected engagement
-  made a fixture pass that, under genuine auto-activation, the model would not even route to the
-  skill. Corollary risk — the **shipped skill isn't discoverable** (missing frontmatter
-  `description`) so the host never activates it → treated as an install-integrity/discoverability
-  defect (NFR-009 / OQ-010), fixed in the skill, not masked in the harness.
 
 ---
 
@@ -2071,16 +1599,3 @@ excluded from active coverage.
 | NFR-010 | AC-008, AC-036 | A2–A3 | check_evals |
 | NFR-011 | AC-025 | A2 | fixture lint |
 | NFR-012 | AC-032 | A4 | check_parity |
-
----
-
-## 18. Readiness
-
-| Milestone | Ready to begin? | Notes |
-|---|---|---|
-| **A0** | **Yes** | Pin, snapshot, NL sidecar, drift, package skeleton fully specified. Resolve OQ-019/021/022 at start (scoped, non-blocking to begin). |
-| **A1** | **Yes** | Single-shot verify, worker timeout, AuthoringTag, profile-knob rejection, obligation semantics closed. OQ-011–014 must close during A1 design (in DoD). |
-| **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
-| A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
-| A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough, plugin packaging) + release notes/publish. OQ-029 resolved before FR-037a lands; FR-037b non-gating. |
