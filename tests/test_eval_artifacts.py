@@ -133,15 +133,16 @@ def test_fr_001_ac_002_corpus_exercises_mode_variant_authoring():
     assert isinstance(first_output(list_mode), list)
 
 
-def test_fr_017_baseline_is_reset_after_the_repin():
-    # §11.8 / AD-007: a pin or corpus change invalidates the previous eval
-    # baseline (it is gate identity), so baseline.json is empty until a later
-    # accepted green real-host gate repopulates it.
+def test_fr_017_baseline_reflects_the_accepted_green_gate():
+    # FR-017 / OQ-016f / §11.8: ids enter baseline.json only via an accepted
+    # green gate (the --update-baseline rule: majority-passing fixtures), so a
+    # populated baseline lists only ids that resolve to committed fixtures.
     document = load_document(EVALS / "baseline.json", "eval_baseline.json")
-    assert document["passing"] == [], (
-        "the transon==0.2.3 repin resets the baseline to empty (§11.8); it "
-        "repopulates only from the next accepted green real-host gate"
-    )
+    ids = document["passing"]
+    assert ids, "baseline should be populated by the accepted green gate"
+    assert ids == sorted(set(ids)), "passing ids must be sorted + unique"
+    stems = {p.stem for p in FIXTURE_PATHS}
+    assert set(ids) <= stems, "every baseline id must resolve to a committed fixture"
 
 
 # --- seed fixtures (§11.8 EvalFixture) ---------------------------------------
