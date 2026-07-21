@@ -180,19 +180,16 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   host→EpisodeResult adapter; isolation contract (ephemeral workspace, no credentials in
   tool sandbox, network egress denied, artifact controls). Normative in AD-024 / §11.8.
 - **OQ-028** — **Resolved (2026-07-22):** Cursor gains a personal scope. Cursor discovers
-  user-level skills (`~/.cursor/skills/`, `~/.agents/skills/`), so project-only was a product
+  user-level skills at `~/.cursor/skills/` (the tool-neutral `~/.agents/skills/` is deliberately
+  not adopted), so project-only was a product
   choice, not a platform limit, and NFR-007 prefers equal capability over a documented
   exclusion. Normative in FR-038 / AC-041 / §11.9; the adapter's `personal scope` exclusion is
   retired when FR-038 lands.
-- **OQ-029** — **Resolved (2026-07-22):** the skill keeps **one** §11.6 grounding recipe
-  (`python -m transon_authoring …`) in every channel; runtime acquisition is documented per
-  channel and never encoded in the recipe. `pip install transon-authoring` remains the native
-  prerequisite; the plugin states the same prerequisite in its manifest and marketplace README.
-  Ephemeral runners such as `uv run --with` stay a non-normative convenience: measured against
-  a local wheel they work and need no console script, but their command form differs from the
-  native recipe (a forked recipe) and their offline behavior depends on a prunable shared cache,
-  weakening NFR-003. No `SessionStart` hook: nothing in packaging runs `pip` (OQ-020). Normative
-  in FR-037a / AC-040.
+- **OQ-029** — **Resolved (2026-07-22):** one §11.6 grounding recipe in every channel;
+  runtime acquisition is documented per channel, never encoded in the recipe. `pip install
+  transon-authoring` stays the prerequisite, stated in the plugin manifest. `uv run --with`
+  rejected: it forks the recipe and its offline behavior depends on a prunable cache (NFR-003).
+  No `SessionStart` hook — packaging never runs `pip` (OQ-020). Normative in FR-037a / AC-040.
 
 ---
 

@@ -199,10 +199,10 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
   runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry — **identical in every
   channel** (OQ-029). Runtime acquisition is documented, never encoded in the recipe: the plugin
-  manifest's `description` MUST state the `pip install transon-authoring` prerequisite, and the
-  marketplace README repeats it. A channel-specific command wrapper (an ephemeral runner such as
-  `uv run --with`) MUST NOT appear in the shipped body — it forks the recipe and makes offline
-  behavior depend on a prunable cache (NFR-003). Verified by `check_install` (AC-040).
+  manifest's `description` MUST contain the literal string `pip install transon-authoring`. A
+  channel-specific command wrapper (an ephemeral runner such as `uv run --with`) MUST NOT appear
+  in the shipped body — it forks the recipe and makes offline behavior depend on a prunable cache
+  (NFR-003). Verified by `check_install` (AC-040).
   **(b) External catalog submission (ongoing; non-gating):** listing the plugin in third-party
   agent-skill catalogs is outreach driven by real adoption. It **gates no milestone**, places no
   requirement on third-party infrastructure, and no claim of catalog presence or host
@@ -210,7 +210,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 
 ### Installation
 - **FR-015** — Install procedures (§11.9): Claude personal/project skill paths; Cursor
-  `.cursor/skills/transon-authoring/`. Skill + engine versions and the snapshot hash are
+  project path (the Cursor personal scope is added by FR-038). Skill + engine versions and the snapshot hash are
   recorded install-time in `.install-manifest.json` (§11.9), never stamped into adapter files —
   the installed body stays byte-identical to the canonical `SKILL.md`.
 - **FR-016** — Idempotent install; uninstall removes **only** files this installer created
@@ -220,7 +220,12 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   same copy / manifest / idempotent-upgrade / uninstall-only-manifest-paths discipline as
   FR-015 and FR-016. The Cursor adapter drops its `personal scope` exclusion, so the two
   adapters reach **equal capability** rather than a documented exclusion (NFR-007). Verified by
-  `check_install` (AC-041).
+  `check_install` (AC-041). Until this lands, four artifacts still assert the superseded
+  project-only rule and are part of this slice: `adapters/cursor/adapter.json` (the exclusion),
+  the shipped `adapters/cursor/README.md` (its "project scope only" sentence),
+  `install/cursor.py` (module docstring + the scope-rejection path), and the tests pinning it —
+  `tests/test_adapters.py`, `tests/test_install.py::test_fr015_cursor_personal_scope_exit2`,
+  and the `tests/test_check_parity.py` exclusion fixture.
 
 ### Improvement
 - **FR-017** — Eval-driven loop (AD-010/020/024). Measurement harness is the **real host**
@@ -654,8 +659,8 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   root is the **repo root** (§10), which is also the self-hosted marketplace repo. `check_install`
   is **green** when, at that root: (a) `.claude-plugin/plugin.json` parses and carries `name`,
   `description`, `version`, with `name` equal to the skill directory name `transon-authoring`,
-  `version` equal to the `pyproject.toml` project version, and a `description` naming the
-  `pip install transon-authoring` runtime prerequisite (OQ-029); (b) `.claude-plugin/marketplace.json`
+  `version` equal to the `pyproject.toml` project version, and a `description` containing the
+  literal string `pip install transon-authoring` (the OQ-029 runtime prerequisite); (b) `.claude-plugin/marketplace.json`
   parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
   `source` resolves to **the plugin root itself**, not merely to some path inside the repo, so
   that (a) and (c) are present relative to it; (c) `skills/transon-authoring/SKILL.md` exists and
@@ -674,9 +679,10 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   installed at the §11.9 destination under an overridable home, installed `SKILL.md`
   byte-identical to canonical, complete `.install-manifest.json`, idempotent re-install,
   uninstall removing only manifest paths, and the OQ-010 frontmatter preconditions holding.
-  `check_parity` is **red** if either adapter still declares a scope the other lacks without a
-  documented exclusion — with FR-038 landed, `cursor` and `claude` declare the same scopes and
-  the Cursor `personal scope` exclusion is gone (NFR-007 / AC-005).
+  Adapter-scope equality is AC-005's job, not this one. As with FR-019 / AC-009 this is a
+  **structural** claim: it asserts the install destination and its integrity, never that Cursor
+  discovered or activated the personal-scope skill — no credential-free headless listing exists
+  (OQ-008).
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
@@ -1514,7 +1520,13 @@ directory name `transon-authoring`, and
 This tree is a **repo artifact, not an install destination**: it is outside the FR-015/FR-016
 `.install-manifest.json` regime, which governs only files copied into a target project's skill
 directory. Users add the marketplace with the host's own command and install by plugin name; no
-third-party catalog is required. Runtime acquisition is OQ-029.
+third-party catalog is required.
+
+**Runtime acquisition (plugin channel).** The grounding recipe is byte-for-byte the native one —
+`python -m transon_authoring …` — so the plugin adds no channel-specific command wrapper. The
+runtime is acquired separately, exactly as in the native channel: `plugin.json.description` MUST
+contain the literal string `pip install transon-authoring` (AC-040). Packaging never runs `pip`
+(OQ-020) and declares no console script (AD-006).
 
 Strategy: **copy** adapter files (not symlink) for hermeticity. Record
 `.install-manifest.json` listing owned paths + versions. **Upgrade:** re-run install (idempotent
