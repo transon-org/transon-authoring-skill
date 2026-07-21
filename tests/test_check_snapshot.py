@@ -3,7 +3,7 @@
 `check_snapshot` must fail when the bundled snapshot differs from
 `get_editor_metadata()` under the pinned `transon==0.2.3` (SPEC §8 NFR-004,
 §9 AC-006, §11.7 pin/drift) and must enforce the OQ-021 sidecar consistency
-rules (SPEC §15). It never tracks unpinned newer releases (AD-007) and never
+rules (ROADMAP §15). It never tracks unpinned newer releases (AD-007) and never
 compares `synced_at` (determinism, FR-011).
 
 The gate is run via subprocess with the interpreter pytest runs under (the

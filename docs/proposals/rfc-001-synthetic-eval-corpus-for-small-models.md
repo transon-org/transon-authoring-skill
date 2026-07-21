@@ -186,7 +186,7 @@ Do **not** invent IDs in this draft file.
 
 > **Historical (fulfilled 2026-07-12):** the RFC was accepted and the SPEC pass happened; the
 > "do not implement until the SPEC edit lands" condition is satisfied. Generator, fixture wave,
-> and the runner-pin swap are now governed by SPEC §14 (A3 DoD), not by this file.
+> and the runner-pin swap are now governed by ROADMAP §14 (A3 DoD), not by this file.
 
 Accept this RFC as the intended direction for corpus growth and small-model gating. Defer
 normative wording and ID issuance until the author’s SPEC pass. Do not implement generator or

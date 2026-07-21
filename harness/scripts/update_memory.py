@@ -134,7 +134,7 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Do-not-relitigate (pointers, not copies)
 
-- Product contract → [`SPEC.md`](SPEC.md).
+- Product contract → [`SPEC.md`](SPEC.md) + [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ROADMAP.md`](ROADMAP.md).
 - Coverage matrix → [`traceability.md`](traceability.md).
 - Golden rules → [`AGENTS.md`](../AGENTS.md).
 """

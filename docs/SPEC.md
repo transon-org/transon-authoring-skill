@@ -6,8 +6,9 @@ correct, engine-valid **Transon** JSON — grounded in engine-authoritative meta
 template is returned. It lives in its own repository, **beside** (not inside) the
 `transon-blockly` editor and the `transon` engine.
 
-> **Status:** Draft (pre-A0). This document is the contract for the project — behavior changes
-> update this SPEC first, then code (see §12 governance).
+> **Status:** Draft (pre-A0). This document, with `ARCHITECTURE.md` and `ROADMAP.md`, is the
+> contract for the project — behavior changes update the contract docs first, then code
+> (see §12 governance).
 >
 > **Pre-A0 note:** Until A0 is approved/started, requirement and decision text may be rewritten in
 > place to keep the draft coherent. **From A0 onward**, FR/NFR/AC/UC/AD/OQ IDs are append-only:
@@ -21,7 +22,7 @@ template is returned. It lives in its own repository, **beside** (not inside) th
 ---
 
 > **Contract split.** The contract spans three documents: [`SPEC.md`](SPEC.md) (§0–4, §7–9,
-> §11–13, §17 — goals, requirements, normative contracts, governance, traceability),
+> §11–13, §17 — goals, requirements, normative contracts, governance, gates, traceability),
 > [`ARCHITECTURE.md`](ARCHITECTURE.md) (§5, §6, §10 — architecture, decision records, package
 > layout), and [`ROADMAP.md`](ROADMAP.md) (§14–16, §18 — milestones, open questions, risks,
 > readiness). **Section numbers are global and unique across all three**, so a reference such as
@@ -44,8 +45,8 @@ editor's numbering; the two documents are not cross-referenced by ID.
 The product name is **`transon-authoring`**. Any earlier editor-dev harness skill of the same name
 is temporary and is removed or redirected once this package ships (A4+).
 
-Architecture decisions live in **§6**. If the SPEC grows too large, extract `ARCHITECTURE.md`; if
-that grows too large, split ADs into `docs/adr/`. Do not create empty ADR files up front.
+Architecture decisions live in **§6** (`ARCHITECTURE.md`). If §6 grows too large, split ADs into
+`docs/adr/`. Do not create empty ADR files up front.
 
 ---
 
@@ -1512,6 +1513,9 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 
 ## 12. Governance
 
+- **The contract spans `SPEC.md`, `ARCHITECTURE.md`, and `ROADMAP.md`.** Section numbers are
+  global and unique across all three; every rule in this section applies to all three, and "the
+  SPEC" below means the contract as a whole.
 - SPEC-first; ID lock at A0 start.
 - Maker ≠ checker on library/snapshot/adapters/evals.
 - Single-source adapters (NFR-007).
@@ -1521,7 +1525,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
   place (ID kept). Do not stack dated revision parentheticals or retain superseded designs beside
   the new text — history lives in git. Deprecated IDs remain as one-line stubs. Resolved OQs keep
   a one/two-line decision; superseded narratives are deleted. Session status goes to
-  `docs/current-state.md`, not into the SPEC or traceability cells.
+  `docs/current-state.md`, not into the contract docs or traceability cells.
 
 ---
 
@@ -1595,6 +1599,3 @@ excluded from active coverage.
 | NFR-010 | AC-008, AC-036 | A2–A3 | check_evals |
 | NFR-011 | AC-025 | A2 | fixture lint |
 | NFR-012 | AC-032 | A4 | check_parity |
-
----
-

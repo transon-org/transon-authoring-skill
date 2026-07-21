@@ -1,8 +1,10 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 #
 # CodeRabbit — external review gate for the transon-authoring repo.
-# The product contract is docs/SPEC.md (SPEC-first, §12 governance; requirement
-# IDs append-only). The operating contract for agents is AGENTS.md. Review
+# The product contract is docs/SPEC.md + docs/ARCHITECTURE.md + docs/ROADMAP.md
+# (SPEC-first, §12 governance; requirement IDs append-only; section numbers are
+# global and unique across the three). The operating contract for agents is
+# AGENTS.md. Review
 # against those documents, not against general taste.
 
 language: en-US
@@ -61,23 +63,25 @@ reviews:
       - name: "SPEC IDs paired with ledger"
         mode: error
         instructions: |
-          Applies when the diff touches docs/SPEC.md or docs/id-ledger.json.
+          Applies when the diff touches any contract doc (docs/SPEC.md, docs/ARCHITECTURE.md or docs/ROADMAP.md)
+          or docs/id-ledger.json.
           The pairing rule takes effect when docs/id-ledger.json exists on the
           base branch: if it does not, the project is pre-A0 and this check
           passes — including the PR that first introduces the ledger.
           Otherwise fail if:
-          - docs/SPEC.md introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
-            that did not appear in the file before, and docs/id-ledger.json in
+          - any contract doc introduces a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>)
+            that did not appear in that file before, and docs/id-ledger.json in
             this same PR does not add exactly that number to the matching
             family array; or
           - docs/id-ledger.json removes any number from any family array; or
-          - docs/id-ledger.json changes without any corresponding docs/SPEC.md
+          - docs/id-ledger.json changes without any corresponding contract-doc
             change in the PR.
           Otherwise pass.
       - name: "No renumbered or deleted requirement IDs"
         mode: error
         instructions: |
-          Applies when the diff touches docs/SPEC.md. The ID lock takes effect
+          Applies when the diff touches any contract doc (docs/SPEC.md, docs/ARCHITECTURE.md or docs/ROADMAP.md).
+          The ID lock takes effect
           when docs/id-ledger.json exists: if the base branch has no
           docs/id-ledger.json, the project is pre-A0 and this check passes.
           Otherwise fail if a requirement ID (FR/NFR/AC/UC/AD/OQ-<n>) that
@@ -108,7 +112,8 @@ reviews:
       - name: "No history in contract docs"
         mode: warning
         instructions: |
-          Applies when the diff touches docs/SPEC.md. Warn if the PR *adds*
+          Applies when the diff touches any contract doc (docs/SPEC.md, docs/ARCHITECTURE.md or docs/ROADMAP.md).
+          Warn if the PR *adds*
           new inline dated revision parentheticals such as *(rev YYYY-MM-DD …)*,
           *(added YYYY-MM-DD …)*, or multi-paragraph superseded-design narrative
           under a resolved OQ (e.g. "the runner was…", "formerly…", "superseded
@@ -124,9 +129,12 @@ reviews:
     - "!**/__pycache__/**"
 
   path_instructions:
-    - path: "docs/SPEC.md"
+    - path: "docs/{SPEC,ARCHITECTURE,ROADMAP}.md"
       instructions: |
-        This file is the normative product contract (governance in §12).
+        These files are the normative product contract (governance in §12):
+        SPEC.md (§0–4, §7–9, §11–13, §17), ARCHITECTURE.md (§5, §6, §10),
+        ROADMAP.md (§14–16, §18). Section numbers are global and unique across
+        all three.
         - Requirement IDs (FR/NFR/AC/UC/AD/OQ) are append-only from A0: flag any
           renumbering, deletion, or reuse of an ID. Removed behavior must be
           deprecated in place as a one-line stub that keeps the ID (optionally
@@ -134,10 +142,12 @@ reviews:
         - A revision replaces the normative text in place. Flag new stacked
           *(rev YYYY-MM-DD …)* / *(added …)* parentheticals and superseded-design
           diaries left beside the new text — history lives in git.
-        - New/changed requirements must keep the SPEC self-consistent in the
-          same edit: §7–§9 requirement text, §11 normative contracts, §13
-          gates, §14 milestone DoDs, §17 traceability matrix, §18 readiness.
-        - A resolved open question (§15) must be marked "Resolved (date):
+        - New/changed requirements must keep the contract self-consistent in
+          the same edit, across documents: §7–§9 requirement text, §11 normative
+          contracts, §13 gates (SPEC.md); §6 decisions, §10 layout
+          (ARCHITECTURE.md); §14 milestone DoDs, §18 readiness (ROADMAP.md);
+          §17 traceability matrix (SPEC.md) plus docs/traceability.md.
+        - A resolved open question (§15, ROADMAP.md) must be marked "Resolved (date):
           <decision>" in one or two lines, with the decision reflected in the
           relevant AD/FR text in the same edit; flag retained superseded
           design narrative under that OQ.
@@ -146,15 +156,15 @@ reviews:
       instructions: |
         Non-authoritative working-memory handoff. Narrative and session-status
         prose belong here — do not flag them for being narrative. Only flag
-        claims that contradict the contract docs (SPEC.md, traceability.md,
-        AGENTS.md); where they disagree, the contract wins. The generated
+        claims that contradict the contract docs (SPEC.md, ARCHITECTURE.md,
+        ROADMAP.md, traceability.md, AGENTS.md); where they disagree, the contract wins. The generated
         At-a-glance header is regenerated by
         `python3 harness/scripts/update_memory.py --state`.
     - path: "docs/id-ledger.json"
       instructions: |
         Generated by `harness/scripts/check_append_only_ids.py --update`;
         never hand-edited. Only additions are legitimate — flag any removal of
-        an ID number, and flag edits that arrive without a matching docs/SPEC.md
+        an ID number, and flag edits that arrive without a matching contract-doc
         change introducing those IDs.
     - path: "docs/traceability.md"
       instructions: |

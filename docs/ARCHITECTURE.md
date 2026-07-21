@@ -4,7 +4,7 @@ Architecture, architecture decision records (`AD-*`), and package layout for
 `transon-authoring`. Normative: this file is part of the contract.
 
 > **Contract split.** The contract spans three documents: [`SPEC.md`](SPEC.md) (§0–4, §7–9,
-> §11–13, §17 — goals, requirements, normative contracts, governance, traceability),
+> §11–13, §17 — goals, requirements, normative contracts, governance, gates, traceability),
 > [`ARCHITECTURE.md`](ARCHITECTURE.md) (§5, §6, §10 — architecture, decision records, package
 > layout), and [`ROADMAP.md`](ROADMAP.md) (§14–16, §18 — milestones, open questions, risks,
 > readiness). **Section numbers are global and unique across all three**, so a reference such as
@@ -261,7 +261,10 @@ transon-authoring/
 │   ├── cases/
 │   └── seeds/                     # synthetic-fixture provenance (AD-021 / FR-029)
 └── docs/
-    ├── SPEC.md
+    ├── SPEC.md                    # §0–4, §7–9, §11–13, §17
+    ├── ARCHITECTURE.md            # §5, §6, §10
+    ├── ROADMAP.md                 # §14–16, §18
+    ├── id-ledger.json             # every ID ever issued (§12 append-only lock)
     └── traceability.md            # generated or maintained matrix (§17)
 ```
 
@@ -269,6 +272,3 @@ Repo-root `resources/` is the canonical, human-edited source. The wheel build ma
 package as `transon_authoring/resources/` (hatchling force-include) so the installed package
 satisfies NFR-003 / the §11.6 `metadata` subcommand offline; the library loads the snapshot via
 `importlib.resources` with a repo-root fallback for source checkouts.
-
----
-

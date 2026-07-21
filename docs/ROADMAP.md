@@ -4,7 +4,7 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
 `transon-authoring`. Normative: this file is part of the contract.
 
 > **Contract split.** The contract spans three documents: [`SPEC.md`](SPEC.md) (§0–4, §7–9,
-> §11–13, §17 — goals, requirements, normative contracts, governance, traceability),
+> §11–13, §17 — goals, requirements, normative contracts, governance, gates, traceability),
 > [`ARCHITECTURE.md`](ARCHITECTURE.md) (§5, §6, §10 — architecture, decision records, package
 > layout), and [`ROADMAP.md`](ROADMAP.md) (§14–16, §18 — milestones, open questions, risks,
 > readiness). **Section numbers are global and unique across all three**, so a reference such as

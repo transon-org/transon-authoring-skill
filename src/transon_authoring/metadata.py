@@ -24,7 +24,7 @@ _LANGUAGE_REFERENCE_CACHE: dict | None = None
 def _resource_bytes(name: str) -> bytes:
     """Return the bytes of bundled resource *name* (e.g. ``metadata-snapshot.json``).
 
-    Resolution order (SPEC §10):
+    Resolution order (ARCHITECTURE §10):
 
     1. ``transon_authoring/resources/<name>`` via ``importlib.resources`` —
        present in installed wheels through the hatchling force-include;
