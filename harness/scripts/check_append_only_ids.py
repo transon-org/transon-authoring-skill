@@ -18,7 +18,8 @@ the A0 ID lock:
    so a gap can never become historical fact.
 
 "Defined" uses the same semantics as check_traceability.py: any ID mentioned in
-``docs/SPEC.md``. Pure stdlib, Python 3.9+, no project imports. Run:
+any contract doc under ``docs/`` (see CONTRACT_DOCS). Pure stdlib, Python 3.9+,
+no project imports. Run:
 
   python3 harness/scripts/check_append_only_ids.py            # gate (pre-commit + CI)
   python3 harness/scripts/check_append_only_ids.py --update   # register newly issued IDs
@@ -44,7 +45,8 @@ LEDGER = DOCS / "id-ledger.json"
 # day their full-form mention disappears.
 ID_RE = re.compile(r"\b(FR|NFR|AC|UC|AD|OQ)-(\d+(?:/\d+)*)\b")
 FAMILIES = ("FR", "NFR", "AC", "UC", "AD", "OQ")
-CONTRACT_DOCS = ("SPEC.md",)
+CONTRACT_DOCS = ("SPEC.md", "ARCHITECTURE.md", "ROADMAP.md")
+CONTRACT_DESC = "the contract docs (SPEC.md / ARCHITECTURE.md / ROADMAP.md)"
 
 
 def defined_ids() -> Dict[str, Set[int]]:
@@ -79,7 +81,7 @@ def _write_ledger(ids: Dict[str, Set[int]]) -> None:
 def check() -> List[str]:
     defined = defined_ids()
     if not any(defined.values()):
-        return ["no requirement IDs found in docs/ — is docs/SPEC.md present?"]
+        return ["no requirement IDs found in docs/ — are the contract docs present?"]
     if not LEDGER.exists():
         return [
             f"ID ledger missing: {LEDGER.relative_to(PROJECT_ROOT)} — initialize it with "
@@ -97,12 +99,14 @@ def check() -> List[str]:
     for family in FAMILIES:
         for num in sorted(ledger[family] - defined[family]):
             problems.append(
-                f"{family}-{num}: in the ledger but no longer defined in docs/SPEC.md — "
+                f"{family}-{num}: in the ledger but no longer defined in "
+                f"{CONTRACT_DESC} — "
                 f"IDs are append-only; deprecate in place, never delete or renumber"
             )
         for num in sorted(defined[family] - ledger[family]):
             problems.append(
-                f"{family}-{num}: defined in docs/SPEC.md but not registered in the ID "
+                f"{family}-{num}: defined in {CONTRACT_DESC} but not registered "
+                f"in the ID "
                 f"ledger — run `python3 harness/scripts/check_append_only_ids.py --update`"
             )
     return problems

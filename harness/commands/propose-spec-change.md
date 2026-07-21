@@ -1,6 +1,7 @@
 # Propose a spec change
 
-Change `docs/SPEC.md` under the §12 governance and the A0 ID lock. Behavior changes update the
+Change the contract docs (`docs/SPEC.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`) under the
+§12 governance and the A0 ID lock. Behavior changes update the
 SPEC **first**, then code.
 
 ## Procedure

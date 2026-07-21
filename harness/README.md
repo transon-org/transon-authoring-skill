@@ -15,7 +15,7 @@ the CI (GitHub mandates the root).
   `git config core.hooksPath harness/githooks`
 
 **Harness vs product.** The product itself is a skill (`SKILL.md` + `adapters/` + the
-`transon_authoring` library — SPEC §10), and it ships its own gates under `scripts/`
+`transon_authoring` library — ARCHITECTURE §10), and it ships its own gates under `scripts/`
 (`check_snapshot`, `check_parity`, `check_evals`, `check_install`). Those are **deliverables**,
 governed by the SPEC. Everything in `harness/` is meta — it exists so agents implement the SPEC
 without drifting from it, and it must never be confused with, or named after, the product skill.

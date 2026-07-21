@@ -120,9 +120,9 @@ _(Record what landed in this session.)_
 
 ## Status by milestone
 
-Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the living read.
+Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is the living read.
 
-- See SPEC §14 for A0–A5 definitions of done.
+- See ROADMAP §14 for A0–A5 definitions of done.
 
 ## Next steps (ordered)
 

@@ -13,7 +13,7 @@ This is the tool-neutral body. Thin adapters under `.cursor/rules/` and `.claude
 - **Code narration:** comments whose entire content is deducible from the next 1–3 lines
   (`# return the result`, `# loop over items`, `# import the module`).
 - **Authorship / session markers:** `TODO(agent)`, `AI-generated`, `refactored in sprint 4`.
-- **History prose in contract docs** (`docs/SPEC.md`, and the FR/NFR/AC bodies inside it):
+- **History prose in contract docs** (`docs/SPEC.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and the FR/NFR/AC bodies inside them):
   superseded designs, decision diaries, stacked revision markers. History lives in git.
 - **Status essays in `docs/traceability.md`:** the Tests column lists test file/function
   references only — no "behavioral closure", gate-run narratives, or session reports.
