@@ -35,7 +35,7 @@ in SPEC §17.
 7. **Maker ≠ checker (§12).** Whoever implements a slice never reviews it — pre-merge review goes
    through the `spec-reviewer` role.
 8. **Stay in scope (§3).** No MCP, no hosted/WASM engine, no new DSL or path syntax, no editor
-   in-surface awareness, no custom transformer profiles in v1.
+   in-surface awareness, no editor sink, no custom transformer profiles in v1.
 9. **Traceability in the same change (§12/§17).** FR/NFR/AC edits and implementation land with the
    matching `docs/traceability.md` update; tests cite their IDs
    (e.g. `def test_ac_018_deterministic_verdict():` or `# AC-018`).
@@ -74,7 +74,7 @@ in SPEC §17.
   `check_evals`, `check_install`, `sync_metadata`) are **A0–A4 deliverables** under `scripts/`
   and are separate from harness gates.
 - Engine (separate repo): `../transon` — authoritative behavior + `docs/SPECIFICATION.md` +
-  `get_editor_metadata()`. Editor (separate repo, optional sink): `../transon-blockly`.
+  `get_editor_metadata()`. Editor (separate repo): `../transon-blockly`.
 
 ## Development loop (per requirement)
 

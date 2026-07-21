@@ -61,7 +61,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   training data. “Current” means **current relative to the pin** (§11.7), not “latest on PyPI.”
 - **G3** — **Verify before return**: never return a template unless `verify` yields `matched`.
 - **G4** — Single-source skill + Claude Code and Cursor adapters + parity gate.
-- **G5** — Decoupled from the editor; editor is an optional JSON sink.
+- **G5** — Decoupled from the editor.
 
 ## 3. Non-goals
 
@@ -73,6 +73,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - Not MCP, hosted HTTP engine, or WASM/Pyodide in v1.
 - Not shell-less product/docs agents in v1.
 - Not editor in-surface checking/disclosure.
+- Not an editor JSON sink or blockly import handoff in v1.
 - Not real filesystem/network I/O in `verify` dry-run (including inside timeout worker subprocesses).
 - Not custom `Transformer` subclasses, custom rule/operator/function registries, or non-default
   markers as a **verify execution profile** in v1 (AD-017) — templates always run under `"$"`.
@@ -83,7 +84,6 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 |---|---|---|
 | Coding agent (Claude Code, Cursor) | shell | `python -m transon_authoring …` |
 | CI / migration bot | headless shell | same; pre-confirmed SampleSet fixtures |
-| `transon-blockly` | browser | optional sink via import codec |
 
 ---
 
@@ -138,7 +138,8 @@ No console-script product; no MCP.
 - **AD-004 — Verify-before-return.** Success only if `verify` → `ok: true`, `assurance: "matched"`.
   `verify` **re-validates** the SampleSet via `check_samples` and rejects unless
   `ok_for_verify` (AD-019). Structured failure otherwise (§11.5).
-- **AD-005 — Single-source, multi-tool.** One `SKILL.md`; Claude + Cursor adapters; parity gate.
+- **AD-005 — Single-source, multi-tool.** One **editable** `SKILL.md`; generated copies are
+  gate-enforced byte-identical to it (FR-037a / AC-040); Claude + Cursor adapters; parity gate.
 - **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
   `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
   `python -m transon_authoring` (§11.6).
@@ -153,7 +154,10 @@ No console-script product; no MCP.
   FR-029 synthetic corpus and re-audit the refuse bucket (§11.8), reset `evals/baseline.json`
   (§11.8), and merge deliberately (OQ-004 still applies for automation shape).
 - **AD-008 — Ordinary JSON output.** No IR/DSL; no verifier-owned key-order canonicalization.
-- **AD-009 — Convention-first install.** Native Claude/Cursor paths (§11.9); no MCP.
+- **AD-009 — Convention-first install; plugin distribution second.** Native Claude/Cursor paths
+  (§11.9) are the primary channel. A Claude Code plugin form plus a self-hosted marketplace
+  manifest is the secondary channel (FR-037); third-party catalogs are outreach, not a gate.
+  No MCP.
 - **AD-010 — Eval-driven improvement.** Changes gated by NFR-010 / AD-020.
 - **AD-011 — Measurement before skill body.** A2 before A3.
 - **AD-012 — Pinned engine package; local execution only.** Verification depends on the pinned
@@ -388,6 +392,21 @@ No console-script product; no MCP.
 - **FR-012** — Canonical `SKILL.md` + Claude/Cursor adapters.
 - **FR-013** — **Deprecated.** MCP server removed from v1 (§3); ID retained so it is not reused.
 - **FR-014** — `python -m transon_authoring` module entry with subcommands in §11.6.
+- **FR-037** — **Plugin packaging + catalog reach (AD-009; normative home for OQ-007).** Two halves:
+  **(a) Packaging (gating; A5):** a Claude Code plugin form of the shipped skill — a
+  `plugin.json` manifest plus a self-hosted `marketplace.json` cataloguing it — laid out per
+  §11.9. Marketplace hosts fetch the repo tree at the manifest's `source`, so the plugin's
+  `SKILL.md` is a **generated artifact that IS committed**: the maintainer script
+  `scripts/sync_plugin.py` regenerates it deterministically from the canonical root `SKILL.md`,
+  and it is byte-identical to that file or the gate is red. Single source is preserved by enforced
+  identity (NFR-007) — the canonical root file remains the only editable body, and the generated
+  copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
+  runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry. Runtime
+  acquisition for plugin users is OQ-029. Verified by `check_install` (AC-040).
+  **(b) External catalog submission (ongoing; non-gating):** listing the plugin in third-party
+  agent-skill catalogs is outreach driven by real adoption. It **gates no milestone**, places no
+  requirement on third-party infrastructure, and no claim of catalog presence or host
+  discovery is ever made by CI.
 
 ### Installation
 - **FR-015** — Install procedures (§11.9): Claude personal/project skill paths; Cursor
@@ -825,11 +844,29 @@ No console-script product; no MCP.
   `get_language_reference()` canonical dump, when its provenance sha256/`reference_version` are
   stale, or when its `reference_version` major is unsupported — the same drift discipline as the
   metadata snapshot (NFR-004 / AC-006).
+- **AC-040** — **Plugin packaging is structurally sound and single-source (FR-037a).** The plugin
+  root is the **repo root** (§10), which is also the self-hosted marketplace repo. `check_install`
+  is **green** when, at that root: (a) `.claude-plugin/plugin.json` parses and carries `name`,
+  `description`, `version`, with `name` equal to the skill directory name `transon-authoring` and
+  `version` equal to the `pyproject.toml` project version; (b) `.claude-plugin/marketplace.json`
+  parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
+  `source` resolves to **the plugin root itself**, not merely to some path inside the repo, so
+  that (a) and (c) are present relative to it; (c) `skills/transon-authoring/SKILL.md` exists and
+  is **byte-identical** to the canonical root `SKILL.md`; (d) the OQ-010 frontmatter preconditions
+  hold there (frontmatter parses; `name` equals the skill directory name; non-empty
+  `description`). It is **red** when any of those files is missing or malformed, when the
+  manifest names disagree with the skill directory, when `source` resolves anywhere other than the
+  plugin root (a marketplace entry pointing at, say, `./docs` fetches no plugin manifest and no
+  skill body), when `version` differs from the project
+  version, or when the plugin `SKILL.md` differs from canonical by a single byte — the last case
+  being the stale-regeneration failure. This extends the NFR-007 single-source surface beyond
+  AC-005, which scans only the root `SKILL.md` and `adapters/**`. As with FR-019, the check claims
+  **packaging integrity only** — never catalog listing or host discoverability.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
   PR with template + SampleSet (FR-030).
-- **UC-002** — Cursor same path; optional handoff to blockly import (no in-surface guarantee).
+- **UC-002** — Cursor same path.
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
 - **UC-004** — New engineer: `pip install transon-authoring`, installs adapters via `install/`,
   first-run layout prompt, authors successfully.
@@ -855,8 +892,12 @@ transon-authoring/
 │   ├── metadata-snapshot.md       # provenance
 │   └── nl-intents.json            # NL sidecar by example name (FR-010)
 ├── adapters/claude/ … cursor/
+├── .claude-plugin/
+│   ├── plugin.json                # FR-037a plugin manifest
+│   └── marketplace.json           # FR-037a self-hosted marketplace catalog
+├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
 ├── install/claude.py cursor.py
-├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
+├── scripts/sync_metadata.py sync_plugin.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
@@ -1681,6 +1722,29 @@ prompt.
 from the source checkout/archive they run from (default: the checkout root itself), so a project
 other than the checkout can receive the skill files.
 
+**Plugin form (FR-037a).** The plugin channel reuses the same canonical body. **This repo is both
+the plugin root and the self-hosted marketplace repo**; the layout is relative to the repo root:
+
+```
+.claude-plugin/plugin.json          # name, description, version
+.claude-plugin/marketplace.json     # name, owner, plugins[] — lists this plugin by name + source
+skills/transon-authoring/SKILL.md   # generated from the canonical root SKILL.md; committed
+```
+
+Marketplace hosts fetch the tree at the entry's `source`, so the plugin `SKILL.md` MUST be
+committed — a generated artifact kept byte-identical to the canonical root file by AC-040, never
+edited directly. The maintainer script `scripts/sync_plugin.py` regenerates it (a `sync_metadata`
+sibling: it writes a repo artifact and is not shipped in the package); editing the canonical root
+file without regenerating turns the gate red. `install/` is unaffected — it copies into a target
+project's skill directory and never writes this tree. The plugin `name` MUST equal the skill
+directory name `transon-authoring`, and
+`plugin.json.version` MUST equal the `pyproject.toml` project version.
+
+This tree is a **repo artifact, not an install destination**: it is outside the FR-015/FR-016
+`.install-manifest.json` regime, which governs only files copied into a target project's skill
+directory. Users add the marketplace with the host's own command and install by plugin name; no
+third-party catalog is required. Runtime acquisition is OQ-029.
+
 Strategy: **copy** adapter files (not symlink) for hermeticity. Record
 `.install-manifest.json` listing owned paths + versions. **Upgrade:** re-run install (idempotent
 replace of owned files). **Uninstall:** delete only manifest paths.
@@ -1718,7 +1782,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | `check_snapshot` | NFR-004 / AD-007 — metadata snapshot + Language Reference drift (FR-036) |
 | `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
-| `check_install` | NFR-009 / FR-019 (integrity + smoke) |
+| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging) |
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
 | Sandbox evals | AC-015/023/024/028 |
@@ -1769,7 +1833,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
   OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
-- **A5 — Editor sink + release.** UC-002 demo (optional); versioned release notes with pin
+- **A5 — Release.** Versioned release notes with pin
   (NFR-008); the **distribution-verification ladder** proving a fresh host works from the
   shipped artifacts, not the checkout:
   1. **Dist smoke (CI job):** build the wheel/sdist, `pip install` the **wheel** (never
@@ -1792,12 +1856,17 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
      repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
      publish), run both installers, confirm the skill activates in real Claude Code and
      real Cursor, author one template; outcome recorded in the release notes.
+  5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout, gated by
+     `check_install` (AC-040). Structural only — it needs no published package and makes no
+     catalog claim.
   *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
   post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
   before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8). *Resolve during
-  A5:* **OQ-028** (Cursor personal scope).
-  *DoD:* ladder steps 1–4 green/recorded; release notes cite skill version, engine pin,
-  snapshot hash; first PyPI publish per OQ-020.
+  A5:* **OQ-028** (Cursor personal scope), **OQ-029** (plugin runtime acquisition).
+  *DoD:* ladder steps 1–5 green/recorded; release notes cite skill version, engine pin,
+  snapshot hash; first PyPI publish per OQ-020; AC-040 green. **FR-037b (external catalog
+  submission) gates nothing** and begins only after the PyPI publish, since a listed skill whose
+  runtime is unpublished is inert.
 
 *Improvement-loop note (AD-021 / FR-029):* synthetic corpus growth and the small-model gate swap
 are **A3 deliverables** (folded into the A3 DoD above) — the harness they rely on is the A2
@@ -1821,7 +1890,8 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
 - **OQ-004** — **Resolved (2026-07-09):** manual sync + drift now; scheduled PR bot later.
 - **OQ-005** — **Resolved (2026-07-09):** no in-surface gate/disclosure (AD-013).
 - **OQ-006** — **Resolved (2026-07-09):** authoring ≥80%→95%; adversarial refuse =100%.
-- **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP.
+- **OQ-007** — **Resolved (2026-07-09):** plain skill then plugin; no MCP. Normative in
+  AD-009 / FR-037.
 - **OQ-008** — **Resolved (2026-07-19):** Cursor's deterministic CI claim
   stays structural + runtime smoke — the Cursor CLI (`cursor-agent`) still exposes no
   credential-free command to enumerate discovered skills. Its headless mode (`agent -p`) does
@@ -1891,6 +1961,13 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   Cursor row and the adapter's documented NFR-007 exclusion are now a product choice, not a
   platform limit. Decide at A5: add a Cursor personal scope (installer + adapter + parity
   update) or keep project-only for v1 with the exclusion reworded as a deliberate choice.
+- **OQ-029** — *(open; A5)* **Plugin runtime acquisition (FR-037a).** Plugin hosts do not install
+  Python dependencies, so a plugin-installed skill still needs `transon-authoring` importable.
+  Candidates: (1) a documented `pip install` prerequisite; (2) a host `SessionStart` hook; (3) an
+  ephemeral `uv run --with transon-authoring python -m transon_authoring …` recipe, which needs no
+  console script and so stays inside AD-006. Decide before FR-037a lands. The choice MUST preserve
+  NFR-003 (offline after install) and OQ-020 (packaging never runs `pip`), and MUST NOT fork the
+  §11.6 grounding recipe between the native and plugin channels.
 
 ---
 
@@ -1981,6 +2058,7 @@ excluded from active coverage.
 | FR-034 | AC-037 | A3+ (improvement) | CLI unit + skill-body |
 | FR-035 | AC-038 | A3+ (improvement) | check_evals + host_harness unit |
 | FR-036 | AC-039 | A5 | CLI unit + snapshot gate |
+| FR-037 | AC-040 | A5 | check_install |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
@@ -2005,4 +2083,4 @@ excluded from active coverage.
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough) + release notes/publish; editor sink demo optional. |
+| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough, plugin packaging) + release notes/publish. OQ-029 resolved before FR-037a lands; FR-037b non-gating. |

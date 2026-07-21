@@ -15,7 +15,7 @@ engine-authoritative metadata, backed by a user-confirmed SampleSet, and blessed
 
 Pre-A0: SPEC locked for A0–A2 implementation readiness; implementation harness in place. Product
 milestones (SPEC §14): A0 grounding spine → A1 verification library → A2 measurement spine →
-A3 authoring loop → A4 distribution → A5 editor sink + release.
+A3 authoring loop → A4 distribution → A5 release.
 
 ## Development
 
