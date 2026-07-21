@@ -8,12 +8,14 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `15c21c3` — evals: accept green real-host baseline after RFC-003 repin (run 29782513843) |
-| Branch | `rfc-003-eval-baseline` |
+| Repo HEAD | `9a6dbb4` — Merge pull request #23 from transon-org/rfc-003-eval-baseline |
+| Branch | `spec-editor-sink-out-of-scope` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**Editor sink removed from v1 scope (branch `spec-editor-sink-out-of-scope`).** UC-002 revised in place to "Cursor same path" — the ID is kept and the Cursor authoring path stays core; only the blockly-import handoff is dropped. G5 reduced to "Decoupled from the editor"; §3 gains "Not an editor JSON sink or blockly import handoff in v1"; `transon-blockly` dropped from the §4 Consumers table; A5 renamed "Release" with the optional UC-002 demo removed from its DoD and from the §18 readiness row; AGENTS.md rule 8 + README milestone line follow. No IDs issued or retired (ledger byte-unchanged); no FR/NFR/AC touched, so `traceability.md` is unaffected. Both harness gates green._
 
 _**RFC-003 baseline gate GREEN + accepted (2026-07-20, run 29782513843; PR #23).** Full real-host gate over the 0.2.3 corpus (54 fixtures ×3): authoring 1.000, adversarial 1.000, correction 1.000, red=[], $18.63, 0 infra_error. `evals/baseline.json` repopulated with the 54 majority-passers (`test_fr_017_baseline_reflects_the_accepted_green_gate`). ec2-flatten-inventory now passes (failed the A3 gate); marginal 2/3 = ec2-flatten-inventory / refuse-recursive-flatten / seed-refuse-nonexistent-mode (future-flake watch). This satisfies the A5 entry condition (baseline reflects the shipped 0.2.3 SKILL.md)._
 
@@ -30,8 +32,8 @@ Authoritative milestone DoDs live in [`SPEC.md` §14](SPEC.md). This is the livi
 
 ## Next steps (ordered)
 
-1. Merge PR #23 (accepted eval baseline) once CodeRabbit + CI settle.
-2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14), optional editor sink. The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
+1. Merge the editor-sink scope change (this branch) through `spec-reviewer` (maker ≠ checker).
+2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14). The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
 
 ## Open blockers / waiting-on
 

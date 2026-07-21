@@ -61,7 +61,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   training data. “Current” means **current relative to the pin** (§11.7), not “latest on PyPI.”
 - **G3** — **Verify before return**: never return a template unless `verify` yields `matched`.
 - **G4** — Single-source skill + Claude Code and Cursor adapters + parity gate.
-- **G5** — Decoupled from the editor; editor is an optional JSON sink.
+- **G5** — Decoupled from the editor.
 
 ## 3. Non-goals
 
@@ -73,6 +73,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - Not MCP, hosted HTTP engine, or WASM/Pyodide in v1.
 - Not shell-less product/docs agents in v1.
 - Not editor in-surface checking/disclosure.
+- Not an editor JSON sink or blockly import handoff in v1.
 - Not real filesystem/network I/O in `verify` dry-run (including inside timeout worker subprocesses).
 - Not custom `Transformer` subclasses, custom rule/operator/function registries, or non-default
   markers as a **verify execution profile** in v1 (AD-017) — templates always run under `"$"`.
@@ -83,7 +84,6 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 |---|---|---|
 | Coding agent (Claude Code, Cursor) | shell | `python -m transon_authoring …` |
 | CI / migration bot | headless shell | same; pre-confirmed SampleSet fixtures |
-| `transon-blockly` | browser | optional sink via import codec |
 
 ---
 
@@ -829,7 +829,7 @@ No console-script product; no MCP.
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
   PR with template + SampleSet (FR-030).
-- **UC-002** — Cursor same path; optional handoff to blockly import (no in-surface guarantee).
+- **UC-002** — Cursor same path.
 - **UC-003** — CI batch with pre-confirmed SampleSets + committed config; non-interactive.
 - **UC-004** — New engineer: `pip install transon-authoring`, installs adapters via `install/`,
   first-run layout prompt, authors successfully.
@@ -1769,7 +1769,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 - **A4 — Distribution.** Adapters, install/uninstall, parity, install integrity CI (OQ-010 and
   OQ-020 resolved at A4 start). *DoD:* AC-005/007/009/032
   (AC-032: `check_parity` carries the NFR-012 self-sufficiency lint).
-- **A5 — Editor sink + release.** UC-002 demo (optional); versioned release notes with pin
+- **A5 — Release.** Versioned release notes with pin
   (NFR-008); the **distribution-verification ladder** proving a fresh host works from the
   shipped artifacts, not the checkout:
   1. **Dist smoke (CI job):** build the wheel/sdist, `pip install` the **wheel** (never
@@ -2005,4 +2005,4 @@ excluded from active coverage.
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough) + release notes/publish; editor sink demo optional. |
+| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough) + release notes/publish. |
