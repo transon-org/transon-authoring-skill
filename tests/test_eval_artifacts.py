@@ -134,11 +134,9 @@ def test_fr_001_ac_002_corpus_exercises_mode_variant_authoring():
 
 
 def test_fr_017_baseline_reflects_the_accepted_green_gate():
-    # OQ-016f / §11.8: ids enter baseline.json only via an accepted green gate
-    # (the --update-baseline rule: majority-passing fixtures). The transon==0.2.3
-    # repin's real-host gate is green (authoring/adversarial/correction all 1.0),
-    # so the baseline is its majority-passers; every id resolves to a committed
-    # fixture. Ratchet: these must keep passing.
+    # FR-017 / OQ-016f / §11.8: ids enter baseline.json only via an accepted
+    # green gate (the --update-baseline rule: majority-passing fixtures), so a
+    # populated baseline lists only ids that resolve to committed fixtures.
     document = load_document(EVALS / "baseline.json", "eval_baseline.json")
     ids = document["passing"]
     assert ids, "baseline should be populated by the accepted green gate"
