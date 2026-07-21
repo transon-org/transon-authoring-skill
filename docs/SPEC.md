@@ -197,8 +197,12 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   and it is byte-identical to that file or the gate is red. Single source is preserved by enforced
   identity (NFR-007) — the canonical root file remains the only editable body, and the generated
   copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
-  runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry. Runtime
-  acquisition for plugin users is OQ-029. Verified by `check_install` (AC-040).
+  runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry — **identical in every
+  channel** (OQ-029). Runtime acquisition is documented, never encoded in the recipe: the plugin
+  manifest's `description` MUST state the `pip install transon-authoring` prerequisite, and the
+  marketplace README repeats it. A channel-specific command wrapper (an ephemeral runner such as
+  `uv run --with`) MUST NOT appear in the shipped body — it forks the recipe and makes offline
+  behavior depend on a prunable cache (NFR-003). Verified by `check_install` (AC-040).
   **(b) External catalog submission (ongoing; non-gating):** listing the plugin in third-party
   agent-skill catalogs is outreach driven by real adoption. It **gates no milestone**, places no
   requirement on third-party infrastructure, and no claim of catalog presence or host
@@ -211,6 +215,12 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   the installed body stays byte-identical to the canonical `SKILL.md`.
 - **FR-016** — Idempotent install; uninstall removes **only** files this installer created
   (manifest recorded at install time).
+- **FR-038** — **Cursor personal scope (resolving OQ-028).** `install/cursor.py` supports
+  `--scope personal` at the §11.9 destination `~/.cursor/skills/transon-authoring/`, with the
+  same copy / manifest / idempotent-upgrade / uninstall-only-manifest-paths discipline as
+  FR-015 and FR-016. The Cursor adapter drops its `personal scope` exclusion, so the two
+  adapters reach **equal capability** rather than a documented exclusion (NFR-007). Verified by
+  `check_install` (AC-041).
 
 ### Improvement
 - **FR-017** — Eval-driven loop (AD-010/020/024). Measurement harness is the **real host**
@@ -643,8 +653,9 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - **AC-040** — **Plugin packaging is structurally sound and single-source (FR-037a).** The plugin
   root is the **repo root** (§10), which is also the self-hosted marketplace repo. `check_install`
   is **green** when, at that root: (a) `.claude-plugin/plugin.json` parses and carries `name`,
-  `description`, `version`, with `name` equal to the skill directory name `transon-authoring` and
-  `version` equal to the `pyproject.toml` project version; (b) `.claude-plugin/marketplace.json`
+  `description`, `version`, with `name` equal to the skill directory name `transon-authoring`,
+  `version` equal to the `pyproject.toml` project version, and a `description` naming the
+  `pip install transon-authoring` runtime prerequisite (OQ-029); (b) `.claude-plugin/marketplace.json`
   parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
   `source` resolves to **the plugin root itself**, not merely to some path inside the repo, so
   that (a) and (c) are present relative to it; (c) `skills/transon-authoring/SKILL.md` exists and
@@ -658,6 +669,14 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   being the stale-regeneration failure. This extends the NFR-007 single-source surface beyond
   AC-005, which scans only the root `SKILL.md` and `adapters/**`. As with FR-019, the check claims
   **packaging integrity only** — never catalog listing or host discoverability.
+- **AC-041** — **Cursor personal scope installs like every other scope (FR-038).**
+  `check_install` exercises `cursor/personal` alongside the existing three combinations:
+  installed at the §11.9 destination under an overridable home, installed `SKILL.md`
+  byte-identical to canonical, complete `.install-manifest.json`, idempotent re-install,
+  uninstall removing only manifest paths, and the OQ-010 frontmatter preconditions holding.
+  `check_parity` is **red** if either adapter still declares a scope the other lacks without a
+  documented exclusion — with FR-038 landed, `cursor` and `claude` declare the same scopes and
+  the Cursor `personal scope` exclusion is gone (NFR-007 / AC-005).
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
@@ -1468,7 +1487,7 @@ prompt.
 | Tool | Project scope | Personal scope |
 |---|---|---|
 | Claude Code | `<repo>/.claude/skills/transon-authoring/` | `~/.claude/skills/transon-authoring/` |
-| Cursor | `<repo>/.cursor/skills/transon-authoring/` | n/a (project-only in v1) |
+| Cursor | `<repo>/.cursor/skills/transon-authoring/` | `~/.cursor/skills/transon-authoring/` (FR-038) |
 
 `<repo>` in the table is the **target project root**: installers accept a target root distinct
 from the source checkout/archive they run from (default: the checkout root itself), so a project
@@ -1537,7 +1556,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | `check_snapshot` | NFR-004 / AD-007 — metadata snapshot + Language Reference drift (FR-036) |
 | `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
-| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging) |
+| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging); FR-038 / AC-041 (Cursor personal scope) |
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
 | Sandbox evals | AC-015/023/024/028 |
@@ -1587,6 +1606,7 @@ excluded from active coverage.
 | FR-035 | AC-038 | A3+ (improvement) | check_evals + host_harness unit |
 | FR-036 | AC-039 | A5 | CLI unit + snapshot gate |
 | FR-037 | AC-040 | A5 | check_install |
+| FR-038 | AC-041 | A5 | check_install |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |

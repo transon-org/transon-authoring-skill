@@ -85,10 +85,9 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
      catalog claim.
   *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
   post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
-  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8). *Resolve during
-  A5:* **OQ-028** (Cursor personal scope), **OQ-029** (plugin runtime acquisition).
+  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8).
   *DoD:* ladder steps 1–5 green/recorded; release notes cite skill version, engine pin,
-  snapshot hash; first PyPI publish per OQ-020; AC-040 green. **FR-037b (external catalog
+  snapshot hash; first PyPI publish per OQ-020; AC-040 and AC-041 green. **FR-037b (external catalog
   submission) gates nothing** and begins only after the PyPI publish, since a listed skill whose
   runtime is unpublished is inert.
 
@@ -180,18 +179,20 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   skill auto-activates from shipped `SKILL.md`; raw loop demoted to non-gating smoke;
   host→EpisodeResult adapter; isolation contract (ephemeral workspace, no credentials in
   tool sandbox, network egress denied, artifact controls). Normative in AD-024 / §11.8.
-- **OQ-028** — *(open; A5)* Cursor personal scope: current Cursor docs document user-level
-  skill discovery (`~/.cursor/skills/`, `~/.agents/skills/`), so the §11.9 "project-only"
-  Cursor row and the adapter's documented NFR-007 exclusion are now a product choice, not a
-  platform limit. Decide at A5: add a Cursor personal scope (installer + adapter + parity
-  update) or keep project-only for v1 with the exclusion reworded as a deliberate choice.
-- **OQ-029** — *(open; A5)* **Plugin runtime acquisition (FR-037a).** Plugin hosts do not install
-  Python dependencies, so a plugin-installed skill still needs `transon-authoring` importable.
-  Candidates: (1) a documented `pip install` prerequisite; (2) a host `SessionStart` hook; (3) an
-  ephemeral `uv run --with transon-authoring python -m transon_authoring …` recipe, which needs no
-  console script and so stays inside AD-006. Decide before FR-037a lands. The choice MUST preserve
-  NFR-003 (offline after install) and OQ-020 (packaging never runs `pip`), and MUST NOT fork the
-  §11.6 grounding recipe between the native and plugin channels.
+- **OQ-028** — **Resolved (2026-07-22):** Cursor gains a personal scope. Cursor discovers
+  user-level skills (`~/.cursor/skills/`, `~/.agents/skills/`), so project-only was a product
+  choice, not a platform limit, and NFR-007 prefers equal capability over a documented
+  exclusion. Normative in FR-038 / AC-041 / §11.9; the adapter's `personal scope` exclusion is
+  retired when FR-038 lands.
+- **OQ-029** — **Resolved (2026-07-22):** the skill keeps **one** §11.6 grounding recipe
+  (`python -m transon_authoring …`) in every channel; runtime acquisition is documented per
+  channel and never encoded in the recipe. `pip install transon-authoring` remains the native
+  prerequisite; the plugin states the same prerequisite in its manifest and marketplace README.
+  Ephemeral runners such as `uv run --with` stay a non-normative convenience: measured against
+  a local wheel they work and need no console script, but their command form differs from the
+  native recipe (a forked recipe) and their offline behavior depends on a prunable shared cache,
+  weakening NFR-003. No `SessionStart` hook: nothing in packaging runs `pip` (OQ-020). Normative
+  in FR-037a / AC-040.
 
 ---
 
@@ -249,4 +250,4 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
 | **A2** | **Yes** | SampleSet/`check_samples`/evals (AD-020) normative; OQ-009 resolved. Standup decisions closed 2026-07-11 (OQ-015–018, OQ-023). |
 | A3 | After A2 green | Skill body (incl. FR-030 review loop) + AD-021/FR-029 improvement-loop deliverables (synthetic corpus, small-model gate swap). Entry: OQ-023 resolved (2026-07-11); OQ-024 resolved (2026-07-12). |
 | A4 | **Yes** (after A3; OQ-010/OQ-020 resolved 2026-07-19) | NFR-012/AC-032 self-sufficiency lint lands in `check_parity`. |
-| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough, plugin packaging) + release notes/publish. OQ-029 resolved before FR-037a lands; FR-037b non-gating. |
+| A5 | After A4; entry: eval-baseline rerun | Distribution-verification ladder (dist smoke, distribution-faithful eval provisioning, UC-004 walkthrough, plugin packaging) + release notes/publish; Cursor personal scope (FR-038). OQ-028/OQ-029 resolved 2026-07-22; FR-037b non-gating. |
