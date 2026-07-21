@@ -1,7 +1,7 @@
 # Current state — working handoff
 
 > **Non-authoritative working memory.** A session-to-session handoff, not part of the
-> contract. Where this and the contract docs (`SPEC.md`, `traceability.md`, `AGENTS.md`)
+> contract. Where this and the contract docs (`SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `traceability.md`, `AGENTS.md`)
 > disagree, **they win**. Update the narrative below at the end of a work session;
 > regenerate the header with `python3 harness/scripts/update_memory.py --state`.
 
@@ -36,7 +36,7 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Push the two stacked scope commits (`4bb48ca` editor sink, `fb3bd77`+fixups plugin/catalog) and open the PR(s). `spec-reviewer` returned **fix-first**; F1–F10 applied on branch.
+1. Merge the contract split (this branch), then resolve **OQ-029** (plugin runtime acquisition — prototype `uv run --with` against a locally built wheel first, since `transon-authoring` is not on PyPI) and **OQ-028** (Cursor personal scope) before `/run-milestone A5`.
 2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14). The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
 
 ## Open blockers / waiting-on
@@ -45,6 +45,6 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Do-not-relitigate (pointers, not copies)
 
-- Product contract → [`SPEC.md`](SPEC.md).
+- Product contract → [`SPEC.md`](SPEC.md) + [`ARCHITECTURE.md`](ARCHITECTURE.md) + [`ROADMAP.md`](ROADMAP.md).
 - Coverage matrix → [`traceability.md`](traceability.md).
 - Golden rules → [`AGENTS.md`](../AGENTS.md).

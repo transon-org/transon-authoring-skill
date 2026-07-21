@@ -108,7 +108,7 @@ def _state_block() -> str:
 STATE_TEMPLATE = """# Current state — working handoff
 
 > **Non-authoritative working memory.** A session-to-session handoff, not part of the
-> contract. Where this and the contract docs (`SPEC.md`, `traceability.md`, `AGENTS.md`)
+> contract. Where this and the contract docs (`SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `traceability.md`, `AGENTS.md`)
 > disagree, **they win**. Update the narrative below at the end of a work session;
 > regenerate the header with `python3 harness/scripts/update_memory.py --state`.
 
