@@ -391,12 +391,15 @@ No console-script product; no MCP.
 - **FR-012** — Canonical `SKILL.md` + Claude/Cursor adapters.
 - **FR-013** — **Deprecated.** MCP server removed from v1 (§3); ID retained so it is not reused.
 - **FR-014** — `python -m transon_authoring` module entry with subcommands in §11.6.
-- **FR-037** — **Plugin packaging + catalog reach (AD-009, resolving OQ-007).** Two halves:
+- **FR-037** — **Plugin packaging + catalog reach (AD-009; normative home for OQ-007).** Two halves:
   **(a) Packaging (gating; A5):** a Claude Code plugin form of the shipped skill — a
   `plugin.json` manifest plus a self-hosted `marketplace.json` cataloguing it — laid out per
-  §11.9. The plugin's `SKILL.md` is **produced by `install/`, never committed** (NFR-007): the
-  repo keeps exactly one canonical skill body. Packaging adds no console-script product (AD-006)
-  and never runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry. Runtime
+  §11.9. Marketplace hosts fetch the repo tree at the manifest's `source`, so the plugin's
+  `SKILL.md` is a **generated artifact that IS committed**: `install/` regenerates it from the
+  canonical root `SKILL.md`, and it is byte-identical to that file or the gate is red. Single
+  source is preserved by enforced identity, not by absence (NFR-007) — the canonical root file
+  remains the only editable body. Packaging adds no console-script product (AD-006) and never
+  runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry. Runtime
   acquisition for plugin users is OQ-029. Verified by `check_install` (AC-040).
   **(b) External catalog submission (ongoing; non-gating):** listing the plugin in third-party
   agent-skill catalogs is outreach driven by real adoption. It **gates no milestone**, places no
@@ -839,14 +842,20 @@ No console-script product; no MCP.
   `get_language_reference()` canonical dump, when its provenance sha256/`reference_version` are
   stale, or when its `reference_version` major is unsupported — the same drift discipline as the
   metadata snapshot (NFR-004 / AC-006).
-- **AC-040** — **Plugin packaging is structurally sound and single-source (FR-037a).**
-  `check_install` is **green** when, for the §11.9 plugin layout: `plugin.json` and
-  `marketplace.json` parse, carry their required fields, and name the skill consistently with the
-  skill directory; the generated plugin `SKILL.md` is byte-identical to the canonical root file;
-  and the OQ-010 frontmatter preconditions hold there (frontmatter parses; `name` equals the
-  skill directory name; non-empty `description`). It is **red** when a plugin `SKILL.md` is
-  committed to the repo (NFR-007 single-source), when either manifest is missing or malformed,
-  or when the manifest name and skill directory disagree. As with FR-019, the check claims
+- **AC-040** — **Plugin packaging is structurally sound and single-source (FR-037a).** The plugin
+  root is the **repo root** (§10), which is also the self-hosted marketplace repo. `check_install`
+  is **green** when, at that root: (a) `.claude-plugin/plugin.json` parses and carries `name`,
+  `description`, `version`, with `name` equal to the skill directory name `transon-authoring` and
+  `version` equal to the `pyproject.toml` project version; (b) `.claude-plugin/marketplace.json`
+  parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
+  `source` resolves inside the repo; (c) `skills/transon-authoring/SKILL.md` exists and is
+  **byte-identical** to the canonical root `SKILL.md`; (d) the OQ-010 frontmatter preconditions
+  hold there (frontmatter parses; `name` equals the skill directory name; non-empty
+  `description`). It is **red** when any of those files is missing or malformed, when the
+  manifest names disagree with the skill directory, when `version` differs from the project
+  version, or when the plugin `SKILL.md` differs from canonical by a single byte — the last case
+  being the stale-regeneration failure. This extends the NFR-007 single-source surface beyond
+  AC-005, which scans only the root `SKILL.md` and `adapters/**`. As with FR-019, the check claims
   **packaging integrity only** — never catalog listing or host discoverability.
 
 ### Use cases
@@ -878,7 +887,10 @@ transon-authoring/
 │   ├── metadata-snapshot.md       # provenance
 │   └── nl-intents.json            # NL sidecar by example name (FR-010)
 ├── adapters/claude/ … cursor/
-├── .claude-plugin/plugin.json marketplace.json   # FR-037a (plugin SKILL.md is generated)
+├── .claude-plugin/
+│   ├── plugin.json                # FR-037a plugin manifest
+│   └── marketplace.json           # FR-037a self-hosted marketplace catalog
+├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
 ├── install/claude.py cursor.py
 ├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
@@ -1705,18 +1717,25 @@ prompt.
 from the source checkout/archive they run from (default: the checkout root itself), so a project
 other than the checkout can receive the skill files.
 
-**Plugin form (FR-037a).** The plugin channel reuses the same canonical body. Layout, relative to
-the plugin root:
+**Plugin form (FR-037a).** The plugin channel reuses the same canonical body. **This repo is both
+the plugin root and the self-hosted marketplace repo**; the layout is relative to the repo root:
 
 ```
 .claude-plugin/plugin.json          # name, description, version
-skills/transon-authoring/SKILL.md   # generated by install/ — never committed
+.claude-plugin/marketplace.json     # name, owner, plugins[] — lists this plugin by name + source
+skills/transon-authoring/SKILL.md   # generated from the canonical root SKILL.md; committed
 ```
 
-The self-hosted marketplace manifest is `.claude-plugin/marketplace.json` at the marketplace repo
-root, listing this plugin by `name` + `source`. Users add it with the host's marketplace command
-and install by plugin name; no third-party catalog is required. The plugin `name` MUST equal the
-skill directory name `transon-authoring`. Runtime acquisition is OQ-029.
+Marketplace hosts fetch the tree at the entry's `source`, so the plugin `SKILL.md` MUST be
+committed — a generated artifact kept byte-identical to the canonical root file by AC-040, never
+edited directly. `install/` regenerates it; editing the canonical root file without regenerating
+turns the gate red. The plugin `name` MUST equal the skill directory name `transon-authoring`, and
+`plugin.json.version` MUST equal the `pyproject.toml` project version.
+
+This tree is a **repo artifact, not an install destination**: it is outside the FR-015/FR-016
+`.install-manifest.json` regime, which governs only files copied into a target project's skill
+directory. Users add the marketplace with the host's own command and install by plugin name; no
+third-party catalog is required. Runtime acquisition is OQ-029.
 
 Strategy: **copy** adapter files (not symlink) for hermeticity. Record
 `.install-manifest.json` listing owned paths + versions. **Upgrade:** re-run install (idempotent
@@ -1829,10 +1848,9 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
      repo — `pip install transon-authoring` (from **TestPyPI** first, then PyPI at
      publish), run both installers, confirm the skill activates in real Claude Code and
      real Cursor, author one template; outcome recorded in the release notes.
-  5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout plus its
-     `plugin.json` / `marketplace.json`, with the plugin `SKILL.md` generated by `install/` and
-     never committed, gated by `check_install` (AC-040). Structural only — it needs no published
-     package and makes no catalog claim.
+  5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout, gated by
+     `check_install` (AC-040). Structural only — it needs no published package and makes no
+     catalog claim.
   *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
   post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
   before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8). *Resolve during
@@ -2032,6 +2050,7 @@ excluded from active coverage.
 | FR-034 | AC-037 | A3+ (improvement) | CLI unit + skill-body |
 | FR-035 | AC-038 | A3+ (improvement) | check_evals + host_harness unit |
 | FR-036 | AC-039 | A5 | CLI unit + snapshot gate |
+| FR-037 | AC-040 | A5 | check_install |
 | NFR-001 | AC-003, AC-022 | A0+ | authority tests / evals |
 | NFR-002 | AC-018 | A1 | determinism unit |
 | NFR-003 | AC-020 | A1 | offline CI job |
