@@ -138,7 +138,8 @@ No console-script product; no MCP.
 - **AD-004 — Verify-before-return.** Success only if `verify` → `ok: true`, `assurance: "matched"`.
   `verify` **re-validates** the SampleSet via `check_samples` and rejects unless
   `ok_for_verify` (AD-019). Structured failure otherwise (§11.5).
-- **AD-005 — Single-source, multi-tool.** One `SKILL.md`; Claude + Cursor adapters; parity gate.
+- **AD-005 — Single-source, multi-tool.** One **editable** `SKILL.md`; generated copies are
+  gate-enforced byte-identical to it (FR-037a / AC-040); Claude + Cursor adapters; parity gate.
 - **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
   `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
   `python -m transon_authoring` (§11.6).
@@ -395,10 +396,11 @@ No console-script product; no MCP.
   **(a) Packaging (gating; A5):** a Claude Code plugin form of the shipped skill — a
   `plugin.json` manifest plus a self-hosted `marketplace.json` cataloguing it — laid out per
   §11.9. Marketplace hosts fetch the repo tree at the manifest's `source`, so the plugin's
-  `SKILL.md` is a **generated artifact that IS committed**: `install/` regenerates it from the
-  canonical root `SKILL.md`, and it is byte-identical to that file or the gate is red. Single
-  source is preserved by enforced identity, not by absence (NFR-007) — the canonical root file
-  remains the only editable body. Packaging adds no console-script product (AD-006) and never
+  `SKILL.md` is a **generated artifact that IS committed**: the maintainer script
+  `scripts/sync_plugin.py` regenerates it deterministically from the canonical root `SKILL.md`,
+  and it is byte-identical to that file or the gate is red. Single source is preserved by enforced
+  identity (NFR-007) — the canonical root file remains the only editable body, and the generated
+  copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
   runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry. Runtime
   acquisition for plugin users is OQ-029. Verified by `check_install` (AC-040).
   **(b) External catalog submission (ongoing; non-gating):** listing the plugin in third-party
@@ -892,7 +894,7 @@ transon-authoring/
 │   └── marketplace.json           # FR-037a self-hosted marketplace catalog
 ├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
 ├── install/claude.py cursor.py
-├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
+├── scripts/sync_metadata.py sync_plugin.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
@@ -1728,8 +1730,11 @@ skills/transon-authoring/SKILL.md   # generated from the canonical root SKILL.md
 
 Marketplace hosts fetch the tree at the entry's `source`, so the plugin `SKILL.md` MUST be
 committed — a generated artifact kept byte-identical to the canonical root file by AC-040, never
-edited directly. `install/` regenerates it; editing the canonical root file without regenerating
-turns the gate red. The plugin `name` MUST equal the skill directory name `transon-authoring`, and
+edited directly. The maintainer script `scripts/sync_plugin.py` regenerates it (a `sync_metadata`
+sibling: it writes a repo artifact and is not shipped in the package); editing the canonical root
+file without regenerating turns the gate red. `install/` is unaffected — it copies into a target
+project's skill directory and never writes this tree. The plugin `name` MUST equal the skill
+directory name `transon-authoring`, and
 `plugin.json.version` MUST equal the `pyproject.toml` project version.
 
 This tree is a **repo artifact, not an install destination**: it is outside the FR-015/FR-016
