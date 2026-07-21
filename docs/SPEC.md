@@ -199,7 +199,10 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
   runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry — **identical in every
   channel** (OQ-029). Runtime acquisition is documented, never encoded in the recipe: the plugin
-  manifest's `description` MUST contain the literal string `pip install transon-authoring`. A
+  manifest's `description` MUST contain the literal string `pip install transon-authoring`, and
+  the **shipped body carries a channel-independent recovery line** — on
+  `No module named transon_authoring` it names the same prerequisite — so an agent that never saw
+  the manifest can still recover in band (NFR-012 self-sufficiency). A
   channel-specific command wrapper (an ephemeral runner such as `uv run --with`) MUST NOT appear
   in the shipped body — it forks the recipe and makes offline behavior depend on a prunable cache
   (NFR-003). Verified by `check_install` (AC-040).

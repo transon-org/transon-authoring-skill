@@ -187,7 +187,8 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   retired when FR-038 lands.
 - **OQ-029** — **Resolved (2026-07-22):** one §11.6 grounding recipe in every channel;
   runtime acquisition is documented per channel, never encoded in the recipe. `pip install
-  transon-authoring` stays the prerequisite, stated in the plugin manifest. `uv run --with`
+  transon-authoring` stays the prerequisite, stated in the plugin manifest and — as a
+  channel-independent in-band remedy — in the shipped body. `uv run --with`
   rejected: it forks the recipe and its offline behavior depends on a prunable cache (NFR-003).
   No `SessionStart` hook — packaging never runs `pip` (OQ-020). Normative in FR-037a / AC-040.
 
