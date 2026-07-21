@@ -850,11 +850,14 @@ No console-script product; no MCP.
   `description`, `version`, with `name` equal to the skill directory name `transon-authoring` and
   `version` equal to the `pyproject.toml` project version; (b) `.claude-plugin/marketplace.json`
   parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
-  `source` resolves inside the repo; (c) `skills/transon-authoring/SKILL.md` exists and is
-  **byte-identical** to the canonical root `SKILL.md`; (d) the OQ-010 frontmatter preconditions
+  `source` resolves to **the plugin root itself**, not merely to some path inside the repo, so
+  that (a) and (c) are present relative to it; (c) `skills/transon-authoring/SKILL.md` exists and
+  is **byte-identical** to the canonical root `SKILL.md`; (d) the OQ-010 frontmatter preconditions
   hold there (frontmatter parses; `name` equals the skill directory name; non-empty
   `description`). It is **red** when any of those files is missing or malformed, when the
-  manifest names disagree with the skill directory, when `version` differs from the project
+  manifest names disagree with the skill directory, when `source` resolves anywhere other than the
+  plugin root (a marketplace entry pointing at, say, `./docs` fetches no plugin manifest and no
+  skill body), when `version` differs from the project
   version, or when the plugin `SKILL.md` differs from canonical by a single byte — the last case
   being the stale-regeneration failure. This extends the NFR-007 single-source surface beyond
   AC-005, which scans only the root `SKILL.md` and `adapters/**`. As with FR-019, the check claims
