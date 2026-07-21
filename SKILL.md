@@ -29,6 +29,11 @@ Precedence for Transon semantics, highest first:
 `transon==0.2.3`, `metadata_version` `"3.0"`. The pinned snapshot is bundled with the
 `transon_authoring` package — print it with `python -m transon_authoring metadata`.
 
+**Runtime prerequisite.** Every command below runs through that package. If any of them reports
+`No module named transon_authoring`, the runtime is not installed in this environment: run
+`pip install transon-authoring` (it pins the engine transitively), then retry. Do not proceed
+without it and never substitute another source for engine behavior.
+
 ## Procedure
 
 Work through sections 1–7 IN ORDER for every authoring request. Do exactly what each step says.

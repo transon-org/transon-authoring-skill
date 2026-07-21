@@ -8,12 +8,17 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `8c30a94` — Merge pull request #24 from transon-org/spec-plugin-catalog-distribution |
-| Branch | `docs-split-spec-architecture-roadmap` |
+| Repo HEAD | `d8a1659` — Merge pull request #25 from transon-org/docs-split-spec-architecture-roadmap |
+| Branch | `spec-oq028-oq029-resolution` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**OQ-028 and OQ-029 resolved (branch `spec-oq028-oq029-resolution`) — no open OQs remain.**
+**OQ-029:** one §11.6 grounding recipe in every channel; acquisition is documented, never encoded in the recipe. Decided on measurement, not assumption — a `uv run --with` prototype against a locally built wheel worked (0.11s warm, exit codes preserved, engine 0.2.3 resolved transitively, no console script needed) but was rejected on two counts: its command form differs from the native recipe, which is the forked recipe OQ-029 itself forbade, and its offline behavior depends on a prunable shared cache (cold cache + no network = exit 2), weakening NFR-003. No `SessionStart` hook, since packaging never runs `pip` (OQ-020). FR-037a requires the plugin manifest `description` to contain the literal `pip install transon-authoring` (gated by AC-040), and the shipped `SKILL.md` now carries a channel-independent recovery line for `No module named transon_authoring` — without it a catalog user hit an unrecoverable error, since the manifest description is rendered at browse time and the agent never sees it. **This edits the shipped body the eval baseline was measured against.** No baseline reset is triggered (§11.8 resets are for pin/corpus/gate-model/harness changes), and the A5 pre-release rerun already covers it, but the current baseline now reflects slightly older text.
+**OQ-028:** Cursor gains a personal scope, so the adapters reach equal capability rather than a documented exclusion (NFR-007). New **FR-038 / AC-041** (A5, `[ ]`); §11.9 install table gains the Cursor personal destination. Evidence for the premise: Cursor's own Agent Skills docs (`cursor.com/docs/skills`, read 2026-07-21) list `~/.cursor/skills/` and `~/.agents/skills/` as user-level discovery locations — FR-038 adopts only `~/.cursor/skills/`. AC-041 is **structural only** and makes no host-discovery claim (OQ-008), so that premise stays unverified by any gate; A5 ladder step 3 exercises project scope only.
+Deliberately SPEC-only, and the gap is **four artifacts**, not one: `adapters/cursor/adapter.json` (the exclusion), the shipped `adapters/cursor/README.md` ("project scope only — Cursor has no personal skill scope in v1"), `install/cursor.py` (docstring + scope-rejection path), and three tests that pin the superseded rule (`test_adapters.py`, `test_install.py::test_fr015_cursor_personal_scope_exit2`, the `test_check_parity.py` exclusion fixture). FR-038 names all of them so the implementer sweeps them together. `check_parity` stays green through the gap — verified in `scripts/check_parity.py`, it compares the two adapter manifests to each other, never to the contract._
 
 _**Contract split into SPEC + ARCHITECTURE + ROADMAP (branch `docs-split-spec-architecture-roadmap`).** Matches the `transon-blockly` convention. `docs/SPEC.md` keeps §0–4, §7–9, §11–13, §17; `docs/ARCHITECTURE.md` takes §5, §6, §10 (all 26 `AD-*`); `docs/ROADMAP.md` takes §14–16, §18 (all `OQ-*`). **Section numbers are preserved and globally unique across the three docs**, so the ~100 files citing bare `§N` stay correct — only file+section pointers were rewritten. The move itself was verbatim (scripted split with a line-conservation assert). Follow-up commits then corrected the contract text the move made false: §0's now-completed "extract ARCHITECTURE.md" instruction, SPEC's preamble still calling itself the whole contract, §12 now naming the three-document contract, and ARCHITECTURE §10's package layout — which gained the two new docs, `id-ledger.json`, and the AD-026 `resources/language-reference.json` it had been missing since the repin. `CONTRACT_DOCS` widened in both harness gates — without it the ID lock goes red on 55 migrated AD/OQ IDs, which it correctly did before the fix. Gate messages genericized off `docs/SPEC.md`. Pointers updated in AGENTS.md, CLAUDE.md, README.md, harness/ (README, commands, agents, hygiene), and the `update_memory.py` generator. All six gates green._
 
@@ -36,7 +41,7 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Merge the contract split (this branch), then resolve **OQ-029** (plugin runtime acquisition — prototype `uv run --with` against a locally built wheel first, since `transon-authoring` is not on PyPI) and **OQ-028** (Cursor personal scope) before `/run-milestone A5`.
+1. Merge the OQ-028/OQ-029 resolution (this branch). With no open OQs, `/run-milestone A5` is unblocked for the implementable slice: ladder 1 (dist smoke CI job), ladder 2 (distribution-faithful eval provisioning), FR-037a/AC-040 plugin packaging, FR-038/AC-041 Cursor personal scope.
 2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14). The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
 
 ## Open blockers / waiting-on
