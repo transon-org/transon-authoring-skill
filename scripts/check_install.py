@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """check-install — install-integrity gate
 (FR-019 / NFR-009; AC-007 / AC-009; FR-037a / AC-040; FR-038 / AC-041;
-SPEC §11.9, §13, OQ-010).
+NFR-008 / AC-042; SPEC §11.9, §13, OQ-010).
 
 An end-to-end install rehearsal, offline and deterministic: the real
 ``install/claude.py`` / ``install/cursor.py`` scripts run as subprocesses
@@ -40,6 +40,15 @@ to the canonical root body and satisfies the OQ-010 preconditions (AC-040).
 This claims **packaging integrity only** — never catalog listing or host
 discoverability.
 
+Plus, once, on the real ``--root``: the NFR-008 release record — repo-root
+``CHANGELOG.md`` exists and its topmost release entry (headings naming no
+release version, e.g. "Unreleased", are skipped) names the ``pyproject.toml``
+project version and states that version's engine pin (``transon==…``, read
+textually from ``pyproject.toml``) and the ``snapshot_sha256`` recorded in
+``resources/metadata-snapshot.md`` — the stale-release-record failure
+(AC-042). Agreement with the repo's own sources only; the ladder outcomes
+NFR-008 requires are maintainer prose and are not mechanically verified.
+
 Exit codes: 0 all green, 1 any finding.
 """
 
@@ -70,6 +79,8 @@ COMBOS = (
 PLUGIN_MANIFEST_REL = ".claude-plugin/plugin.json"
 MARKETPLACE_REL = ".claude-plugin/marketplace.json"
 PLUGIN_SKILL_REL = f"skills/{SKILL_DIR_NAME}/SKILL.md"
+CHANGELOG_REL = "CHANGELOG.md"
+SNAPSHOT_PROVENANCE_REL = "resources/metadata-snapshot.md"
 RUNTIME_PREREQ = "pip install transon-authoring"
 MANIFEST_FIELDS = frozenset(
     {
@@ -92,6 +103,16 @@ _PIN_RE = re.compile(
 _VERSION_RE = re.compile(r"^version\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
 
 _FRONTMATTER_LINE_RE = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*)$")
+
+# Release-record parses (AC-042). Markdown ATX headings only; a heading names a
+# release when it carries a dotted version token (dates are dash-separated and
+# never match).
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(\S.*)$")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_RELEASE_VERSION_RE = re.compile(r"(?<![\w.])(\d+\.\d+(?:\.[0-9A-Za-z.+-]+)?)")
+_SNAPSHOT_SHA_RE = re.compile(
+    r"[\"']snapshot_sha256[\"']\s*:\s*[\"']([0-9a-fA-F]{64})[\"']"
+)
 
 
 def parse_frontmatter(text: str) -> Optional[dict[str, str]]:
@@ -539,6 +560,117 @@ def check_plugin(root: Path, findings: list[str], oks: list[str]) -> None:
     check_plugin_skill(root, findings, oks)
 
 
+def find_release_entry(text: str) -> Optional[tuple[str, str]]:
+    """Return ``(version, entry_text)`` for the topmost heading naming a
+    release version, or None when no heading names one. Headings above it that
+    name no version (an "Unreleased" section) are skipped, and the entry runs
+    until the next heading at the same or a higher level. Fenced blocks are not
+    scanned for headings."""
+    lines = text.splitlines()
+    fenced = False
+    for index, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        heading = _HEADING_RE.match(line)
+        if heading is None:
+            continue
+        version = _RELEASE_VERSION_RE.search(heading.group(2))
+        if version is None:
+            continue
+        level = len(heading.group(1))
+        end = len(lines)
+        inner_fence = False
+        for offset in range(index + 1, len(lines)):
+            if _FENCE_RE.match(lines[offset]):
+                inner_fence = not inner_fence
+                continue
+            if inner_fence:
+                continue
+            following = _HEADING_RE.match(lines[offset])
+            if following is not None and len(following.group(1)) <= level:
+                end = offset
+                break
+        return version.group(1), "\n".join(lines[index:end])
+    return None
+
+
+def check_release_record(root: Path, findings: list[str], oks: list[str]) -> None:
+    """AC-042 — the repo-root release record carries the NFR-008 version
+    triplet. Asserts agreement with the repo's own sources of truth only; the
+    ladder outcomes NFR-008 requires are maintainer prose, unverified here."""
+    path = root / CHANGELOG_REL
+    if not path.is_file():
+        findings.append(
+            f"release: {CHANGELOG_REL} is missing under {root} — every release "
+            "is recorded there (NFR-008 / AC-042)"
+        )
+        return
+    entry = find_release_entry(path.read_text(encoding="utf-8"))
+    if entry is None:
+        findings.append(
+            f"release: no heading in {CHANGELOG_REL} names a release version — "
+            "unreleased/in-progress headings alone are not a release record "
+            "(NFR-008 / AC-042)"
+        )
+        return
+    version, body = entry
+
+    before = len(findings)
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
+    project_version = _VERSION_RE.search(text)
+    pin = _PIN_RE.search(text)
+    if project_version is None or pin is None:
+        findings.append(
+            f"release: no [project] version and/or 'transon==…' pin in "
+            f"{pyproject} — the {CHANGELOG_REL} entry cannot be checked "
+            "(NFR-008 / AC-042)"
+        )
+    else:
+        if version != project_version.group(1):
+            findings.append(
+                f"release: topmost {CHANGELOG_REL} entry names {version!r}, "
+                f"but the pyproject.toml project version is "
+                f"{project_version.group(1)!r} — stale release record "
+                "(NFR-008 / AC-042)"
+            )
+        expected_pin = f"transon=={pin.group(1)}"
+        if expected_pin not in body:
+            findings.append(
+                f"release: the {CHANGELOG_REL} {version} entry does not state "
+                f"the engine pin {expected_pin!r} from pyproject.toml — stale "
+                "release record (NFR-008 / AC-042)"
+            )
+
+    provenance = root / SNAPSHOT_PROVENANCE_REL
+    snapshot = (
+        _SNAPSHOT_SHA_RE.search(provenance.read_text(encoding="utf-8"))
+        if provenance.is_file()
+        else None
+    )
+    if snapshot is None:
+        findings.append(
+            f"release: no snapshot_sha256 recorded in {provenance} — the "
+            f"{CHANGELOG_REL} entry cannot be checked (NFR-008 / AC-042)"
+        )
+    elif snapshot.group(1) not in body:
+        findings.append(
+            f"release: the {CHANGELOG_REL} {version} entry does not state the "
+            f"snapshot hash {snapshot.group(1)} from {SNAPSHOT_PROVENANCE_REL} "
+            "— stale release record (NFR-008 / AC-042)"
+        )
+
+    if len(findings) == before:
+        oks.append(
+            f"release: {CHANGELOG_REL} topmost release entry {version} states "
+            "the project version, engine pin and snapshot hash (NFR-008 "
+            "triplet)"
+        )
+
+
 def cursor_smoke(findings: list[str], oks: list[str]) -> None:
     """Runtime smoke only — never a "discovered/ingested" claim (OQ-008)."""
     proc = subprocess.run(
@@ -580,8 +712,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="check_install",
         description="Rehearse skill install/uninstall in temp dirs and fail "
         "on any integrity, idempotency, uninstall, OQ-010 "
-        "discoverability-precondition, runtime-smoke, or plugin-packaging "
-        "violation (FR-019 / NFR-009 / AC-007 / AC-009 / AC-040).",
+        "discoverability-precondition, runtime-smoke, plugin-packaging or "
+        "release-record violation (FR-019 / NFR-009 / AC-007 / AC-009 / "
+        "AC-040 / AC-042).",
     )
     parser.add_argument(
         "--root",
@@ -617,6 +750,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
         cursor_smoke(findings, oks)
     check_plugin(root, findings, oks)
+    check_release_record(root, findings, oks)
 
     for line in oks:
         print(f"{PROG}: OK {line}")

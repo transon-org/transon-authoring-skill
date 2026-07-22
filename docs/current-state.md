@@ -8,12 +8,29 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `d8a1659` — Merge pull request #25 from transon-org/docs-split-spec-architecture-roadmap |
-| Branch | `spec-oq028-oq029-resolution` |
+| Repo HEAD | `5140202` — feat: Cursor personal scope and Claude Code plugin packaging |
+| Branch | `a5-release` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**A5 implementable slice in progress (branch `a5-release`).** Committed: the governed spec change
+(`33f2724`) making the release record normative — repo-root `CHANGELOG.md` named in NFR-008 and
+ARCHITECTURE §10, new **AC-042** verifying the version triplet against `pyproject.toml` +
+`resources/metadata-snapshot.md`, and ROADMAP ladder 2 pinned to the **staged file subset** as the
+installer's source root (not an unpacked sdist — that is ladder 1's claim). Then `5140202`:
+**FR-038/AC-041** (Cursor personal scope — the exclusion was a product choice, so all four
+superseded artifacts were swept together and `check_install` now exercises `cursor/personal`) and
+**FR-037a/AC-040** (the §11.9 plugin tree, `scripts/sync_plugin.py`, byte-identity gate); project
+version bumped `0.0.1` → `0.1.0`, which AC-040 forces `plugin.json` to match and `release.yml`
+forces the tag to match.
+Uncommitted at this point: `CHANGELOG.md` + the AC-042 check (NFR-008 row deliberately stays `[ ]`
+— the mechanical half is green and cited, the release-checklist half has not happened), the ladder-3
+`cursor-activation-smoke.yml` scaffold (dispatch-only; needs a `CURSOR_API_KEY` secret that does not
+exist yet, installs the Cursor CLI via an unpinned `curl | bash` because Cursor publishes no
+versioned artifact, and audits rather than blocks egress because Cursor publishes no endpoint list),
+and the ladder-2 eval-provisioning slice, still in flight._
 
 _**OQ-028 and OQ-029 resolved (branch `spec-oq028-oq029-resolution`) — no open OQs remain.**
 **OQ-029:** one §11.6 grounding recipe in every channel; acquisition is documented, never encoded in the recipe. Decided on measurement, not assumption — a `uv run --with` prototype against a locally built wheel worked (0.11s warm, exit codes preserved, engine 0.2.3 resolved transitively, no console script needed) but was rejected on two counts: its command form differs from the native recipe, which is the forked recipe OQ-029 itself forbade, and its offline behavior depends on a prunable shared cache (cold cache + no network = exit 2), weakening NFR-003. No `SessionStart` hook, since packaging never runs `pip` (OQ-020). FR-037a requires the plugin manifest `description` to contain the literal `pip install transon-authoring` (gated by AC-040), and the shipped `SKILL.md` now carries a channel-independent recovery line for `No module named transon_authoring` — without it a catalog user hit an unrecoverable error, since the manifest description is rendered at browse time and the agent never sees it. **This edits the shipped body the eval baseline was measured against.** No baseline reset is triggered (§11.8 resets are for pin/corpus/gate-model/harness changes), and the A5 pre-release rerun already covers it, but the current baseline now reflects slightly older text.
@@ -41,12 +58,29 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Merge the OQ-028/OQ-029 resolution (this branch). With no open OQs, `/run-milestone A5` is unblocked for the implementable slice: ladder 1 (dist smoke CI job), ladder 2 (distribution-faithful eval provisioning), FR-037a/AC-040 plugin packaging, FR-038/AC-041 Cursor personal scope.
-2. A5 release: versioned release notes with the 0.2.3 pin + snapshot hash, first PyPI publish (OQ-020), the distribution-verification ladder (§14). The A5 entry condition (eval baseline reflecting the shipped SKILL.md) is met.
+1. Finish the `a5-release` branch: land the ladder-2 provisioning slice, run the full suite plus all
+   six gates over the combined tree, `spec-reviewer` pass (maker ≠ checker), merge.
+2. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
+   the `CHANGELOG.md` 0.1.0 entry:
+   a. **Entry-condition eval rerun.** The shipped body changed since the accepted baseline (the
+      OQ-029 recovery line), so the full 54×3 real-host gate must be re-run before release
+      (≈$18–19), with OQ-027f (i)–(iv) confirmed in force.
+   b. **Ladder 2 probe first.** Dispatch one fixture via `--only` under the new installer
+      provisioning and read the per-fixture majority before spending on the full gate.
+   c. **Ladder 3.** Add the `CURSOR_API_KEY` secret, then dispatch `cursor-activation-smoke.yml`;
+      tighten its egress from `audit` to `block` using the observed host set.
+   d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.
+   e. **Publish.** Register the trusted publishers + environments, dispatch TestPyPI, push `v0.1.0`.
+      FR-037b outreach begins only after this.
+3. Flip the NFR-008 traceability row to `[x]` once 2a–2e are recorded.
 
 ## Open blockers / waiting-on
 
-- None. (Watch item: 3 fixtures passed the baseline gate 2/3 — future-flake candidates the ratchet will surface via `failure_modes`.)
+- Nothing blocking the branch. A5's DoD cannot close without the maintainer items in Next step 2.
+- Confirm the `marketplace.json` owner identity (`transon-org`, inferred from the git remote) — the
+  repo is named `transon-authoring-skill` while the plugin is `transon-authoring`.
+- Watch item: 3 fixtures passed the baseline gate 2/3 — future-flake candidates the ratchet will
+  surface via `failure_modes`.
 
 ## Do-not-relitigate (pointers, not copies)
 

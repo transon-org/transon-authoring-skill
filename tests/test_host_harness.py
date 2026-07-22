@@ -10,6 +10,7 @@ score-equivalent to the demoted raw loop for the engine-free outcome classes.
 
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -92,11 +93,17 @@ class FakeHost:
         self.seen: dict = {}
 
     def run_episode(self, *, skill_md, prompt, workspace, runner_cfg):
+        skill_dir = workspace / ".claude" / "skills" / "transon-authoring"
+        installed = skill_dir / "SKILL.md"
         self.seen = {
             "prompt": prompt,
-            "skill_installed": (
-                workspace / ".claude" / "skills" / "transon-authoring" / "SKILL.md"
-            ).is_file(),
+            "skill_installed": installed.is_file(),
+            "installed_bytes": installed.read_bytes() if installed.is_file() else None,
+            "manifest": (
+                json.loads((skill_dir / ".install-manifest.json").read_text("utf-8"))
+                if (skill_dir / ".install-manifest.json").is_file()
+                else None
+            ),
             "samples_present": (workspace / "samples.json").is_file(),
             "workspace": workspace,
             "workspace_existed": workspace.is_dir(),
@@ -205,10 +212,15 @@ def test_ac_036_oq_027_adapter_score_matches_raw_loop():
 # --- the driver run_fixture with an injected fake host -----------------------
 
 
-def test_oq_027_run_fixture_installs_skill_and_confines_workspace():
-    # OQ-027f(i)/(iv) — the driver installs SKILL.md into an ephemeral
-    # workspace, writes the fixture SampleSet there, hands the intent as the
-    # prompt, and tears the workspace down after the episode.
+def test_oq_027a_run_fixture_provisions_workspace_via_installer():
+    # OQ-027a / ROADMAP §14 A5 ladder step 2 — the ephemeral workspace is
+    # provisioned by the SHIPPED installer (`install/claude.py --scope project
+    # --target-root <workspace>`), so the gate measures the
+    # installed-from-distribution configuration rather than a harness-authored
+    # copy. Installed bytes are byte-identical to canonical SKILL.md and the
+    # install manifest is present (inert to the host, no baseline reset).
+    # Also OQ-027f(i)/(iv): the SampleSet lands in the workspace, the intent is
+    # the prompt, and the workspace is torn down after the episode.
     matched = _load("matched")
     host = FakeHost(HostOutcome(status=STATUS_RESULT, result={"ok": True}))
     episode = host_harness.run_fixture(matched, RUNNER_CFG, host, REPO_ROOT)
@@ -217,9 +229,46 @@ def test_oq_027_run_fixture_installs_skill_and_confines_workspace():
     assert episode["submitted"] == {"ok": True}
     assert matched["intent_nl"] in host.seen["prompt"]
     assert host.seen["skill_installed"] is True
+    assert host.seen["installed_bytes"] == (REPO_ROOT / "SKILL.md").read_bytes()
+    manifest = host.seen["manifest"]
+    assert manifest is not None
+    assert manifest["tool"] == "claude"
+    assert manifest["scope"] == "project"
+    assert "SKILL.md" in manifest["files"]
     assert host.seen["samples_present"] is True  # matched fixture supplies samples
     # Ephemeral workspace destroyed after scoring (OQ-027f(iv)).
     assert not host.seen["workspace"].exists()
+
+
+def test_oq_027a_installer_failure_is_infra_error(tmp_path):
+    # OQ-016d — a provisioning failure (installer exits non-zero; here its
+    # source root carries SKILL.md but no adapter descriptor/pyproject) is an
+    # infra_error, never a fixture failure scored against the authoring target.
+    source_root = tmp_path / "broken-source"
+    (source_root / "install").mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "SKILL.md", source_root / "SKILL.md")
+    for name in ("claude.py", "_shared.py"):
+        shutil.copy2(REPO_ROOT / "install" / name, source_root / "install" / name)
+
+    host = FakeHost(HostOutcome(status=STATUS_RESULT, result={"ok": True}))
+    episode = host_harness.run_fixture(_load("matched"), RUNNER_CFG, host, source_root)
+    assert episode["outcome"] == "infra_error"
+    assert "install" in episode["error"]
+    assert host.seen == {}  # the host was never invoked
+
+
+def test_oq_027a_missing_installer_is_infra_error(tmp_path):
+    # A source root without install/claude.py cannot provision the workspace —
+    # infra_error before any model call, not a fixture failure (OQ-016d).
+    source_root = tmp_path / "no-installer"
+    source_root.mkdir()
+    shutil.copy2(REPO_ROOT / "SKILL.md", source_root / "SKILL.md")
+
+    host = FakeHost(HostOutcome(status=STATUS_RESULT, result={"ok": True}))
+    episode = host_harness.run_fixture(_load("refuse"), RUNNER_CFG, host, source_root)
+    assert episode["outcome"] == "infra_error"
+    assert "claude.py" in episode["error"]
+    assert host.seen == {}
 
 
 def test_oq_027_run_fixture_host_fault_is_infra_error():

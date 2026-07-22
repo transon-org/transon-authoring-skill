@@ -1341,8 +1341,10 @@ EvalFixture = {
 - **Harness (OQ-017 / AD-024 / OQ-027):** the gate runs the skill in the **real
   host agent harness** it ships into — the reference host is the **Claude Agent SDK**, pinned by
   `runner.json.harness = { kind: "agent-sdk", version }`. The driver (`scripts/host_harness.py`,
-  behind the optional extra `transon-authoring[evals]`) installs `SKILL.md` as shipped into the
-  host's skill path and lets the host **auto-activate** it under its own system prompt (OQ-027a
+  behind the optional extra `transon-authoring[evals]`) provisions the workspace by running the
+  shipped installer — `install/claude.py --scope project --target-root <workspace>` (ROADMAP §14
+  A5 ladder 2) — so `SKILL.md` reaches the host's skill path exactly as a user's would, and lets
+  the host **auto-activate** it under its own system prompt (OQ-027a
   faithful engagement — no injection, no preamble), runs one
   episode per `runs_per_fixture` with the host's rich tool suite over a per-episode ephemeral
   workspace (fixture `intent_nl` as the prompt, the fixture's `samples.json` when supplied).

@@ -1,5 +1,5 @@
-"""FR-019 / NFR-009 (AC-009, AC-007's gate half, AC-040, AC-041) —
-scripts/check_install.py.
+"""FR-019 / NFR-009 (AC-009, AC-007's gate half, AC-040, AC-041) and
+NFR-008 / AC-042 (release record) — scripts/check_install.py.
 
 The gate is invoked via subprocess with the interpreter pytest runs under
 (same style as tests/test_install.py), pointed at throwaway fixture roots
@@ -48,6 +48,30 @@ MARKETPLACE_JSON = {
     "plugins": [{"name": "transon-authoring", "source": "./"}],
 }
 
+# NFR-008 / AC-042 fixtures: the release record and its two other sources of
+# truth (the pyproject pin above, and this provenance file's snapshot hash).
+FIXTURE_SNAPSHOT_SHA = "0123456789abcdef" * 4
+SNAPSHOT_MD = f"""\
+# Metadata snapshot provenance (fixture)
+
+```json
+{{
+  "algorithm": "sha256",
+  "engine_version": "0.2.3",
+  "snapshot_sha256": "{FIXTURE_SNAPSHOT_SHA}"
+}}
+```
+"""
+CHANGELOG_MD = f"""\
+# Changelog
+
+## 0.0.1 — 2026-07-22
+
+- Skill version: `0.0.1`
+- Engine pin: `transon==0.2.3`
+- Snapshot hash (`snapshot_sha256`): `{FIXTURE_SNAPSHOT_SHA}`
+"""
+
 
 def run_gate(*argv: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -64,6 +88,8 @@ def make_fake_root(
     plugin_json: dict | None = None,
     marketplace_json: dict | None = None,
     plugin_skill_md: str | None = None,
+    changelog_md: str | None = None,
+    snapshot_md: str | None = None,
     omit: tuple[str, ...] = (),
 ) -> Path:
     root = tmp_path / name
@@ -88,8 +114,16 @@ def make_fake_root(
     (root / "resources" / "metadata-snapshot.json").write_bytes(
         b'{\n  "fixture_snapshot": true\n}\n'
     )
+    (root / "resources" / "metadata-snapshot.md").write_text(
+        snapshot_md if snapshot_md is not None else SNAPSHOT_MD, encoding="utf-8"
+    )
     (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (root / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    if "CHANGELOG.md" not in omit:
+        (root / "CHANGELOG.md").write_text(
+            changelog_md if changelog_md is not None else CHANGELOG_MD,
+            encoding="utf-8",
+        )
 
     plugin_dir = root / ".claude-plugin"
     plugin_dir.mkdir()
@@ -360,6 +394,90 @@ def test_ac040_no_catalog_or_discoverability_claim_in_output(tmp_path: Path):
     output = (result.stdout + result.stderr).lower()
     for claim in ("catalog", "listed in", "discovered", "installable from"):
         assert claim not in output, claim
+
+
+def test_ac042_release_record_green_on_repo():
+    # AC-042 / NFR-008 — the shipped repo's CHANGELOG.md topmost release entry
+    # agrees with all three sources of truth (pyproject version, pyproject
+    # engine pin, resources/metadata-snapshot.md snapshot_sha256).
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release entry" in result.stdout
+
+
+def test_ac042_red_on_missing_changelog(tmp_path: Path):
+    # AC-042 — no repo-root CHANGELOG.md at all is red.
+    root = make_fake_root(tmp_path, omit=("CHANGELOG.md",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "CHANGELOG.md" in result.stderr
+
+
+def test_ac042_red_on_no_release_version_named(tmp_path: Path):
+    # AC-042 — a changelog whose only heading names no release version (an
+    # in-progress file) records no release and is red.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md="# Changelog\n\n## Unreleased\n\n- work in progress\n",
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "names a release version" in result.stderr
+
+
+def test_ac042_red_on_version_mismatch(tmp_path: Path):
+    # AC-042 — the topmost release entry must name the pyproject project
+    # version (0.0.1 in the fixture); 9.9.9 is the stale-release-record case.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("## 0.0.1", "## 9.9.9"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "9.9.9" in result.stderr
+    assert "0.0.1" in result.stderr
+
+
+def test_ac042_red_on_stale_engine_pin(tmp_path: Path):
+    # AC-042 — an entry stating a pin other than the pyproject `transon==…`
+    # is the stale-release-record failure.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("transon==0.2.3", "transon==0.1.9"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "transon==0.2.3" in result.stderr
+
+
+def test_ac042_red_on_stale_snapshot_hash(tmp_path: Path):
+    # AC-042 — an entry stating a snapshot hash other than the
+    # resources/metadata-snapshot.md snapshot_sha256 is red.
+    root = make_fake_root(
+        tmp_path, changelog_md=CHANGELOG_MD.replace(FIXTURE_SNAPSHOT_SHA, "f" * 64)
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert FIXTURE_SNAPSHOT_SHA in result.stderr
+
+
+def test_nfr008_unreleased_heading_above_release_entry_is_ignored(tmp_path: Path):
+    # AC-042 / NFR-008 — headings above the topmost release entry that name no
+    # release version are ignored, values inside them included: only the
+    # topmost *release* entry is checked against the sources of truth.
+    unreleased = (
+        "# Changelog\n\n"
+        "## Unreleased\n\n"
+        "- planned repin to `transon==9.9.9`\n"
+        f"- planned snapshot hash `{'e' * 64}`\n\n"
+    )
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=unreleased + CHANGELOG_MD.split("\n", 2)[2],
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release entry 0.0.1" in result.stdout
 
 
 def test_ac009_no_discoverability_claim_in_output(tmp_path: Path):

@@ -1,0 +1,222 @@
+name: Cursor activation smoke (headless)
+
+# A5 distribution-verification ladder, step 3 (OQ-008). Confirms that a fresh
+# headless Cursor ACTUALLY ACTIVATES the shipped skill and grounds through the
+# module recipe, in an ephemeral workspace whose skill was installed by
+# `install/cursor.py --target-root` — i.e. from the shipped artifacts, not from
+# a checkout the agent can read.
+#
+# CLAIM TIER. OQ-008 resolved that Cursor exposes no credential-free,
+# deterministic command to enumerate discovered skills, so the structural
+# `check_install` gate may never claim activation. This workflow is the ONLY
+# place an activation claim may be made, and it costs a model call — so it is
+# dispatch-only, never a PR gate, and gates no merge and no milestone by itself.
+# Promoting it to a gate requires an eval-policy commit (§11.8 discipline).
+#
+# TWO-JOB SPLIT, mirroring evals-smoke.yml: `build` reaches the network to fetch
+# the CLI and the runtime and to provision the workspace; `smoke` downloads that
+# bundle, installs nothing, and makes the credentialed call.
+#
+# SUPPLY-CHAIN NOTE. Cursor publishes no versioned or pinnable installer for
+# `cursor-agent` — the documented method is `curl https://cursor.com/install |
+# bash`, which is unpinned by construction. That unpinned fetch is confined to
+# the `build` job, which holds no credential; the credential lives only in
+# `smoke`, which fetches nothing. Pin this step the day Cursor ships a
+# versioned artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Task handed to the headless agent"
+        required: false
+        default: >-
+          Author a Transon template that renames the top-level key "amount" to
+          "total". Use the transon-authoring skill.
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Job 1: CLI + runtime + an installed-from-shipped-artifacts workspace ────
+  build:
+    name: Build Cursor smoke bundle (CLI + runtime + installed workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the Cursor CLI, the runtime, and provision the workspace
+        run: |
+          set -euo pipefail
+          BUNDLE="${RUNNER_TEMP}/cursorbundle"
+          mkdir -p "${BUNDLE}"
+
+          # Runtime into a RELOCATABLE target dir — the smoke job imports it via
+          # PYTHONPATH, so the shipped `python -m transon_authoring` recipe the
+          # skill body prescribes actually resolves there (OQ-020: the skill
+          # files and the runtime are acquired separately).
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --target "${BUNDLE}/pydeps" .
+
+          # Cursor CLI. See the supply-chain note above. The installer documents
+          # no install-directory override, so it lands wherever it lands (today
+          # under ~/.local/bin) and we relocate whatever it produced into the
+          # bundle rather than assuming a path.
+          curl https://cursor.com/install -fsS | bash
+          mkdir -p "${BUNDLE}/cursor"
+          AGENT="$(command -v cursor-agent || find "${HOME}" -maxdepth 4 -name 'cursor-agent' -type f -perm -u+x | head -n1)"
+          test -n "${AGENT}" || { echo "cursor-agent not found after install" >&2; exit 1; }
+          cp -RL "$(dirname "$(readlink -f "${AGENT}")")/." "${BUNDLE}/cursor/"
+          find "${BUNDLE}/cursor" -maxdepth 2 -name 'cursor-agent*' | sort
+
+          # The workspace the agent runs in: skill files installed BY THE SHIPPED
+          # INSTALLER into a target root that is not this checkout. Nothing else
+          # from the repo is copied in — if the skill does not carry what it
+          # needs, the agent cannot fall back on repo files (NFR-012).
+          WORKSPACE="${BUNDLE}/workspace"
+          mkdir -p "${WORKSPACE}"
+          python3 install/cursor.py --scope project --target-root "${WORKSPACE}"
+          echo "Provisioned workspace:"
+          find "${WORKSPACE}" -type f | sort
+
+          # The transcript secret-scanner runs in the credentialed job, which
+          # checks nothing out — ship it (and the siblings it imports).
+          cp -R scripts "${BUNDLE}/scripts"
+
+          tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/cursorbundle.tgz" cursorbundle
+
+      - name: Upload Cursor smoke bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cursor-smoke-bundle
+          path: ${{ runner.temp }}/cursorbundle.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Job 2: the credentialed headless run (fetches nothing) ─────────────────
+  smoke:
+    name: Headless activation smoke (1 episode, real Cursor)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Cursor publishes no endpoint list for the CLI, so an allow-list block
+      # here would be invented rather than derived — and a wrong one would look
+      # like a failed activation. AUDIT records every host this run touches;
+      # tighten to `block` with the observed set once a dispatch has produced it.
+      - name: Audit egress (OQ-027f(iii), audit tier)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Download + unpack the bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cursor-smoke-bundle
+          path: ${{ runner.temp }}
+
+      - name: Unpack + sanity-check the transfer (before any credentialed call)
+        run: |
+          set -euo pipefail
+          tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/cursorbundle.tgz"
+          B="${RUNNER_TEMP}/cursorbundle"
+          AGENT="$(find "${B}/cursor" -maxdepth 3 -name 'cursor-agent' -type f | head -n1)"
+          test -n "${AGENT}" || { echo "cursor-agent missing from the bundle" >&2; exit 1; }
+          {
+            echo "PYTHONPATH=${B}/pydeps"
+            echo "CURSOR_AGENT=${AGENT}"
+            echo "WORKSPACE=${B}/workspace"
+          } >> "${GITHUB_ENV}"
+          # The recipe the skill body prescribes must resolve here, or a failed
+          # activation would be indistinguishable from a missing runtime.
+          PYTHONPATH="${B}/pydeps" python3 -m transon_authoring metadata >/dev/null
+          echo "runtime recipe OK"
+          test -f "${B}/workspace/.cursor/skills/transon-authoring/SKILL.md"
+          echo "installed skill present"
+
+      - name: Run the headless episode
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          # Bound via env, never `${{ }}`-interpolated into the script body — a
+          # dispatch input spliced into the shell would be a script injection.
+          SMOKE_PROMPT: ${{ inputs.prompt }}
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/cursor-transcript"
+          mkdir -p "${OUT}"
+          cd "${WORKSPACE}"
+          set +e
+          "${CURSOR_AGENT}" -p --output-format text \
+            "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
+          echo "cursor-agent exit code: $?"
+          set -e
+          tail -c 4000 "${OUT}/episode.txt" || true
+
+      # The activation claim, and the only place one may be made (OQ-008): the
+      # transcript must show the shipped grounding recipe being used. A negative
+      # result fails this dispatch loudly — it gates no merge, but a silent red
+      # would defeat the point of running it.
+      - name: Assert the shipped skill activated and grounded
+        if: always()
+        run: |
+          python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" <<'PY'
+          import os, sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+          grounded = "python -m transon_authoring" in text or "python3 -m transon_authoring" in text
+          named = "transon-authoring" in text
+
+          lines = [
+              "### Cursor headless activation smoke",
+              "",
+              f"- **skill named in transcript:** {named}",
+              f"- **grounded via the module recipe:** {grounded}",
+              f"- **transcript bytes:** {len(text)}",
+              "",
+              "_Dispatch-tier claim (OQ-008). Gates no merge and no milestone._",
+          ]
+          summary = "\n".join(lines) + "\n"
+          print(summary)
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              Path(step_summary).open("a", encoding="utf-8").write(summary)
+
+          if not grounded:
+              print("SMOKE FAIL: no evidence the shipped skill was activated and "
+                    "grounded through the module recipe")
+              sys.exit(1)
+          print("SMOKE PASS: a fresh headless Cursor activated the installed "
+                "skill and grounded through the module recipe.")
+          PY
+
+      - name: Secret-scan the transcript (OQ-027f(iv) / NFR-011)
+        id: scan
+        if: always()
+        run: |
+          python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
+            "${RUNNER_TEMP}/cursor-transcript"
+
+      - name: Upload the transcript (build artifact, never committed)
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cursor-smoke-transcript
+          path: ${{ runner.temp }}/cursor-transcript
+          retention-days: 7
+          if-no-files-found: ignore
