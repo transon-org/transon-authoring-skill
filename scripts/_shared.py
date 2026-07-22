@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+#: The canonical shipped skill body, relative to a repo/bundle root: the one
+#: editable ``SKILL.md``, at the plugin-native path (SPEC §11.9).
+SKILL_REL = Path("skills") / "transon-authoring" / "SKILL.md"
+
 #: The additive per-episode token telemetry keys (FR-035 / AC-034).
 TOKEN_KEYS = ("input", "output", "cache_read", "cache_creation", "turns")
 
@@ -83,12 +87,16 @@ def usage_tokens(get) -> dict[str, int]:
 def prepare_workspace(
     fixture: dict[str, Any], repo_root: Path, workspace: Path
 ) -> tuple[str, str]:
-    """Read ``SKILL.md``, optionally write ``samples.json``, build the prompt.
+    """Read the canonical ``SKILL.md``, optionally write ``samples.json``,
+    build the prompt.
+
+    The body is read from ``skills/transon-authoring/SKILL.md`` — the one
+    canonical location (SPEC §11.9).
 
     Returns ``(skill_md, prompt)``. Raises on I/O faults — callers classify
     those as ``infra_error`` (OQ-016d).
     """
-    skill_md = (repo_root / "SKILL.md").read_bytes().decode("utf-8")
+    skill_md = (repo_root / SKILL_REL).read_bytes().decode("utf-8")
     prompt = fixture["intent_nl"]
     if fixture.get("samples") is not None:
         (workspace / "samples.json").write_text(

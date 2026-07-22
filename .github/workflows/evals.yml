@@ -101,7 +101,17 @@ jobs:
           # source_ref provenance-LINK check that used to force docs/ in here is
           # withdrawn (see FR-033 rev 2026-07-15) — a repo-integrity check has no
           # business inside the credential-holding, checkout-free gate job.
-          cp -R scripts evals SKILL.md "${BUNDLE}/repo/"
+          #
+          # A5 ladder step 2 (OQ-027a): the driver provisions each episode
+          # workspace by RUNNING the shipped installer over this bundled repo
+          # dir as its source root, so the bundle must also carry everything
+          # install/claude.py reads — install/, adapters/, pyproject.toml and
+          # resources/metadata-snapshot.json. NOT an unpacked sdist: the claim is
+          # that the shipped installer provisions the workspace (the built
+          # archive is ladder step 1's job).
+          mkdir -p "${BUNDLE}/repo/resources"
+          cp -R scripts evals install adapters skills pyproject.toml "${BUNDLE}/repo/"
+          cp resources/metadata-snapshot.json "${BUNDLE}/repo/resources/"
 
           tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/evalbundle.tgz" evalbundle
           ls -la "${RUNNER_TEMP}/evalbundle.tgz"
@@ -182,6 +192,18 @@ jobs:
           # dispatch; the smoke already had the inline binding).
           PYTHONPATH="${PYDEPS}" python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
           "${CLI}" --version
+          # A5 ladder step 2 (OQ-027a): the driver provisions every episode
+          # workspace by running install/claude.py over the bundled repo dir. A
+          # missing installer input would surface only as a per-episode
+          # infra_error — AFTER provider spend — so assert the staged source root
+          # is complete here, before any model call.
+          R="${RUNNER_TEMP}/evalbundle/repo"
+          for f in skills/transon-authoring/SKILL.md pyproject.toml \
+                   resources/metadata-snapshot.json \
+                   adapters/claude/adapter.json install/claude.py install/_shared.py; do
+            test -f "${R}/${f}" || { echo "eval bundle is missing ${f}" >&2; exit 1; }
+          done
+          echo "installer source root complete"
 
       - name: Run eval gate (key withheld from tool sandbox — OQ-027f(ii))
         # Bind the secret via env: (not `${{ }}` interpolation in the script

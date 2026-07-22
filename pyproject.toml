@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "transon-authoring"
-version = "0.0.1"
+version = "0.1.0"
 description = "Authoring capability for AI agents that produces engine-valid Transon JSON, verified to assurance: matched (docs/SPEC.md)"
 readme = "README.md"
 requires-python = ">=3.10"

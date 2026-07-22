@@ -18,7 +18,7 @@ import pytest
 from transon_authoring._ingress import load_schema, schema_violations
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_PATH = REPO_ROOT / "SKILL.md"
+SKILL_PATH = REPO_ROOT / "skills" / "transon-authoring" / "SKILL.md"
 
 # The mechanical scorer lives under scripts/; import it the same way
 # tests/test_check_evals.py does (offline, refuse scoring needs no re-verify).

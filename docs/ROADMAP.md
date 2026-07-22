@@ -65,10 +65,15 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
      fixtures — catches packaging gaps (e.g. bundled `resources/` missing from the wheel)
      that editable installs cannot see.
   2. **Distribution-faithful eval provisioning:** the §11.8 harness workspace is installed
-     by `install/claude.py --target-root <workspace>` from a release-archive-shaped layout
-     before host auto-activation (OQ-027a), so the gate measures the installed-from-
-     distribution configuration; validated first by a targeted `--only` probe. Installed
-     bytes are byte-identical to canonical, so this alone forces no baseline reset — any
+     by `install/claude.py --target-root <workspace>` before host auto-activation (OQ-027a),
+     so the gate measures the installed-from-distribution configuration; validated first by a
+     targeted `--only` probe. The installer's **source root is the staged file subset the eval
+     bundle already carries** — `skills/transon-authoring/SKILL.md`, `pyproject.toml`,
+     `resources/metadata-snapshot.json`,
+     `adapters/`, `install/` — not an unpacked sdist: the claim is that the shipped installer
+     provisions the workspace, not that the built archive was exercised (that is ladder step 1's
+     job). Installed bytes are byte-identical to canonical and the added
+     `.install-manifest.json` is inert to the host, so this forces no baseline reset — any
      `harness.kind`/`version` change still follows §11.8 discipline.
   3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008):**
      `cursor-agent -p` in an ephemeral workspace whose skill was installed by
@@ -83,11 +88,15 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
   5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout, gated by
      `check_install` (AC-040). Structural only — it needs no published package and makes no
      catalog claim.
-  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
-  post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
-  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8).
-  *DoD:* ladder steps 1–5 green/recorded; release notes cite skill version, engine pin,
-  snapshot hash; first PyPI publish per OQ-020; AC-040 and AC-041 green. **FR-037b (external catalog
+  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` body measured at the current
+  pin, under the AD-007 repin's pin+corpus baseline reset (§11.8). A further full gate is required
+  only when a §11.8 reset trigger fires — pin, corpus, gate model, or harness `kind`/`version`;
+  ladder step 2's provisioning change is not one, and is validated by its own targeted `--only`
+  probe rather than by re-measuring the corpus. Where the shipped body has moved since the
+  measurement without tripping a trigger, the release record states the gap (NFR-008).
+  *DoD:* ladder steps 1–5 green/recorded; the `CHANGELOG.md` release record cites skill version,
+  engine pin, snapshot hash and each ladder outcome (NFR-008); first PyPI publish per OQ-020;
+  AC-040, AC-041, and AC-042 green. **FR-037b (external catalog
   submission) gates nothing** and begins only after the PyPI publish, since a listed skill whose
   runtime is unpublished is inert.
 
@@ -183,8 +192,7 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   user-level skills at `~/.cursor/skills/` (the tool-neutral `~/.agents/skills/` is deliberately
   not adopted), so project-only was a product
   choice, not a platform limit, and NFR-007 prefers equal capability over a documented
-  exclusion. Normative in FR-038 / AC-041 / §11.9; the adapter's `personal scope` exclusion is
-  retired when FR-038 lands.
+  exclusion. Normative in FR-038 / AC-041 / §11.9.
 - **OQ-029** — **Resolved (2026-07-22):** one §11.6 grounding recipe in every channel;
   runtime acquisition is documented per channel, never encoded in the recipe. `pip install
   transon-authoring` stays the prerequisite, stated in the plugin manifest and — as a

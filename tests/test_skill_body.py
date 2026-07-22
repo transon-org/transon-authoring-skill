@@ -37,7 +37,12 @@ from transon_authoring.__main__ import _build_parser
 from transon_authoring._ingress import IngressError, schema_violations
 from transon_authoring.config import DEFAULT_REPAIR_ATTEMPTS, build_config
 
-SKILL_PATH = Path(__file__).resolve().parent.parent / "SKILL.md"
+SKILL_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "skills"
+    / "transon-authoring"
+    / "SKILL.md"
+)
 
 
 def _body() -> str:

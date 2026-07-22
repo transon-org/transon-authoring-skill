@@ -1,4 +1,5 @@
-"""FR-019 / NFR-009 (AC-009, and AC-007's gate half) — scripts/check_install.py.
+"""FR-019 / NFR-009 (AC-009, AC-007's gate half, AC-040, AC-041) and
+NFR-008 / AC-042 (release record) — scripts/check_install.py.
 
 The gate is invoked via subprocess with the interpreter pytest runs under
 (same style as tests/test_install.py), pointed at throwaway fixture roots
@@ -35,6 +36,42 @@ description: Fixture skill body for the install-integrity gate.
 # transon-authoring (fixture)
 """
 
+PLUGIN_JSON = {
+    "name": "transon-authoring",
+    "description": "Fixture plugin manifest. Requires the runtime: "
+    "pip install transon-authoring.",
+    "version": "0.0.1",
+}
+MARKETPLACE_JSON = {
+    "name": "transon-authoring",
+    "owner": {"name": "fixture-owner"},
+    "plugins": [{"name": "transon-authoring", "source": "./"}],
+}
+
+# NFR-008 / AC-042 fixtures: the release record and its two other sources of
+# truth (the pyproject pin above, and this provenance file's snapshot hash).
+FIXTURE_SNAPSHOT_SHA = "0123456789abcdef" * 4
+SNAPSHOT_MD = f"""\
+# Metadata snapshot provenance (fixture)
+
+```json
+{{
+  "algorithm": "sha256",
+  "engine_version": "0.2.3",
+  "snapshot_sha256": "{FIXTURE_SNAPSHOT_SHA}"
+}}
+```
+"""
+CHANGELOG_MD = f"""\
+# Changelog
+
+## 0.0.1 — 2026-07-22
+
+- Skill version: `0.0.1`
+- Engine pin: `transon==0.2.3`
+- Snapshot hash (`snapshot_sha256`): `{FIXTURE_SNAPSHOT_SHA}`
+"""
+
 
 def run_gate(*argv: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -48,10 +85,15 @@ def make_fake_root(
     name: str = "root",
     skill_md: str = SKILL_MD,
     adapter_files: list[str] | None = None,
+    plugin_json: dict | None = None,
+    marketplace_json: dict | None = None,
+    changelog_md: str | None = None,
+    snapshot_md: str | None = None,
+    omit: tuple[str, ...] = (),
 ) -> Path:
     root = tmp_path / name
     files = adapter_files if adapter_files is not None else ["SKILL.md"]
-    for tool, scopes in (("claude", ["project", "personal"]), ("cursor", ["project"])):
+    for tool in ("claude", "cursor"):
         adapter_dir = root / "adapters" / tool
         adapter_dir.mkdir(parents=True)
         (adapter_dir / "adapter.json").write_text(
@@ -59,7 +101,7 @@ def make_fake_root(
                 {
                     "schema_version": "1.0",
                     "tool": tool,
-                    "scopes": scopes,
+                    "scopes": ["project", "personal"],
                     "files": files,
                     "exclusions": [],
                 }
@@ -71,14 +113,41 @@ def make_fake_root(
     (root / "resources" / "metadata-snapshot.json").write_bytes(
         b'{\n  "fixture_snapshot": true\n}\n'
     )
+    (root / "resources" / "metadata-snapshot.md").write_text(
+        snapshot_md if snapshot_md is not None else SNAPSHOT_MD, encoding="utf-8"
+    )
     (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
-    (root / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    # The canonical body is the plugin-path file — there is no second copy.
+    if "skill" not in omit:
+        skill_dir = root / "skills" / "transon-authoring"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    if "CHANGELOG.md" not in omit:
+        (root / "CHANGELOG.md").write_text(
+            changelog_md if changelog_md is not None else CHANGELOG_MD,
+            encoding="utf-8",
+        )
+
+    plugin_dir = root / ".claude-plugin"
+    plugin_dir.mkdir()
+    if "plugin.json" not in omit:
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_json if plugin_json is not None else PLUGIN_JSON),
+            encoding="utf-8",
+        )
+    if "marketplace.json" not in omit:
+        (plugin_dir / "marketplace.json").write_text(
+            json.dumps(
+                marketplace_json if marketplace_json is not None else MARKETPLACE_JSON
+            ),
+            encoding="utf-8",
+        )
     return root
 
 
 def test_ac009_gate_green_on_repo():
     # AC-009 / FR-019 / NFR-009 — the shipped repo passes the full rehearsal
-    # (all three tool/scope combos + OQ-010 lint + cursor runtime smoke).
+    # (all four tool/scope combos + OQ-010 lint + cursor runtime smoke).
     result = run_gate("--root", str(REPO_ROOT))
     assert result.returncode == 0, result.stderr
     assert "FAIL" not in result.stderr
@@ -161,7 +230,12 @@ def test_ac007_gate_covers_idempotent_uninstall(tmp_path: Path):
     root = make_fake_root(tmp_path)
     result = run_gate("--root", str(root))
     assert result.returncode == 0, result.stderr
-    for combo in ("claude/project", "claude/personal", "cursor/project"):
+    for combo in (
+        "claude/project",
+        "claude/personal",
+        "cursor/project",
+        "cursor/personal",
+    ):
         for check in (
             "re-install idempotent",
             "uninstall removes the clean destination",
@@ -169,6 +243,289 @@ def test_ac007_gate_covers_idempotent_uninstall(tmp_path: Path):
             "uninstall without manifest is a no-op",
         ):
             assert f"{combo}: {check}" in result.stdout, (combo, check)
+
+
+def test_ac041_gate_exercises_cursor_personal_combo():
+    # AC-041 / FR-038 — the gate rehearses cursor/personal alongside the other
+    # three combos on the shipped repo: install-table destination, canonical
+    # bytes, complete manifest, OQ-010 preconditions. Structural only — no
+    # claim that Cursor discovered or activated the skill (OQ-008).
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    for check in (
+        "installed at the install-table destination",
+        "installed files byte-identical to canonical",
+        "manifest complete and correct",
+        "SKILL.md frontmatter discoverability preconditions",
+    ):
+        assert f"cursor/personal: {check}" in result.stdout, check
+
+
+def test_ac040_plugin_green_on_repo():
+    # AC-040 / FR-037 (a) — the shipped repo's plugin tree is structurally
+    # sound:
+    # both manifests, the version/name agreement, the local marketplace source,
+    # and the canonical body sitting at the plugin-native path.
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    for check in (
+        "plugin: .claude-plugin/plugin.json",
+        "plugin: .claude-plugin/marketplace.json",
+        "plugin: the canonical skill body is present at "
+        "skills/transon-authoring/SKILL.md",
+        "plugin: SKILL.md frontmatter discoverability preconditions",
+    ):
+        assert check in result.stdout, check
+
+
+def test_ac040_red_on_missing_plugin_manifest(tmp_path: Path):
+    # AC-040(a) — a missing plugin.json is red.
+    root = make_fake_root(tmp_path, omit=("plugin.json",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert ".claude-plugin/plugin.json" in result.stderr
+
+
+def test_ac040_red_on_plugin_name_not_skill_dir(tmp_path: Path):
+    # AC-040(a) — the plugin `name` must equal the skill directory name.
+    root = make_fake_root(
+        tmp_path, plugin_json={**PLUGIN_JSON, "name": "some-other-plugin"}
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "some-other-plugin" in result.stderr
+
+
+def test_ac040_red_on_version_mismatch_with_pyproject(tmp_path: Path):
+    # AC-040(a) — plugin.json version must equal the pyproject project version.
+    root = make_fake_root(tmp_path, plugin_json={**PLUGIN_JSON, "version": "9.9.9"})
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "9.9.9" in result.stderr
+    assert "0.0.1" in result.stderr
+
+
+def test_ac040_red_on_description_without_pip_install_string(tmp_path: Path):
+    # AC-040(a) / OQ-029 — the description carries the runtime prerequisite
+    # literally, so an agent reading only the manifest can acquire the runtime.
+    root = make_fake_root(
+        tmp_path,
+        plugin_json={**PLUGIN_JSON, "description": "Fixture plugin manifest."},
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "pip install transon-authoring" in result.stderr
+
+
+def test_ac040_red_on_missing_marketplace_owner(tmp_path: Path):
+    # AC-040(b) — marketplace.json must carry a non-empty owner.
+    entry = {k: v for k, v in MARKETPLACE_JSON.items() if k != "owner"}
+    root = make_fake_root(tmp_path, marketplace_json=entry)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "owner" in result.stderr
+
+
+def test_ac040_red_on_marketplace_source_outside_plugin_root(tmp_path: Path):
+    # AC-040(b) — a source pointing anywhere but the plugin root fetches no
+    # plugin manifest and no skill body.
+    root = make_fake_root(
+        tmp_path,
+        marketplace_json={
+            **MARKETPLACE_JSON,
+            "plugins": [{"name": "transon-authoring", "source": "./docs"}],
+        },
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "source" in result.stderr
+    assert "./docs" in result.stderr
+
+
+def test_ac040_red_on_non_path_marketplace_source(tmp_path: Path):
+    # AC-040(b) — the gate claims local resolution only; a non-string source
+    # form (e.g. a github descriptor) is red, not silently accepted.
+    root = make_fake_root(
+        tmp_path,
+        marketplace_json={
+            **MARKETPLACE_JSON,
+            "plugins": [
+                {
+                    "name": "transon-authoring",
+                    "source": {"source": "github", "repo": "transon-org/x"},
+                }
+            ],
+        },
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "source" in result.stderr
+
+
+def test_ac040_red_on_missing_canonical_body(tmp_path: Path):
+    # AC-040(c) — marketplace hosts fetch the repo tree, and the plugin path IS
+    # the canonical path, so a plugin root with no body there is red.
+    root = make_fake_root(tmp_path, omit=("skill",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "skills/transon-authoring/SKILL.md" in result.stderr
+
+
+def test_ac040_red_on_plugin_skill_frontmatter_precondition(tmp_path: Path):
+    # AC-040(d) / OQ-010 — the preconditions are asserted on the canonical
+    # body at the plugin path. A body without a description turns both the
+    # install lint and the plugin lint red.
+    root = make_fake_root(
+        tmp_path, skill_md="---\nname: transon-authoring\n---\n\n# body\n"
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "plugin: frontmatter description" in result.stderr
+
+
+def test_ac040_no_catalog_or_discoverability_claim_in_output(tmp_path: Path):
+    # AC-040 / FR-037b — packaging integrity only: the gate never claims a
+    # catalog listing or host discovery.
+    root = make_fake_root(tmp_path)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    output = (result.stdout + result.stderr).lower()
+    for claim in ("catalog", "listed in", "discovered", "installable from"):
+        assert claim not in output, claim
+
+
+def test_ac042_release_record_green_on_repo():
+    # AC-042 / NFR-008 — the shipped repo's CHANGELOG.md topmost release entry
+    # agrees with all three sources of truth (pyproject version, pyproject
+    # engine pin, resources/metadata-snapshot.md snapshot_sha256).
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry" in result.stdout
+    # The OK line claims agreement with the repo's sources, never that the
+    # release was published (the entry exists before the tag is pushed).
+    assert "agrees with" in result.stdout
+
+
+def test_ac042_red_on_missing_changelog(tmp_path: Path):
+    # AC-042 — no repo-root CHANGELOG.md at all is red.
+    root = make_fake_root(tmp_path, omit=("CHANGELOG.md",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "CHANGELOG.md" in result.stderr
+
+
+def test_ac042_red_on_no_release_version_named(tmp_path: Path):
+    # AC-042 — a changelog whose only heading names no release version (an
+    # in-progress file) records no release and is red.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md="# Changelog\n\n## Unreleased\n\n- work in progress\n",
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "names a release version" in result.stderr
+
+
+def test_ac042_red_on_version_mismatch(tmp_path: Path):
+    # AC-042 — the topmost release entry must name the pyproject project
+    # version (0.0.1 in the fixture); 9.9.9 is the stale-release-record case.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("## 0.0.1", "## 9.9.9"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "9.9.9" in result.stderr
+    assert "0.0.1" in result.stderr
+
+
+def test_ac042_red_on_stale_engine_pin(tmp_path: Path):
+    # AC-042 — an entry stating a pin other than the pyproject `transon==…`
+    # is the stale-release-record failure.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("transon==0.2.3", "transon==0.1.9"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "transon==0.2.3" in result.stderr
+
+
+def test_ac042_red_on_stale_snapshot_hash(tmp_path: Path):
+    # AC-042 — an entry stating a snapshot hash other than the
+    # resources/metadata-snapshot.md snapshot_sha256 is red.
+    root = make_fake_root(
+        tmp_path, changelog_md=CHANGELOG_MD.replace(FIXTURE_SNAPSHOT_SHA, "f" * 64)
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert FIXTURE_SNAPSHOT_SHA in result.stderr
+
+
+def test_ac042_v_prefixed_release_heading_is_recognised(tmp_path: Path):
+    # AC-042 — the release trigger is `refs/tags/v*`, so `## v0.0.1 — <date>`
+    # is exactly what a maintainer writes at tag time. The leading `v` is
+    # stripped before the version token is read: the entry names 0.0.1 and
+    # agrees with all three sources, so the gate is green.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("## 0.0.1", "## v0.0.1"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
+
+
+def test_ac042_unreleased_heading_naming_a_version_is_not_a_release_entry(
+    tmp_path: Path,
+):
+    # AC-042 — "Unreleased or in-progress headings above the topmost release
+    # entry are ignored", whatever version token they carry. An
+    # `## Unreleased — targeting 0.0.1` heading must not be taken as the
+    # release entry even though it names the pyproject version; the entry
+    # below it is the release record.
+    changelog = (
+        "# Changelog\n\n"
+        "## Unreleased — targeting 0.0.1\n\n"
+        "- not yet released\n\n" + CHANGELOG_MD.split("\n", 2)[2]
+    )
+    root = make_fake_root(tmp_path, changelog_md=changelog)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
+
+    # …and when the in-progress heading is the *only* heading naming a
+    # version, the file records no release at all: red, not green.
+    only_unreleased = (
+        "# Changelog\n\n"
+        "## In progress — 0.0.1\n\n"
+        "- Skill version: `0.0.1`\n"
+        "- Engine pin: `transon==0.2.3`\n"
+        f"- Snapshot hash (`snapshot_sha256`): `{FIXTURE_SNAPSHOT_SHA}`\n"
+    )
+    root2 = make_fake_root(tmp_path, name="root2", changelog_md=only_unreleased)
+    result2 = run_gate("--root", str(root2))
+    assert result2.returncode == 1
+    assert "names a release version" in result2.stderr
+
+
+def test_nfr008_unreleased_heading_above_release_entry_is_ignored(tmp_path: Path):
+    # AC-042 / NFR-008 — headings above the topmost release entry that name no
+    # release version are ignored, values inside them included: only the
+    # topmost *release* entry is checked against the sources of truth.
+    unreleased = (
+        "# Changelog\n\n"
+        "## Unreleased\n\n"
+        "- planned repin to `transon==9.9.9`\n"
+        f"- planned snapshot hash `{'e' * 64}`\n\n"
+    )
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=unreleased + CHANGELOG_MD.split("\n", 2)[2],
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
 
 
 def test_ac009_no_discoverability_claim_in_output(tmp_path: Path):

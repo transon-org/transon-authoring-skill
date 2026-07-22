@@ -2,14 +2,20 @@
 """check-parity — adapter parity + shipped self-sufficiency gate
 (NFR-007 / AC-005; NFR-012 / AC-032; SPEC §13).
 
-Pure offline text/tree scan over the shipped surface: the root ``SKILL.md``
-plus every file under ``adapters/``. Findings are deterministic — sorted by
-file path, then line number — and reported on stderr.
+Pure offline text/tree scan. The text lints cover the shipped surface: the
+canonical ``skills/transon-authoring/SKILL.md`` plus every file under
+``adapters/``. The single-source rule walks the whole repo tree. Findings
+are deterministic — sorted by file path, then line number — and reported on
+stderr.
 
 Parity half (NFR-007 / AC-005):
 
-1. Exactly one ``SKILL.md`` in the shipped surface: the repo root. Any file
-   named ``SKILL.md`` under ``adapters/`` is red (single-source rule).
+1. Exactly one ``SKILL.md`` in the repo, at the canonical path
+   ``skills/transon-authoring/SKILL.md``. Any other file of that name is
+   red, except under ``.git/``, ``.venv*/``, ``dist/``, ``build/``,
+   ``evals/_runs/`` and the install destinations ``.claude/`` and
+   ``.cursor/`` — an installer run against the checkout itself legitimately
+   writes a body there.
 2. ``adapters/claude/adapter.json`` and ``adapters/cursor/adapter.json``
    both parse; their ``files`` lists are equal; every scope/capability
    difference appears in the narrower adapter's ``exclusions`` with a
@@ -41,12 +47,14 @@ Exit codes: 0 all green, 1 any finding.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
-from _shared import report_failures
+from _shared import SKILL_REL, report_failures
 
 #: The module CLI's closed subcommand set (SPEC §11.6). Lives here because
 #: the shipped files cannot cite the spec section themselves (NFR-012).
@@ -63,6 +71,19 @@ SUBCOMMANDS = frozenset(
         "init-config",
     }
 )
+
+#: The canonical shipped body: the one editable ``SKILL.md``, sitting at the
+#: plugin-native path so the plugin channel needs no copy of it (FR-037a).
+CANONICAL_SKILL_REL = SKILL_REL.as_posix()
+
+#: Directory names pruned from the single-source ``SKILL.md`` walk (AC-005).
+#: ``.claude``/``.cursor`` are the install destinations: an installer aimed at
+#: the checkout itself writes a body there, and that copy is the installer's
+#: output, not a second source.
+PRUNED_DIR_NAMES = frozenset({".git", "dist", "build", ".claude", ".cursor"})
+PRUNED_DIR_GLOBS = (".venv*",)
+#: Pruned only at this exact position, not by bare directory name.
+PRUNED_DIR_PATHS = frozenset({"evals/_runs"})
 
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 RECIPE_RE = re.compile(r"python3?\s+-m\s+transon_authoring\s+([A-Za-z0-9_-]+)")
@@ -233,15 +254,68 @@ def check_adapter_parity(root: Path, findings: list) -> None:
                 )
 
 
+def is_pruned(rel_dir: str) -> bool:
+    """True for a repo-relative directory path outside the AC-005 walk."""
+    if rel_dir in PRUNED_DIR_PATHS:
+        return True
+    name = rel_dir.rsplit("/", 1)[-1]
+    return name in PRUNED_DIR_NAMES or any(
+        fnmatch.fnmatch(name, glob) for glob in PRUNED_DIR_GLOBS
+    )
+
+
+def find_skill_bodies(root: Path) -> list[str]:
+    """Repo-relative paths of every ``SKILL.md`` in the walked tree (AC-005)."""
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        prefix = "" if rel_dir == "." else f"{rel_dir}/"
+        dirnames[:] = [
+            name for name in dirnames if not is_pruned(f"{prefix}{name}")
+        ]
+        if "SKILL.md" in filenames:
+            found.append(f"{prefix}SKILL.md")
+    return found
+
+
+def check_single_source(root: Path, findings: list) -> None:
+    """Parity half check 1: the canonical body exists and is the only one."""
+    if not (root / SKILL_REL).is_file():
+        findings.append(
+            (
+                CANONICAL_SKILL_REL,
+                0,
+                f"missing {CANONICAL_SKILL_REL} — the single shipped skill "
+                "body lives at that canonical path (NFR-007 / AC-005)",
+            )
+        )
+    for rel in find_skill_bodies(root):
+        if rel == CANONICAL_SKILL_REL:
+            continue
+        if rel == "SKILL.md":
+            where = "second SKILL.md at the repo root"
+        elif rel.startswith("adapters/"):
+            where = (
+                "adapter-side SKILL.md copy — adapters share the ONE "
+                "canonical body, never a fork"
+            )
+        else:
+            where = f"second SKILL.md at {rel}"
+        findings.append(
+            (
+                rel,
+                0,
+                f"{where} — the one body lives at {CANONICAL_SKILL_REL} and "
+                "is never copied (NFR-007 / AC-005)",
+            )
+        )
+
+
 def scan(root: Path) -> list[tuple[str, int, str]]:
     findings: list[tuple[str, int, str]] = []
 
-    skill_path = root / "SKILL.md"
-    if not skill_path.is_file():
-        findings.append(
-            ("SKILL.md", 0, "missing root SKILL.md — the single shipped "
-             "skill body lives at the repo root (NFR-007 / AC-005)")
-        )
+    skill_path = root / SKILL_REL
+    check_single_source(root, findings)
 
     adapters_dir = root / "adapters"
     adapter_files: list[Path] = []
@@ -253,19 +327,6 @@ def scan(root: Path) -> list[tuple[str, int, str]]:
         findings.append(
             ("adapters", 0, "missing adapters/ directory (NFR-007 / AC-005)")
         )
-
-    # Parity check 1: exactly one SKILL.md, at the repo root.
-    for path in adapter_files:
-        if path.name == "SKILL.md":
-            rel = path.relative_to(root).as_posix()
-            findings.append(
-                (
-                    rel,
-                    0,
-                    "adapter-side SKILL.md copy — adapters share the ONE "
-                    "root SKILL.md, never a fork (NFR-007 / AC-005)",
-                )
-            )
 
     # Parity check 2: adapter manifests agree or document exclusions.
     if adapters_dir.is_dir():
@@ -296,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
-        help="repo root containing SKILL.md and adapters/ "
+        help=f"repo root containing {CANONICAL_SKILL_REL} and adapters/ "
         "(default: this script's repo)",
     )
     args = parser.parse_args(argv)
