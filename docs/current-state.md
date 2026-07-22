@@ -8,12 +8,27 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `e8aa513` — refactor: one SKILL.md, at the plugin-native canonical path |
+| Repo HEAD | `60be2fa` — spec: A5 entry condition is already satisfied; no full gate rerun |
 | Branch | `a5-release` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**A5 entry condition amended — no full eval rerun (`60be2fa`).** The entry condition asked for a
+post-repin real-host gate "before release"; that run had already happened (29782513843, 2026-07-20,
+green over 54×3, baseline repopulated), so the sentence predated the run it demanded and taking it
+literally meant ≈$19 to re-measure an unchanged artifact. Verified before amending: no §11.8 reset
+trigger has fired — pin `0.2.3`, corpus (baseline 54, lint green), harness `agent-sdk`/`0.2.116` all
+unchanged, and ladder 2's provisioning is already ruled reset-free by ROADMAP §14 — and the A5
+branch changes the measured body by **zero bytes** (blob `710e69a4` throughout). The body has moved
+once since that gate, by the additive runtime-prerequisite paragraph in `9be1f66`; `CHANGELOG.md`
+now publishes the scores **and** states they reflect the shipped body minus that paragraph, rather
+than implying the shipped bytes were measured. No baseline, target or pin was touched. Ladder 2 is
+validated instead by its own targeted `--only` probe (~$0.50), which **has not run** — it needs the
+branch pushed, then `gh workflow run evals.yml -f fixtures=<id>`; read the per-fixture majority, not
+the aggregate (a single matched fixture leaves the adversarial bucket empty, so the aggregate is red
+by construction)._
 
 _**Single-`SKILL.md` restructure DONE (`e1b020c` spec + `e8aa513` impl; review fixes uncommitted).**
 User decision 2026-07-22: stop carrying two copies of the body. The repo had the canonical
