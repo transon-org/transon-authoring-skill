@@ -8,86 +8,43 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `60be2fa` — spec: A5 entry condition is already satisfied; no full gate rerun |
+| Repo HEAD | `18e00f1` — fix: report a recipe marker, not activation; tighten the NFR-008 flip note (review) |
 | Branch | `a5-release` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
 
-_**A5 entry condition amended — no full eval rerun (`60be2fa`).** The entry condition asked for a
-post-repin real-host gate "before release"; that run had already happened (29782513843, 2026-07-20,
-green over 54×3, baseline repopulated), so the sentence predated the run it demanded and taking it
-literally meant ≈$19 to re-measure an unchanged artifact. Verified before amending: no §11.8 reset
-trigger has fired — pin `0.2.3`, corpus (baseline 54, lint green), harness `agent-sdk`/`0.2.116` all
-unchanged, and ladder 2's provisioning is already ruled reset-free by ROADMAP §14 — and the A5
-branch changes the measured body by **zero bytes** (blob `710e69a4` throughout). The body has moved
-once since that gate, by the additive runtime-prerequisite paragraph in `9be1f66`; `CHANGELOG.md`
-now publishes the scores **and** states they reflect the shipped body minus that paragraph, rather
-than implying the shipped bytes were measured. No baseline, target or pin was touched. Ladder 2 is
-validated instead by its own targeted `--only` probe: **done** — run 29961198852 on `a5-release`,
-`seed-matched-flatten-orders` ×3, majority `pass`, zero `infra_error`, $0.49 (the aggregate is red
-by construction on one matched fixture; the per-fixture majority is the criterion)._
+_**A5 release slice — on `a5-release`, PUSHED, PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28) open, all gates green.**
+The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
+Delivered across the branch:_
+- _**FR-037a/AC-040** — the §11.9 Claude Code plugin tree (`.claude-plugin/plugin.json` +
+  `marketplace.json`), then restructured so **the plugin-native `skills/transon-authoring/SKILL.md`
+  is THE canonical body** — one `SKILL.md` in the repo, single source by absence of a second copy
+  (no generated duplicate, no identity gate); AC-005 reds on any other `SKILL.md`. The body moved
+  byte-for-byte (blob `710e69a4`), a pure path change with no §11.8 implication._
+- _**FR-038/AC-041** — Cursor personal scope; the project-only exclusion was a product choice, so
+  all four superseded artifacts were swept and `check_install` exercises `cursor/personal`._
+- _**NFR-008/AC-042** — repo-root `CHANGELOG.md` as the release record; `check_install` verifies its
+  version triplet against `pyproject.toml` + `resources/metadata-snapshot.md`. Row stays `[ ]`: the
+  mechanical half is green+cited, the release-checklist half is unperformed._
+- _**Ladder 1** dist smoke (pre-existing) and **ladder 2** installer-provisioned eval workspace —
+  ladder 2 validated by a targeted `--only` probe (run 29961198852, majority `pass`, zero
+  `infra_error`, $0.49). **Ladder 3** = `cursor-activation-smoke.yml`, dispatch-only, non-gating._
+- _Project version `0.0.1` → `0.1.0` (AC-040 forces `plugin.json`; `release.yml` forces the tag)._
 
-_**Single-`SKILL.md` restructure DONE (`e1b020c` spec + `e8aa513` impl; review fixes uncommitted).**
-User decision 2026-07-22: stop carrying two copies of the body. The repo had the canonical
-`SKILL.md` at the root plus a committed generated duplicate at `skills/transon-authoring/SKILL.md`
-held byte-identical by AC-040. **The plugin-native path is now THE canonical path** — one file,
-single source by absence of a second copy, so edit-without-regenerating cannot happen;
-`scripts/sync_plugin.py` and AC-040's identity clause are gone. The body moved byte-for-byte
-(`d2bbc87e…` before and after, blob `710e69a4` — a pure path change, no §11.8 implication).
-A root symlink was considered and **rejected**: a Windows checkout without symlink support
-materialises a text file containing `../../SKILL.md`, which would then be served as the skill body
-while `check_install` reads through the link locally and passes.
-Installers read adapter-listed files out of that directory and still write them **flat**, so
-`adapters/*/adapter.json` `files` and `.install-manifest.json` keep naming destination-relative
-`SKILL.md` and uninstall deletes the same paths as before — verified by a real install/uninstall
-against a scratch target root.
-**Second `spec-reviewer` pass** (the first covered only the two-copy design) returned 10 findings.
-Its lead finding was fair and self-inflicted: the repo-root guard was landed **code-first**, with
-no contract text authorizing it — the spec commit had deleted the only sentence describing
-`check_parity`'s scan surface and added no replacement. Fixed spec-first: **AC-005 now carries the
-normative single-source clause** (red on any `SKILL.md` other than the canonical one; excludes
-`.git/`, `.venv*/`, `dist/`, `build/`, `evals/_runs/`, and the `.claude/`/`.cursor/` install
-destinations, since an installer aimed at the checkout legitimately writes a body there), and the
-guard was widened from root-only to a pruned whole-tree walk — `docs/SKILL.md` or
-`skills/transon-authoring-v2/SKILL.md` were green before. Also fixed: the canonical-path literal is
-defined once in `scripts/_shared.py` and imported (it had been spelled independently in three
-modules, in a slice whose thesis is single source); a brittle absence-of-old-wording test dropped;
-superseded-design narrative stripped from contract text, docstrings and comments; `.gitignore` now
-carries `.claude/worktrees/` — it was only in `.git/info/exclude`, which hatchling does not read,
-so a maintainer-machine sdist build shipped a stale second `SKILL.md` from a leftover worktree._
-
-_**A5 implementable slice (branch `a5-release`, 4 commits through `2ac5ba6`, UNPUSHED).** Committed: the governed spec change
-(`33f2724`) making the release record normative — repo-root `CHANGELOG.md` named in NFR-008 and
-ARCHITECTURE §10, new **AC-042** verifying the version triplet against `pyproject.toml` +
-`resources/metadata-snapshot.md`, and ROADMAP ladder 2 pinned to the **staged file subset** as the
-installer's source root (not an unpacked sdist — that is ladder 1's claim). Then `5140202`:
-**FR-038/AC-041** (Cursor personal scope — the exclusion was a product choice, so all four
-superseded artifacts were swept together and `check_install` now exercises `cursor/personal`) and
-**FR-037a/AC-040** (the §11.9 plugin tree, `scripts/sync_plugin.py`, byte-identity gate); project
-version bumped `0.0.1` → `0.1.0`, which AC-040 forces `plugin.json` to match and `release.yml`
-forces the tag to match.
-Then `b55a15d`: **NFR-008/AC-042** (`CHANGELOG.md` + the release-record check; the row deliberately
-stays `[ ]` — the mechanical half is green and cited, the release-checklist half has not happened),
-**ladder 2** (`host_harness` provisions the workspace by running the shipped
-`install/claude.py --target-root`; provisioning failure classifies `infra_error`; both eval
-workflows bundle what the installer reads and assert it before provider spend; SPEC §11.8 reworded
-to name the installer), and **ladder 3** (`cursor-activation-smoke.yml`, dispatch-only).
-**`spec-reviewer` caught two falsehoods in the release record**, both since corrected and both
-verified independently: `transon-authoring 0.0.1` **is already on TestPyPI** (uploaded 2026-07-22
-from `main`, run 29915374804) — the record had claimed no upload existed; and ladder 1 was recorded
-"green on the CI runs of this branch" when `a5-release` has never been pushed and has no runs. The
-gate that governs this file cannot catch either: AC-042 checks only that the triplet agrees with
-`pyproject.toml` and the snapshot provenance, so **every ladder/publication line is unverified
-prose and must be checked by a human against `gh run list` before release**.
-Ladder-3 caveats to settle before it is ever dispatched: it needs a `CURSOR_API_KEY` secret that
-does not exist; OQ-027f(ii) is **not** satisfiable there (the key is the agent's own credential —
-no proxy equivalent to the Anthropic path), so it is documented as accepted residual risk needing a
-dedicated low-privilege key; the Cursor CLI installs via an unpinned `curl | bash` (Cursor ships no
-versioned artifact); egress audits rather than blocks (Cursor publishes no endpoint list); and the
-claim is limited to "the shipped recipe was used" — text output cannot distinguish activation from
-the agent reading the installed file, since its cwd is the workspace._
+_**Decisions worth not relitigating:** the ≈$19 full eval rerun was dropped (`60be2fa`) — the A5
+entry condition was already met by the green gate of 2026-07-20 (run 29782513843) and no §11.8 reset
+trigger has fired; the `CHANGELOG` discloses that the baseline predates a few additive body edits.
+**`transon-authoring 0.0.1` is already on TestPyPI** (run 29915374804) — AC-042 checks only the
+triplet, so every ladder/publication line in the `CHANGELOG` is unverified prose to check against
+`gh run list` before release. **Ladder 3 carries an unresolved credential-exposure risk** the
+platform blocks closing (Cursor ships no pinnable artifact / endpoint list / key-proxy): it runs an
+unverified `curl|bash` binary with `CURSOR_API_KEY` under audit-only egress, now gated behind an
+`accept_unverified_cli_risk=yes` dispatch input and a mandatory throwaway key. **Three
+`spec-reviewer` passes** (two-copy design; the restructure — whose lead finding was a guard landed
+code-first, since fixed spec-first via AC-005; the CodeRabbit-fix commit) and **four CodeRabbit
+rounds** are all settled._
 
 _**OQ-028 and OQ-029 resolved (branch `spec-oq028-oq029-resolution`) — no open OQs remain.**
 **OQ-029:** one §11.6 grounding recipe in every channel; acquisition is documented, never encoded in the recipe. Decided on measurement, not assumption — a `uv run --with` prototype against a locally built wheel worked (0.11s warm, exit codes preserved, engine 0.2.3 resolved transitively, no console script needed) but was rejected on two counts: its command form differs from the native recipe, which is the forked recipe OQ-029 itself forbade, and its offline behavior depends on a prunable shared cache (cold cache + no network = exit 2), weakening NFR-003. No `SessionStart` hook, since packaging never runs `pip` (OQ-020). FR-037a requires the plugin manifest `description` to contain the literal `pip install transon-authoring` (gated by AC-040), and the shipped `SKILL.md` now carries a channel-independent recovery line for `No module named transon_authoring` — without it a catalog user hit an unrecoverable error, since the manifest description is rendered at browse time and the agent never sees it. **This edits the shipped body the eval baseline was measured against.** No baseline reset is triggered (§11.8 resets are for pin/corpus/gate-model/harness changes), and the A5 pre-release rerun already covers it, but the current baseline now reflects slightly older text.
@@ -115,7 +72,8 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Push `a5-release` and open the PR (outward-facing; needs the user).
+1. Review and merge PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28)
+   (pushed, gates green, CodeRabbit settled).
 2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;

@@ -8,15 +8,10 @@ name: Cursor activation smoke (headless)
 # skill (the agent could have read the installed SKILL.md and quoted the recipe),
 # so this reports a recipe MARKER, never activation — see the pass wording below.
 #
-# CLAIM TIER. OQ-008 resolved that Cursor exposes no credential-free,
-# deterministic command to enumerate discovered skills, so the structural
-# `check_install` gate may never claim activation. This workflow costs a model
-# call and is the only place that exercises the shipped skill under a real
-# headless Cursor — but its text-only output still cannot PROVE activation (it
-# reports a recipe marker, below), so it too makes no activation claim. It is
-# dispatch-only, never a PR gate, and gates no merge and no milestone. A genuine
-# activation claim would need the CLI's structured skill/tool events and an
-# eval-policy commit (§11.8 discipline).
+# CLAIM: this reports a recipe MARKER, not skill activation, and gates nothing.
+# It is dispatch-only (never a PR gate) and costs a model call. Its text-only
+# output cannot prove the host activated the skill — a marker check is the
+# strongest claim the CLI's plain output supports (OQ-008).
 #
 # TWO-JOB SPLIT, mirroring evals-smoke.yml: `build` reaches the network to fetch
 # the CLI and the runtime and to provision the workspace; `smoke` downloads that
@@ -243,14 +238,10 @@ jobs:
           python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
             "${RUNNER_TEMP}/cursor-transcript"
 
-      # OQ-008 permits an activation claim only at this credentialed tier — but
-      # the claim still has to be earned, and text output alone cannot earn the
-      # strong form: the agent's cwd IS the provisioned workspace, so it could
-      # simply have read the installed SKILL.md and quoted the recipe without the
-      # host ever activating it as a skill. So this step claims only what the
-      # transcript shows. Upgrading to a genuine activation claim means asserting
-      # on the CLI's own structured skill/tool events (`--output-format json`)
-      # once a dispatch has shown what those events look like.
+      # Claims only what the transcript shows — a recipe marker, not activation.
+      # The agent's cwd IS the provisioned workspace, so it could read the
+      # installed SKILL.md and quote the recipe without the host activating it as
+      # a skill; plain text output cannot tell the two apart.
       - name: Assert the episode succeeded and the recipe marker appeared
         if: always() && steps.scan.outcome == 'success'
         run: |
@@ -262,6 +253,7 @@ jobs:
           path = Path(sys.argv[1])
           status_path = Path(sys.argv[2])
           text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+          transcript_bytes = path.stat().st_size if path.is_file() else 0
           # A missing status file means the run step never reached the recorder —
           # treat as failure, not as an implicit pass.
           status = status_path.read_text().strip() if status_path.is_file() else "missing"
@@ -274,7 +266,7 @@ jobs:
               f"- **cursor-agent exit status:** `{status}`",
               f"- **skill name present in transcript:** {named}",
               f"- **module-recipe marker observed:** {grounded}",
-              f"- **transcript bytes:** {len(text)}",
+              f"- **transcript bytes:** {transcript_bytes}",
               "",
               "",
               "_Dispatch-tier observation (OQ-008). Text output cannot distinguish "
