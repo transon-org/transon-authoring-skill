@@ -1,4 +1,5 @@
-"""FR-019 / NFR-009 (AC-009, and AC-007's gate half) — scripts/check_install.py.
+"""FR-019 / NFR-009 (AC-009, AC-007's gate half, AC-040, AC-041) —
+scripts/check_install.py.
 
 The gate is invoked via subprocess with the interpreter pytest runs under
 (same style as tests/test_install.py), pointed at throwaway fixture roots
@@ -35,6 +36,18 @@ description: Fixture skill body for the install-integrity gate.
 # transon-authoring (fixture)
 """
 
+PLUGIN_JSON = {
+    "name": "transon-authoring",
+    "description": "Fixture plugin manifest. Requires the runtime: "
+    "pip install transon-authoring.",
+    "version": "0.0.1",
+}
+MARKETPLACE_JSON = {
+    "name": "transon-authoring",
+    "owner": {"name": "fixture-owner"},
+    "plugins": [{"name": "transon-authoring", "source": "./"}],
+}
+
 
 def run_gate(*argv: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -48,10 +61,14 @@ def make_fake_root(
     name: str = "root",
     skill_md: str = SKILL_MD,
     adapter_files: list[str] | None = None,
+    plugin_json: dict | None = None,
+    marketplace_json: dict | None = None,
+    plugin_skill_md: str | None = None,
+    omit: tuple[str, ...] = (),
 ) -> Path:
     root = tmp_path / name
     files = adapter_files if adapter_files is not None else ["SKILL.md"]
-    for tool, scopes in (("claude", ["project", "personal"]), ("cursor", ["project"])):
+    for tool in ("claude", "cursor"):
         adapter_dir = root / "adapters" / tool
         adapter_dir.mkdir(parents=True)
         (adapter_dir / "adapter.json").write_text(
@@ -59,7 +76,7 @@ def make_fake_root(
                 {
                     "schema_version": "1.0",
                     "tool": tool,
-                    "scopes": scopes,
+                    "scopes": ["project", "personal"],
                     "files": files,
                     "exclusions": [],
                 }
@@ -73,12 +90,34 @@ def make_fake_root(
     )
     (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (root / "SKILL.md").write_text(skill_md, encoding="utf-8")
+
+    plugin_dir = root / ".claude-plugin"
+    plugin_dir.mkdir()
+    if "plugin.json" not in omit:
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(plugin_json if plugin_json is not None else PLUGIN_JSON),
+            encoding="utf-8",
+        )
+    if "marketplace.json" not in omit:
+        (plugin_dir / "marketplace.json").write_text(
+            json.dumps(
+                marketplace_json if marketplace_json is not None else MARKETPLACE_JSON
+            ),
+            encoding="utf-8",
+        )
+    if "skill" not in omit:
+        plugin_skill_dir = root / "skills" / "transon-authoring"
+        plugin_skill_dir.mkdir(parents=True)
+        (plugin_skill_dir / "SKILL.md").write_text(
+            plugin_skill_md if plugin_skill_md is not None else skill_md,
+            encoding="utf-8",
+        )
     return root
 
 
 def test_ac009_gate_green_on_repo():
     # AC-009 / FR-019 / NFR-009 — the shipped repo passes the full rehearsal
-    # (all three tool/scope combos + OQ-010 lint + cursor runtime smoke).
+    # (all four tool/scope combos + OQ-010 lint + cursor runtime smoke).
     result = run_gate("--root", str(REPO_ROOT))
     assert result.returncode == 0, result.stderr
     assert "FAIL" not in result.stderr
@@ -161,7 +200,12 @@ def test_ac007_gate_covers_idempotent_uninstall(tmp_path: Path):
     root = make_fake_root(tmp_path)
     result = run_gate("--root", str(root))
     assert result.returncode == 0, result.stderr
-    for combo in ("claude/project", "claude/personal", "cursor/project"):
+    for combo in (
+        "claude/project",
+        "claude/personal",
+        "cursor/project",
+        "cursor/personal",
+    ):
         for check in (
             "re-install idempotent",
             "uninstall removes the clean destination",
@@ -169,6 +213,153 @@ def test_ac007_gate_covers_idempotent_uninstall(tmp_path: Path):
             "uninstall without manifest is a no-op",
         ):
             assert f"{combo}: {check}" in result.stdout, (combo, check)
+
+
+def test_ac041_gate_exercises_cursor_personal_combo():
+    # AC-041 / FR-038 — the gate rehearses cursor/personal alongside the other
+    # three combos on the shipped repo: install-table destination, canonical
+    # bytes, complete manifest, OQ-010 preconditions. Structural only — no
+    # claim that Cursor discovered or activated the skill (OQ-008).
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    for check in (
+        "installed at the install-table destination",
+        "installed files byte-identical to canonical",
+        "manifest complete and correct",
+        "SKILL.md frontmatter discoverability preconditions",
+    ):
+        assert f"cursor/personal: {check}" in result.stdout, check
+
+
+def test_ac040_plugin_green_on_repo():
+    # AC-040 / FR-037a — the shipped repo's plugin tree is structurally sound:
+    # both manifests, the version/name agreement, the local marketplace source,
+    # and the byte-identical generated SKILL.md.
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    for check in (
+        "plugin: .claude-plugin/plugin.json",
+        "plugin: .claude-plugin/marketplace.json",
+        "plugin: skills/transon-authoring/SKILL.md",
+        "plugin: SKILL.md frontmatter discoverability preconditions",
+    ):
+        assert check in result.stdout, check
+
+
+def test_ac040_red_on_missing_plugin_manifest(tmp_path: Path):
+    # AC-040(a) — a missing plugin.json is red.
+    root = make_fake_root(tmp_path, omit=("plugin.json",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert ".claude-plugin/plugin.json" in result.stderr
+
+
+def test_ac040_red_on_plugin_name_not_skill_dir(tmp_path: Path):
+    # AC-040(a) — the plugin `name` must equal the skill directory name.
+    root = make_fake_root(
+        tmp_path, plugin_json={**PLUGIN_JSON, "name": "some-other-plugin"}
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "some-other-plugin" in result.stderr
+
+
+def test_ac040_red_on_version_mismatch_with_pyproject(tmp_path: Path):
+    # AC-040(a) — plugin.json version must equal the pyproject project version.
+    root = make_fake_root(tmp_path, plugin_json={**PLUGIN_JSON, "version": "9.9.9"})
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "9.9.9" in result.stderr
+    assert "0.0.1" in result.stderr
+
+
+def test_ac040_red_on_description_without_pip_install_string(tmp_path: Path):
+    # AC-040(a) / OQ-029 — the description carries the runtime prerequisite
+    # literally, so an agent reading only the manifest can acquire the runtime.
+    root = make_fake_root(
+        tmp_path,
+        plugin_json={**PLUGIN_JSON, "description": "Fixture plugin manifest."},
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "pip install transon-authoring" in result.stderr
+
+
+def test_ac040_red_on_missing_marketplace_owner(tmp_path: Path):
+    # AC-040(b) — marketplace.json must carry a non-empty owner.
+    entry = {k: v for k, v in MARKETPLACE_JSON.items() if k != "owner"}
+    root = make_fake_root(tmp_path, marketplace_json=entry)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "owner" in result.stderr
+
+
+def test_ac040_red_on_marketplace_source_outside_plugin_root(tmp_path: Path):
+    # AC-040(b) — a source pointing anywhere but the plugin root fetches no
+    # plugin manifest and no skill body.
+    root = make_fake_root(
+        tmp_path,
+        marketplace_json={
+            **MARKETPLACE_JSON,
+            "plugins": [{"name": "transon-authoring", "source": "./docs"}],
+        },
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "source" in result.stderr
+    assert "./docs" in result.stderr
+
+
+def test_ac040_red_on_non_path_marketplace_source(tmp_path: Path):
+    # AC-040(b) — the gate claims local resolution only; a non-string source
+    # form (e.g. a github descriptor) is red, not silently accepted.
+    root = make_fake_root(
+        tmp_path,
+        marketplace_json={
+            **MARKETPLACE_JSON,
+            "plugins": [
+                {
+                    "name": "transon-authoring",
+                    "source": {"source": "github", "repo": "transon-org/x"},
+                }
+            ],
+        },
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "source" in result.stderr
+
+
+def test_ac040_red_on_single_byte_stale_plugin_skill(tmp_path: Path):
+    # AC-040(c) — the stale-regeneration case: one byte of drift is red, and
+    # the finding names the regeneration command.
+    root = make_fake_root(tmp_path, plugin_skill_md=SKILL_MD + "x")
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "python3 scripts/sync_plugin.py" in result.stderr
+
+
+def test_ac040_red_on_plugin_skill_frontmatter_precondition(tmp_path: Path):
+    # AC-040(d) / OQ-010 — the preconditions are asserted on the plugin copy
+    # too. A canonical body without a description turns both the install lint
+    # and the plugin lint red.
+    root = make_fake_root(
+        tmp_path, skill_md="---\nname: transon-authoring\n---\n\n# body\n"
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "plugin: frontmatter description" in result.stderr
+
+
+def test_ac040_no_catalog_or_discoverability_claim_in_output(tmp_path: Path):
+    # AC-040 / FR-037b — packaging integrity only: the gate never claims a
+    # catalog listing or host discovery.
+    root = make_fake_root(tmp_path)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    output = (result.stdout + result.stderr).lower()
+    for claim in ("catalog", "listed in", "discovered", "installable from"):
+        assert claim not in output, claim
 
 
 def test_ac009_no_discoverability_claim_in_output(tmp_path: Path):

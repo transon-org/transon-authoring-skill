@@ -34,7 +34,12 @@ def test_ac005_single_skill_source():
                 "exclusion carrying a non-empty reason"
             )
 
-    # Concretely: Cursor is project-only in v1; its missing personal scope is
-    # the documented exclusion.
-    assert "personal" in claude["scopes"]
-    assert "personal" not in cursor["scopes"]
+
+def test_ac005_adapters_reach_equal_scopes():
+    # AC-005 / NFR-007 (FR-038) — the two adapters reach equal capability:
+    # the same scope set, and no exclusion left on the Cursor side.
+    claude = json.loads((ADAPTERS_DIR / "claude" / "adapter.json").read_text())
+    cursor = json.loads((ADAPTERS_DIR / "cursor" / "adapter.json").read_text())
+
+    assert set(claude["scopes"]) == set(cursor["scopes"])
+    assert cursor["exclusions"] == []

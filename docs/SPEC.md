@@ -221,14 +221,9 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - **FR-038** — **Cursor personal scope (resolving OQ-028).** `install/cursor.py` supports
   `--scope personal` at the §11.9 destination `~/.cursor/skills/transon-authoring/`, with the
   same copy / manifest / idempotent-upgrade / uninstall-only-manifest-paths discipline as
-  FR-015 and FR-016. The Cursor adapter drops its `personal scope` exclusion, so the two
+  FR-015 and FR-016. The Cursor adapter carries no `personal scope` exclusion, so the two
   adapters reach **equal capability** rather than a documented exclusion (NFR-007). Verified by
-  `check_install` (AC-041). Until this lands, four artifacts still assert the superseded
-  project-only rule and are part of this slice: `adapters/cursor/adapter.json` (the exclusion),
-  the shipped `adapters/cursor/README.md` (its "project scope only" sentence),
-  `install/cursor.py` (module docstring + the scope-rejection path), and the tests pinning it —
-  `tests/test_adapters.py`, `tests/test_install.py::test_fr015_cursor_personal_scope_exit2`,
-  and the `tests/test_check_parity.py` exclusion fixture.
+  `check_install` (AC-041).
 
 ### Improvement
 - **FR-017** — Eval-driven loop (AD-010/020/024). Measurement harness is the **real host**

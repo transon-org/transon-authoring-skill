@@ -188,8 +188,7 @@ beyond the v1 subset remain ongoing improvement-loop work and do not gate any mi
   user-level skills at `~/.cursor/skills/` (the tool-neutral `~/.agents/skills/` is deliberately
   not adopted), so project-only was a product
   choice, not a platform limit, and NFR-007 prefers equal capability over a documented
-  exclusion. Normative in FR-038 / AC-041 / §11.9; the adapter's `personal scope` exclusion is
-  retired when FR-038 lands.
+  exclusion. Normative in FR-038 / AC-041 / §11.9.
 - **OQ-029** — **Resolved (2026-07-22):** one §11.6 grounding recipe in every channel;
   runtime acquisition is documented per channel, never encoded in the recipe. `pip install
   transon-authoring` stays the prerequisite, stated in the plugin manifest and — as a

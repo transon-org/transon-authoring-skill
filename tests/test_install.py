@@ -35,13 +35,12 @@ def make_repo(tmp_path: Path, name: str = "repo", pyproject: str = PYPROJECT) ->
     for tool in ("claude", "cursor"):
         adapter_dir = root / "adapters" / tool
         adapter_dir.mkdir(parents=True)
-        scopes = ["project", "personal"] if tool == "claude" else ["project"]
         (adapter_dir / "adapter.json").write_text(
             json.dumps(
                 {
                     "schema_version": "1.0",
                     "tool": tool,
-                    "scopes": scopes,
+                    "scopes": ["project", "personal"],
                     "files": ["SKILL.md"],
                     "exclusions": [],
                 },
@@ -123,9 +122,11 @@ def test_fr015_claude_personal_scope_uses_home_override(tmp_path: Path):
     assert not (repo / ".claude").exists()
 
 
-def test_fr015_cursor_personal_scope_exit2(tmp_path: Path):
-    # FR-015 / NFR-007 — Cursor is project-only in v1 (documented exclusion,
-    # §11.9 install table): personal scope is a config error, exit 2.
+def test_fr038_cursor_personal_scope_uses_home_override(tmp_path: Path):
+    # FR-038 / AC-041 — Cursor personal scope installs at the §11.9
+    # destination under --home, with the same manifest discipline as every
+    # other scope. Structural claim only (OQ-008): nothing here asserts that
+    # Cursor discovered or activated the skill.
     repo = make_repo(tmp_path)
     home = tmp_path / "home"
     home.mkdir()
@@ -138,17 +139,55 @@ def test_fr015_cursor_personal_scope_exit2(tmp_path: Path):
         "--home",
         str(home),
     )
-    assert result.returncode == 2
-    assert "personal" in result.stderr
-    assert result.stdout == ""
-    assert not (home / ".cursor").exists()
+    assert result.returncode == 0, result.stderr
+
+    dest = home / ".cursor" / "skills" / "transon-authoring"
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == SKILL_BODY
+    report = json.loads(result.stdout)
+    assert report["tool"] == "cursor"
+    assert report["scope"] == "personal"
+    assert report["dest"] == str(dest)
     assert not (repo / ".cursor").exists()
 
-    project = run_installer(CURSOR_INSTALLER, "--repo-root", str(repo))
-    assert project.returncode == 0, project.stderr
-    dest = repo / ".cursor" / "skills" / "transon-authoring"
-    assert (dest / "SKILL.md").is_file()
-    assert json.loads(project.stdout)["tool"] == "cursor"
+    manifest = json.loads((dest / ".install-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["tool"] == "cursor"
+    assert manifest["scope"] == "personal"
+    assert manifest["skill_version"] == "0.0.1"
+    assert manifest["engine_pin"] == "transon==0.2.3"
+    assert manifest["snapshot_sha256"] == hashlib.sha256(SNAPSHOT_BYTES).hexdigest()
+    assert manifest["files"] == ["SKILL.md", ".install-manifest.json"]
+
+
+def test_fr038_cursor_personal_uninstall_removes_only_manifest_paths(tmp_path: Path):
+    # FR-038 / AC-041 (with FR-016) — personal-scope uninstall deletes only
+    # manifest-listed paths; stray user files under the destination survive.
+    repo = make_repo(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    scope_argv = (
+        "--scope",
+        "personal",
+        "--repo-root",
+        str(repo),
+        "--home",
+        str(home),
+    )
+    assert run_installer(CURSOR_INSTALLER, *scope_argv).returncode == 0
+
+    dest = home / ".cursor" / "skills" / "transon-authoring"
+    stray = dest / "user-note.txt"
+    stray.write_text("keep me\n", encoding="utf-8")
+
+    result = run_installer(CURSOR_INSTALLER, *scope_argv, "--uninstall")
+    assert result.returncode == 0, result.stderr
+    assert stray.read_text(encoding="utf-8") == "keep me\n"
+    assert not (dest / "SKILL.md").exists()
+    assert not (dest / ".install-manifest.json").exists()
+    assert dest.is_dir()
+    report = json.loads(result.stdout)
+    assert report["action"] == "uninstall"
+    assert report["files"] == ["SKILL.md", ".install-manifest.json"]
 
 
 def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):

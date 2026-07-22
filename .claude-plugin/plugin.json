@@ -1,0 +1,5 @@
+{
+  "description": "Authors engine-valid Transon JSON transformation templates and returns one only after the pinned engine verifies it against a confirmed SampleSet. Requires the runtime: pip install transon-authoring.",
+  "name": "transon-authoring",
+  "version": "0.1.0"
+}

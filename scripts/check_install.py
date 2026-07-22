@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """check-install — install-integrity gate
-(FR-019 / NFR-009; AC-007 / AC-009; SPEC §11.9, §13, OQ-010).
+(FR-019 / NFR-009; AC-007 / AC-009; FR-037a / AC-040; FR-038 / AC-041;
+SPEC §11.9, §13, OQ-010).
 
 An end-to-end install rehearsal, offline and deterministic: the real
 ``install/claude.py`` / ``install/cursor.py`` scripts run as subprocesses
@@ -8,7 +9,8 @@ against a **temp staged copy** of the source root and a temp ``--home`` —
 the real ``~`` and the real repo's ``.claude``/``.cursor`` are never touched,
 and no ``claude``/``cursor`` binary is invoked.
 
-Per (tool, scope) in {claude/project, claude/personal, cursor/project}:
+Per (tool, scope) in {claude/project, claude/personal, cursor/project,
+cursor/personal}:
 
 1. Install: destination matches the §11.9 table; every adapter-listed file
    (including ``SKILL.md``) is byte-identical to the canonical source;
@@ -27,6 +29,16 @@ Per (tool, scope) in {claude/project, claude/personal, cursor/project}:
 Plus, once: cursor runtime smoke — ``python -m transon_authoring metadata``
 exits 0 and its JSON carries ``metadata_version == "3.0"`` (no
 "discovered/ingested" claim, OQ-008).
+
+Plus, once, on the real ``--root``: the FR-037a plugin tree — a repo artifact
+outside the install-manifest regime, so it is checked in place, not staged.
+``.claude-plugin/plugin.json`` and ``.claude-plugin/marketplace.json`` are
+well-formed and agree with each other, with the skill directory name, and with
+the ``pyproject.toml`` project version; the marketplace ``source`` resolves to
+the plugin root itself; ``skills/transon-authoring/SKILL.md`` is byte-identical
+to the canonical root body and satisfies the OQ-010 preconditions (AC-040).
+This claims **packaging integrity only** — never catalog listing or host
+discoverability.
 
 Exit codes: 0 all green, 1 any finding.
 """
@@ -49,7 +61,16 @@ from _shared import report_failures
 PROG = "check-install"
 SKILL_DIR_NAME = "transon-authoring"
 MANIFEST_NAME = ".install-manifest.json"
-COMBOS = (("claude", "project"), ("claude", "personal"), ("cursor", "project"))
+COMBOS = (
+    ("claude", "project"),
+    ("claude", "personal"),
+    ("cursor", "project"),
+    ("cursor", "personal"),
+)
+PLUGIN_MANIFEST_REL = ".claude-plugin/plugin.json"
+MARKETPLACE_REL = ".claude-plugin/marketplace.json"
+PLUGIN_SKILL_REL = f"skills/{SKILL_DIR_NAME}/SKILL.md"
+RUNTIME_PREREQ = "pip install transon-authoring"
 MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -183,7 +204,11 @@ def run_installer(
 
 
 def lint_frontmatter(
-    combo: str, dest: Path, findings: list[str], oks: list[str]
+    combo: str,
+    dest: Path,
+    findings: list[str],
+    oks: list[str],
+    ac: str = "AC-009",
 ) -> None:
     """OQ-010 discoverability-precondition lint (preconditions only — never a
     host-discoverability claim)."""
@@ -192,8 +217,8 @@ def lint_frontmatter(
     before = len(findings)
     if fields is None:
         findings.append(
-            f"{combo}: installed SKILL.md has no parseable YAML frontmatter "
-            "block (OQ-010 discoverability precondition, AC-009)"
+            f"{combo}: SKILL.md has no parseable YAML frontmatter "
+            f"block (OQ-010 discoverability precondition, {ac})"
         )
     else:
         name = fields.get("name", "")
@@ -201,12 +226,12 @@ def lint_frontmatter(
             findings.append(
                 f"{combo}: frontmatter name {name!r} != skill directory name "
                 f"{SKILL_DIR_NAME!r} (OQ-010 discoverability precondition, "
-                "AC-009)"
+                f"{ac})"
             )
         if not fields.get("description", ""):
             findings.append(
                 f"{combo}: frontmatter description missing or empty (OQ-010 "
-                "discoverability precondition, AC-009)"
+                f"discoverability precondition, {ac})"
             )
     if len(findings) == before:
         oks.append(
@@ -346,6 +371,174 @@ def rehearse(
     dest.rmdir()
 
 
+def _nonempty(value: object) -> bool:
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _load_manifest(root: Path, rel: str, findings: list[str]) -> Optional[dict]:
+    path = root / rel
+    if not path.is_file():
+        findings.append(f"plugin: {rel} is missing under {root} (AC-040)")
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        findings.append(f"plugin: {rel} does not parse ({exc}) (AC-040)")
+        return None
+    if not isinstance(data, dict):
+        findings.append(f"plugin: {rel} is not a JSON object (AC-040)")
+        return None
+    return data
+
+
+def check_plugin_manifest(
+    root: Path, findings: list[str], oks: list[str]
+) -> Optional[str]:
+    """AC-040(a). Returns the declared plugin name (for the marketplace
+    cross-check), or None when the manifest is unusable."""
+    data = _load_manifest(root, PLUGIN_MANIFEST_REL, findings)
+    if data is None:
+        return None
+    before = len(findings)
+    for field in ("name", "description", "version"):
+        if not _nonempty(data.get(field)):
+            findings.append(
+                f"plugin: {PLUGIN_MANIFEST_REL} {field} is missing or empty "
+                "(AC-040)"
+            )
+    name = data.get("name")
+    if _nonempty(name) and name != SKILL_DIR_NAME:
+        findings.append(
+            f"plugin: {PLUGIN_MANIFEST_REL} name {name!r} != skill directory "
+            f"name {SKILL_DIR_NAME!r} (AC-040)"
+        )
+    description = data.get("description")
+    if _nonempty(description) and RUNTIME_PREREQ not in description:
+        findings.append(
+            f"plugin: {PLUGIN_MANIFEST_REL} description does not contain the "
+            f"literal runtime prerequisite {RUNTIME_PREREQ!r} (OQ-029 / AC-040)"
+        )
+    version = data.get("version")
+    pyproject = root / "pyproject.toml"
+    project_version = None
+    if pyproject.is_file():
+        match = _VERSION_RE.search(pyproject.read_text(encoding="utf-8"))
+        project_version = match.group(1) if match else None
+    if project_version is None:
+        findings.append(
+            f"plugin: no [project] version in {pyproject} — the "
+            f"{PLUGIN_MANIFEST_REL} version cannot be checked (AC-040)"
+        )
+    elif _nonempty(version) and version != project_version:
+        findings.append(
+            f"plugin: {PLUGIN_MANIFEST_REL} version {version!r} != "
+            f"pyproject.toml project version {project_version!r} (AC-040)"
+        )
+    if len(findings) == before:
+        oks.append(
+            f"plugin: {PLUGIN_MANIFEST_REL} names {SKILL_DIR_NAME} at the "
+            "project version, with the pip-install prerequisite in its "
+            "description"
+        )
+    return name if isinstance(name, str) else None
+
+
+def check_marketplace(
+    root: Path, plugin_name: Optional[str], findings: list[str], oks: list[str]
+) -> None:
+    """AC-040(b)."""
+    data = _load_manifest(root, MARKETPLACE_REL, findings)
+    if data is None:
+        return
+    before = len(findings)
+    if not _nonempty(data.get("name")):
+        findings.append(
+            f"plugin: {MARKETPLACE_REL} name is missing or empty (AC-040)"
+        )
+    owner = data.get("owner")
+    if not (_nonempty(owner) or (isinstance(owner, dict) and _nonempty(owner.get("name")))):
+        findings.append(
+            f"plugin: {MARKETPLACE_REL} owner is missing or empty — expected a "
+            "non-empty string or an object with a non-empty name (AC-040)"
+        )
+    wanted = plugin_name or SKILL_DIR_NAME
+    plugins = data.get("plugins")
+    entries = (
+        [e for e in plugins if isinstance(e, dict) and e.get("name") == wanted]
+        if isinstance(plugins, list)
+        else []
+    )
+    if not entries:
+        findings.append(
+            f"plugin: {MARKETPLACE_REL} has no plugins[] entry named "
+            f"{wanted!r} (AC-040)"
+        )
+    else:
+        source = entries[0].get("source")
+        if not _nonempty(source):
+            findings.append(
+                f"plugin: {MARKETPLACE_REL} entry {wanted!r} has source "
+                f"{source!r}; this gate resolves local path sources only "
+                "(AC-040)"
+            )
+        else:
+            target = (root / source).resolve()
+            complete = (target / PLUGIN_MANIFEST_REL).is_file() and (
+                target / PLUGIN_SKILL_REL
+            ).is_file()
+            if target != root.resolve() or not complete:
+                findings.append(
+                    f"plugin: {MARKETPLACE_REL} entry source {source!r} "
+                    f"resolves to {target}, not to the plugin root {root} "
+                    f"carrying {PLUGIN_MANIFEST_REL} and {PLUGIN_SKILL_REL} "
+                    "(AC-040)"
+                )
+    if len(findings) == before:
+        oks.append(
+            f"plugin: {MARKETPLACE_REL} entry {wanted} points at the plugin "
+            "root itself"
+        )
+
+
+def check_plugin_skill(root: Path, findings: list[str], oks: list[str]) -> None:
+    """AC-040(c) + (d)."""
+    canonical = root / "SKILL.md"
+    copy = root / PLUGIN_SKILL_REL
+    if not canonical.is_file():
+        findings.append(
+            f"plugin: no canonical SKILL.md under {root} to compare the "
+            "generated plugin body against (AC-040)"
+        )
+        return
+    if not copy.is_file():
+        findings.append(
+            f"plugin: {PLUGIN_SKILL_REL} is missing — regenerate it with "
+            "`python3 scripts/sync_plugin.py` (AC-040)"
+        )
+        return
+    if copy.read_bytes() != canonical.read_bytes():
+        findings.append(
+            f"plugin: {PLUGIN_SKILL_REL} is not byte-identical to the "
+            "canonical root SKILL.md — regenerate it with "
+            "`python3 scripts/sync_plugin.py` (NFR-007 / AC-040)"
+        )
+        return
+    oks.append(
+        f"plugin: {PLUGIN_SKILL_REL} byte-identical to the canonical root "
+        "SKILL.md"
+    )
+    lint_frontmatter("plugin", copy.parent, findings, oks, ac="AC-040")
+
+
+def check_plugin(root: Path, findings: list[str], oks: list[str]) -> None:
+    """AC-040 — packaging integrity of the FR-037a plugin tree at the real
+    repo root (a repo artifact, never staged and never installed). Packaging
+    integrity only: no claim about host discovery."""
+    plugin_name = check_plugin_manifest(root, findings, oks)
+    check_marketplace(root, plugin_name, findings, oks)
+    check_plugin_skill(root, findings, oks)
+
+
 def cursor_smoke(findings: list[str], oks: list[str]) -> None:
     """Runtime smoke only — never a "discovered/ingested" claim (OQ-008)."""
     proc = subprocess.run(
@@ -387,8 +580,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="check_install",
         description="Rehearse skill install/uninstall in temp dirs and fail "
         "on any integrity, idempotency, uninstall, OQ-010 "
-        "discoverability-precondition, or runtime-smoke violation "
-        "(FR-019 / NFR-009 / AC-007 / AC-009).",
+        "discoverability-precondition, runtime-smoke, or plugin-packaging "
+        "violation (FR-019 / NFR-009 / AC-007 / AC-009 / AC-040).",
     )
     parser.add_argument(
         "--root",
@@ -423,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
                     oks,
                 )
         cursor_smoke(findings, oks)
+    check_plugin(root, findings, oks)
 
     for line in oks:
         print(f"{PROG}: OK {line}")

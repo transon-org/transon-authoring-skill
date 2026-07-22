@@ -6,5 +6,5 @@ Run `python3 install/cursor.py` to install the skill. The installer copies the c
 idempotent replace of those files; `python3 install/cursor.py --uninstall` removes only the paths
 listed in the manifest.
 
-Files land in `<repo>/.cursor/skills/transon-authoring/` — project scope only; Cursor has no
-personal skill scope in v1.
+Files land in `<repo>/.cursor/skills/transon-authoring/` for the project scope, or in
+`~/.cursor/skills/transon-authoring/` for the personal scope.

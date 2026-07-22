@@ -53,14 +53,9 @@ CLAUDE_ADAPTER = {
 CURSOR_ADAPTER = {
     "schema_version": "1.0",
     "tool": "cursor",
-    "scopes": ["project"],
+    "scopes": ["project", "personal"],
     "files": ["SKILL.md"],
-    "exclusions": [
-        {
-            "capability": "personal scope",
-            "reason": "Cursor is project-only in v1 (install table)",
-        }
-    ],
+    "exclusions": [],
 }
 
 
@@ -130,10 +125,19 @@ def test_ac005_red_on_unknown_subcommand_recipe(shipped_tree: Path):
 
 
 def test_ac005_red_on_undocumented_scope_difference(shipped_tree: Path):
-    # NFR-007 / AC-005 — Cursor lacks the personal scope; dropping its
-    # documented exclusion leaves an undocumented capability difference.
+    # NFR-007 / AC-005 — a narrower adapter is green only while it carries a
+    # documented exclusion with a non-empty reason; dropping the exclusion
+    # leaves an undocumented capability difference and is red. The narrower
+    # adapter is synthetic: the shipped adapters reach equal scopes.
     cursor = shipped_tree / "adapters" / "cursor" / "adapter.json"
     adapter = json.loads(cursor.read_text(encoding="utf-8"))
+    adapter["scopes"] = ["project"]
+    adapter["exclusions"] = [
+        {"capability": "personal scope", "reason": "synthetic narrower adapter"}
+    ]
+    cursor.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+    assert run_check(shipped_tree).returncode == 0
+
     adapter["exclusions"] = []
     cursor.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
     result = run_check(shipped_tree)
