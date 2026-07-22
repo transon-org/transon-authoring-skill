@@ -25,10 +25,9 @@ branch changes the measured body by **zero bytes** (blob `710e69a4` throughout).
 once since that gate, by the additive runtime-prerequisite paragraph in `9be1f66`; `CHANGELOG.md`
 now publishes the scores **and** states they reflect the shipped body minus that paragraph, rather
 than implying the shipped bytes were measured. No baseline, target or pin was touched. Ladder 2 is
-validated instead by its own targeted `--only` probe (~$0.50), which **has not run** — it needs the
-branch pushed, then `gh workflow run evals.yml -f fixtures=<id>`; read the per-fixture majority, not
-the aggregate (a single matched fixture leaves the adversarial bucket empty, so the aggregate is red
-by construction)._
+validated instead by its own targeted `--only` probe: **done** — run 29961198852 on `a5-release`,
+`seed-matched-flatten-orders` ×3, majority `pass`, zero `infra_error`, $0.49 (the aggregate is red
+by construction on one matched fixture; the per-fixture majority is the criterion)._
 
 _**Single-`SKILL.md` restructure DONE (`e1b020c` spec + `e8aa513` impl; review fixes uncommitted).**
 User decision 2026-07-22: stop carrying two copies of the body. The repo had the canonical

@@ -13,7 +13,7 @@ Dates are UTC. Run references are GitHub Actions run URLs or ids.
 ## 0.1.0 — prepared 2026-07-22, not yet published
 
 Status: **release record prepared; the artifacts are not published.** The version triplet below is
-current; the ladder is partially complete (steps 2, 3, 4 and the PyPI publish are pending). This
+current; ladder steps 1, 2 and 5 are done, steps 3 and 4 and the PyPI publish are pending. This
 entry is amended in place — with run references and dates — as those steps complete, and it is not
 a claim that release 0.1.0 has shipped.
 
@@ -48,7 +48,12 @@ a claim that release 0.1.0 has shipped.
      `check_evals` reports as a hard red); the pass criterion is the per-fixture majority.
 3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **not yet
    performed.** No `cursor-agent -p` run against a `install/cursor.py --target-root` workspace has
-   been executed. Non-gating when it is run.
+   been executed. Non-gating when it is run. Carries an **unresolved credential-exposure risk** the
+   platform prevents closing: the smoke job runs an unverifiable `curl | bash` Cursor binary with
+   `CURSOR_API_KEY` present under audit-only egress (Cursor ships no pinnable artifact, no endpoint
+   list, and no key-proxy). Bounded, not closed — the job refuses to run unless dispatched with
+   `accept_unverified_cli_risk=yes`, and a dedicated revocable key is mandatory. See the workflow
+   header.
    - Outcome: _pending — run reference or date, result._
 4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
    repo-free machine (`pip install transon-authoring` from TestPyPI, then PyPI; both installers;

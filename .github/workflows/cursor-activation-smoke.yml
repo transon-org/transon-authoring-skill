@@ -17,26 +17,34 @@ name: Cursor activation smoke (headless)
 # the CLI and the runtime and to provision the workspace; `smoke` downloads that
 # bundle, installs nothing, and makes the credentialed call.
 #
-# CREDENTIAL EXPOSURE — ACCEPTED RESIDUAL RISK, read before adding the secret.
-# OQ-027f(ii) (withhold the provider key from the tool sandbox) is NOT satisfied
-# here. `evals.yml` withholds the Anthropic key by routing the host through a
-# loopback key proxy and unsetting the real key before the run; Cursor's CLI
-# offers no equivalent — `CURSOR_API_KEY` is the credential the agent process
-# itself authenticates with, so it is necessarily present in the environment of a
-# process that also runs shell tools. Consequences, all accepted deliberately:
-#   - use a DEDICATED, low-privilege, revocable Cursor key for this workflow —
-#     never a personal or org-wide one;
-#   - the episode transcript is secret-scanned BEFORE anything is echoed to the
-#     job log or uploaded (a leak reaching the log cannot be recalled);
-#   - the prompt is fixed and maintainer-authored, so unlike the eval gate this
-#     job runs no untrusted corpus input.
-#
-# SUPPLY-CHAIN NOTE. Cursor publishes no versioned or pinnable installer for
-# `cursor-agent` — the documented method is `curl https://cursor.com/install |
-# bash`, which is unpinned by construction. That unpinned fetch is confined to
-# the `build` job, which holds no credential; the credential lives only in
-# `smoke`, which fetches nothing. Pin this step the day Cursor ships a
-# versioned artifact.
+# CREDENTIAL EXPOSURE — UNRESOLVED RESIDUAL RISK, read before enabling this.
+# Two platform facts combine into a real exposure this workflow CANNOT currently
+# close, only bound:
+#   1. Cursor publishes no versioned, pinnable, or checksummed `cursor-agent`
+#      artifact — the only documented install is `curl https://cursor.com/install
+#      | bash`, unpinned and unverifiable by construction. The `build` job fetches
+#      it (holding no credential) and bundles the binary.
+#   2. The `smoke` job then EXECUTES that unverified binary with `CURSOR_API_KEY`
+#      in its environment (the key IS the agent's own credential — unlike the
+#      Anthropic path in evals.yml, Cursor exposes no proxy to withhold it, so
+#      OQ-027f(ii) is unsatisfiable here), under AUDIT-only egress (Cursor
+#      publishes no endpoint list to build a block allowlist from, and the first
+#      dispatch is what would discover it — a chicken-and-egg the block can't win
+#      on run one).
+# So a compromised installer or binary could exfiltrate the key over its OWN
+# network calls BEFORE the transcript scan runs — the scan sees the transcript,
+# never the binary's traffic, so scan-before-log does nothing against this path.
+# This is NOT closed. It is bounded, and enabling it is a deliberate choice:
+#   - the risk is inert until a maintainer both creates the CURSOR_API_KEY secret
+#     AND sets the `accept_unverified_cli_risk` dispatch input to "yes" (the smoke
+#     job refuses to run otherwise);
+#   - use a DEDICATED, low-privilege, REVOCABLE Cursor key — never a personal or
+#     org-wide one — so the blast radius of a leak is one throwaway key;
+#   - the prompt is fixed and maintainer-authored (no untrusted corpus input);
+#   - the transcript is still secret-scanned before it can reach the log/artifact,
+#     which covers accidental leakage into the transcript (not binary exfil).
+# Close it properly the day Cursor ships a pinnable/checksummed artifact or a
+# key-proxy equivalent; until then ladder 3 stays dispatch-only and non-gating.
 
 on:
   workflow_dispatch:
@@ -47,6 +55,12 @@ on:
         default: >-
           Author a Transon template that renames the top-level key "amount" to
           "total". Use the transon-authoring skill.
+      accept_unverified_cli_risk:
+        description: >-
+          Set to "yes" to acknowledge the unverified-binary + exposed-key risk in
+          the workflow header. The credentialed smoke job refuses to run otherwise.
+        required: false
+        default: "no"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -130,7 +144,22 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      ACCEPT_RISK: ${{ inputs.accept_unverified_cli_risk }}
     steps:
+      # Enforce the header's acknowledgement: this job runs an unverified binary
+      # with a live credential (see CREDENTIAL EXPOSURE above). Refuse unless the
+      # dispatcher explicitly accepted that, so the risk can never be taken by a
+      # default/accidental dispatch. Runs before egress setup and the download.
+      - name: Require explicit risk acknowledgement
+        run: |
+          if [ "${ACCEPT_RISK}" != "yes" ]; then
+            echo "Refusing: this credentialed smoke runs an unverified cursor-agent" >&2
+            echo "binary with CURSOR_API_KEY present. Re-dispatch with" >&2
+            echo "accept_unverified_cli_risk=yes after reading the workflow header." >&2
+            exit 1
+          fi
+
       # Cursor publishes no endpoint list for the CLI, so an allow-list block
       # here would be invented rather than derived — and a wrong one would look
       # like a failed activation. AUDIT records every host this run touches;
@@ -185,8 +214,15 @@ jobs:
           set +e
           "${CURSOR_AGENT}" -p --output-format text \
             "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
-          echo "cursor-agent exit code: $?"
+          STATUS=$?
           set -e
+          # Persist the exit status for the post-scan assertion. It must NOT gate
+          # here: the secret scan runs first (next step), and a nonzero cursor-agent
+          # can only be treated as a smoke failure AFTER the transcript is scanned —
+          # otherwise a `set -e` abort on a nonzero exit would skip the scan and let
+          # a leak-bearing transcript reach the artifact. So record and continue.
+          echo "cursor-agent exit code: ${STATUS}"
+          echo "${STATUS}" > "${OUT}/exit-status"
           # Deliberately NO echo of the transcript here — the secret scan runs in
           # the next step, and anything printed to the job log before it has
           # bypassed the scan permanently.
@@ -210,21 +246,27 @@ jobs:
       # transcript shows. Upgrading to a genuine activation claim means asserting
       # on the CLI's own structured skill/tool events (`--output-format json`)
       # once a dispatch has shown what those events look like.
-      - name: Assert the shipped grounding recipe was used
+      - name: Assert the episode succeeded and used the shipped recipe
         if: always() && steps.scan.outcome == 'success'
         run: |
-          python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" <<'PY'
+          python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" \
+                    "${RUNNER_TEMP}/cursor-transcript/exit-status" <<'PY'
           import os, sys
           from pathlib import Path
 
           path = Path(sys.argv[1])
+          status_path = Path(sys.argv[2])
           text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+          # A missing status file means the run step never reached the recorder —
+          # treat as failure, not as an implicit pass.
+          status = status_path.read_text().strip() if status_path.is_file() else "missing"
           grounded = "python -m transon_authoring" in text or "python3 -m transon_authoring" in text
           named = "transon-authoring" in text
 
           lines = [
               "### Cursor headless activation smoke",
               "",
+              f"- **cursor-agent exit status:** `{status}`",
               f"- **skill named in transcript:** {named}",
               f"- **grounded via the module recipe:** {grounded}",
               f"- **transcript bytes:** {len(text)}",
@@ -241,13 +283,20 @@ jobs:
           if step_summary:
               Path(step_summary).open("a", encoding="utf-8").write(summary)
 
+          # A nonzero cursor-agent is a failed episode: a crash can still leave the
+          # recipe string in partial output, so the grounding text check alone would
+          # false-pass it. Require BOTH a clean exit and the recipe.
+          if status != "0":
+              print(f"SMOKE FAIL: cursor-agent exited {status!r} — the episode did "
+                    "not complete successfully")
+              sys.exit(1)
           if not grounded:
               print("SMOKE FAIL: the transcript shows no use of the shipped "
                     "grounding recipe")
               sys.exit(1)
           print("SMOKE PASS: a fresh headless Cursor, given only the "
-                "installer-provisioned workspace, used the shipped grounding "
-                "recipe.")
+                "installer-provisioned workspace, completed the episode and used "
+                "the shipped grounding recipe.")
           PY
 
       - name: Upload the transcript (build artifact, never committed)
