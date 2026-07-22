@@ -191,12 +191,12 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 - **FR-037** — **Plugin packaging + catalog reach (AD-009; normative home for OQ-007).** Two halves:
   **(a) Packaging (gating; A5):** a Claude Code plugin form of the shipped skill — a
   `plugin.json` manifest plus a self-hosted `marketplace.json` cataloguing it — laid out per
-  §11.9. Marketplace hosts fetch the repo tree at the manifest's `source`, so the plugin's
-  `SKILL.md` is a **generated artifact that IS committed**: the maintainer script
-  `scripts/sync_plugin.py` regenerates it deterministically from the canonical root `SKILL.md`,
-  and it is byte-identical to that file or the gate is red. Single source is preserved by enforced
-  identity (NFR-007) — the canonical root file remains the only editable body, and the generated
-  copy is never hand-edited. Packaging adds no console-script product (AD-006) and never
+  §11.9. Marketplace hosts fetch the repo tree at the manifest's `source`, so the shipped body
+  MUST physically sit at the plugin-native path — which is why **that path is where the canonical
+  body lives**: there is exactly one `SKILL.md` in the repo, at
+  `skills/transon-authoring/SKILL.md`, and every other channel (adapters, installers, the eval
+  harness) reads it from there. Single source is preserved by **absence of a second copy**, not by
+  a generated artifact held identical to one (NFR-007). Packaging adds no console-script product (AD-006) and never
   runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry — **identical in every
   channel** (OQ-029). Runtime acquisition is documented, never encoded in the recipe: the plugin
   manifest's `description` MUST contain the literal string `pip install transon-authoring`, and
@@ -442,7 +442,7 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
 ### Install CI
 - **FR-019** — CI install checks (`check_install`; offline, deterministic):
   - **Claude Code:** structural install at the §11.9 path — installed `SKILL.md` byte-identical
-    to the canonical root file, complete `.install-manifest.json`, idempotent re-install,
+    to the canonical body, complete `.install-manifest.json`, idempotent re-install,
     uninstall removes only manifest paths — plus the OQ-010 discoverability-precondition lint
     (frontmatter parses; `name` equals the skill directory name; non-empty `description`).
     No headless listing exists (OQ-010): CI claims **install integrity + discoverability
@@ -667,17 +667,16 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   literal string `pip install transon-authoring` (the OQ-029 runtime prerequisite); (b) `.claude-plugin/marketplace.json`
   parses and carries `name`, `owner`, and a `plugins` entry whose `name` matches (a) and whose
   `source` resolves to **the plugin root itself**, not merely to some path inside the repo, so
-  that (a) and (c) are present relative to it; (c) `skills/transon-authoring/SKILL.md` exists and
-  is **byte-identical** to the canonical root `SKILL.md`; (d) the OQ-010 frontmatter preconditions
+  that (a) and (c) are present relative to it; (c) the canonical body exists at
+  `skills/transon-authoring/SKILL.md`; (d) the OQ-010 frontmatter preconditions
   hold there (frontmatter parses; `name` equals the skill directory name; non-empty
   `description`). It is **red** when any of those files is missing or malformed, when the
   manifest names disagree with the skill directory, when `source` resolves anywhere other than the
   plugin root (a marketplace entry pointing at, say, `./docs` fetches no plugin manifest and no
-  skill body), when `version` differs from the project
-  version, or when the plugin `SKILL.md` differs from canonical by a single byte — the last case
-  being the stale-regeneration failure. This extends the NFR-007 single-source surface beyond
-  AC-005, which scans only the root `SKILL.md` and `adapters/**`. As with FR-019, the check claims
-  **packaging integrity only** — never catalog listing or host discoverability.
+  skill body), or when `version` differs from the project
+  version. There is no copy to hold identical: the plugin path **is** the canonical path, so the
+  stale-regeneration failure this AC once guarded against cannot arise. As with FR-019, the check
+  claims **packaging integrity only** — never catalog listing or host discoverability.
 - **AC-041** — **Cursor personal scope installs like every other scope (FR-038).**
   `check_install` exercises `cursor/personal` alongside the existing three combinations:
   installed at the §11.9 destination under an overridable home, installed `SKILL.md`
@@ -1518,22 +1517,27 @@ prompt.
 from the source checkout/archive they run from (default: the checkout root itself), so a project
 other than the checkout can receive the skill files.
 
-**Plugin form (FR-037a).** The plugin channel reuses the same canonical body. **This repo is both
-the plugin root and the self-hosted marketplace repo**; the layout is relative to the repo root:
+**Canonical body location.** The one editable `SKILL.md` lives at
+`skills/transon-authoring/SKILL.md` — the path a Claude Code plugin host expects, so the plugin
+channel needs no copy of it. Installers copy adapter-listed files **out of that directory** into a
+target project's skill directory, where they land flat (`<dest>/SKILL.md`); the source path is a
+repo-layout detail and never appears in an install destination or a `.install-manifest.json`
+`files` entry.
+
+**Plugin form (FR-037a).** **This repo is both the plugin root and the self-hosted marketplace
+repo**; the layout is relative to the repo root:
 
 ```
 .claude-plugin/plugin.json          # name, description, version
 .claude-plugin/marketplace.json     # name, owner, plugins[] — lists this plugin by name + source
-skills/transon-authoring/SKILL.md   # generated from the canonical root SKILL.md; committed
+skills/transon-authoring/SKILL.md   # the canonical body itself — not a copy
 ```
 
-Marketplace hosts fetch the tree at the entry's `source`, so the plugin `SKILL.md` MUST be
-committed — a generated artifact kept byte-identical to the canonical root file by AC-040, never
-edited directly. The maintainer script `scripts/sync_plugin.py` regenerates it (a `sync_metadata`
-sibling: it writes a repo artifact and is not shipped in the package); editing the canonical root
-file without regenerating turns the gate red. `install/` is unaffected — it copies into a target
-project's skill directory and never writes this tree. The plugin `name` MUST equal the skill
-directory name `transon-authoring`, and
+Marketplace hosts fetch the tree at the entry's `source`, so the body MUST be committed at that
+path; because it is the canonical file rather than a generated duplicate, no sync step and no
+identity gate stand between an edit and the plugin channel. `install/` is unaffected — it copies
+into a target project's skill directory and never writes this tree. The plugin `name` MUST equal
+the skill directory name `transon-authoring`, and
 `plugin.json.version` MUST equal the `pyproject.toml` project version.
 
 This tree is a **repo artifact, not an install destination**: it is outside the FR-015/FR-016

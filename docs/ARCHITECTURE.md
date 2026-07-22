@@ -232,7 +232,6 @@ No console-script product; no MCP.
 
 ```
 transon-authoring/
-├── SKILL.md
 ├── CHANGELOG.md                   # release record: version, pin, snapshot hash (NFR-008 / AC-042)
 ├── pyproject.toml                 # depends on transon==0.2.3 (AD-007 pin)
 ├── src/transon_authoring/
@@ -252,9 +251,9 @@ transon-authoring/
 ├── .claude-plugin/
 │   ├── plugin.json                # FR-037a plugin manifest
 │   └── marketplace.json           # FR-037a self-hosted marketplace catalog
-├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
+├── skills/transon-authoring/SKILL.md  # THE canonical shipped body — the only copy (FR-037a)
 ├── install/claude.py cursor.py
-├── scripts/sync_metadata.py sync_plugin.py check_snapshot.py check_parity.py check_evals.py check_install.py
+├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
