@@ -17,3 +17,8 @@ build/
 # Eval run artifacts (FR-032 transcripts + FR-035 whole-transcript / run_summary
 # telemetry) — build artifacts, never committed (SPEC §11.8 / AD-025)
 evals/_runs/
+
+# Agent worktrees. Tracked here rather than only in .git/info/exclude because
+# the sdist build reads .gitignore: a worktree left in the tree otherwise ships
+# its own stale SKILL.md and docs inside a locally built archive.
+.claude/worktrees/

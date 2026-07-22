@@ -1,8 +1,10 @@
 """NFR-007 / AC-005 + NFR-012 / AC-032 — `check_parity` gate.
 
-Parity half (NFR-007 / AC-005): exactly one `SKILL.md` in the shipped surface
-(the canonical `skills/transon-authoring/SKILL.md`; any adapter-side copy is
-red), the Claude/Cursor `adapter.json`
+Parity half (NFR-007 / AC-005): exactly one `SKILL.md` in the repo tree, at
+the canonical `skills/transon-authoring/SKILL.md` — any other copy is red
+except under `.git/`, `.venv*/`, `dist/`, `build/`, `evals/_runs/` and the
+install destinations `.claude/` and `.cursor/`. Plus: the Claude/Cursor
+`adapter.json`
 files ship the same `files` list, every scope/capability difference is a
 documented exclusion (non-empty `reason`) in the narrower adapter, and every
 `python -m transon_authoring <sub>` recipe in the shipped files names a real
@@ -122,6 +124,43 @@ def test_ac005_red_on_recreated_root_skill_copy(shipped_tree: Path):
     result = run_check(shipped_tree)
     assert result.returncode == 1
     assert "second SKILL.md at the repo root" in result.stderr
+
+
+def test_ac005_red_on_stray_skill_copy_outside_shipped_surface(shipped_tree: Path):
+    # NFR-007 / AC-005 — the scan covers the whole repo tree, not just the
+    # root and adapters/: a body anywhere else is a second copy and is red.
+    for rel in ("docs/SKILL.md", "resources/SKILL.md",
+                "skills/transon-authoring-v2/SKILL.md"):
+        copy = shipped_tree / rel
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text(SKILL_BODY, encoding="utf-8")
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    for rel in ("docs/SKILL.md", "resources/SKILL.md",
+                "skills/transon-authoring-v2/SKILL.md"):
+        assert rel in result.stderr
+
+
+def test_ac005_green_on_excluded_skill_copies(shipped_tree: Path):
+    # NFR-007 / AC-005 — the excluded trees are not false positives: an
+    # installer run against the checkout itself writes a body under .claude/
+    # and .cursor/, and version-control/build/eval-run trees carry copies of
+    # their own.
+    for rel in (
+        ".claude/skills/transon-authoring/SKILL.md",
+        ".cursor/skills/transon-authoring/SKILL.md",
+        ".venv/lib/python3.12/site-packages/pkg/SKILL.md",
+        ".venv-3.11/lib/pkg/SKILL.md",
+        ".git/worktrees/x/SKILL.md",
+        "dist/skills/transon-authoring/SKILL.md",
+        "build/skills/transon-authoring/SKILL.md",
+        "evals/_runs/run-1/SKILL.md",
+    ):
+        copy = shipped_tree / rel
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text(SKILL_BODY, encoding="utf-8")
+    result = run_check(shipped_tree)
+    assert result.returncode == 0, result.stderr
 
 
 def test_ac005_red_on_unknown_subcommand_recipe(shipped_tree: Path):

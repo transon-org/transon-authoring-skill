@@ -8,34 +8,41 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `b55a15d` — feat: release record, distribution-faithful eval provisioning, ladder-3 smoke |
+| Repo HEAD | `e8aa513` — refactor: one SKILL.md, at the plugin-native canonical path |
 | Branch | `a5-release` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
 
-_**IN PROGRESS, UNCOMMITTED — single-`SKILL.md` restructure (spec written, code not swept).**
+_**Single-`SKILL.md` restructure DONE (`e1b020c` spec + `e8aa513` impl; review fixes uncommitted).**
 User decision 2026-07-22: stop carrying two copies of the body. The repo had the canonical
 `SKILL.md` at the root plus a committed generated duplicate at `skills/transon-authoring/SKILL.md`
-held byte-identical by AC-040. **The plugin-native path becomes THE canonical path** — one file,
-single source by absence of a second copy rather than by an enforced-identity gate, so
-edit-without-regenerating cannot happen. A root symlink was considered and rejected: a Windows
-checkout without symlink support materialises a text file containing `../../SKILL.md`, which would
-then be served as the skill body while `check_install` reads through the link locally and passes.
-**Done (uncommitted):** SPEC FR-037(a), AC-040 (byte-identity clause deleted), §11.9 (new
-"Canonical body location" — installers copy OUT of that directory and land files FLAT, so
-`.install-manifest.json` `files` and `adapters/*/adapter.json` keep naming destination-relative
-`SKILL.md` and uninstall still deletes the right paths), FR-019, ARCHITECTURE §10.
-**Not started:** `git mv SKILL.md skills/transon-authoring/SKILL.md` (must be byte-identical — a
-pure path change, no §11.8 baseline implication); delete `scripts/sync_plugin.py` +
-`tests/test_sync_plugin.py`; sweep ~10 code call sites (`check_parity` root read + its
-"exactly one SKILL.md" rule, `check_install` `PLUGIN_SKILL_REL`/staging tuple/identity block,
-`install/_shared.py:108` source resolution, `scripts/_shared.py:91`, `host_harness`,
-`eval_harness`, `local_eval`), 4 workflows, ~9 test files, and the FR-037 traceability row
-(it cites the deleted `test_sync_plugin.py`). Then full suite + six gates.
-Session ended here because the tool-safety classifier went down (Bash and subagent launches
-refused; read-only tools fine)._
+held byte-identical by AC-040. **The plugin-native path is now THE canonical path** — one file,
+single source by absence of a second copy, so edit-without-regenerating cannot happen;
+`scripts/sync_plugin.py` and AC-040's identity clause are gone. The body moved byte-for-byte
+(`d2bbc87e…` before and after, blob `710e69a4` — a pure path change, no §11.8 implication).
+A root symlink was considered and **rejected**: a Windows checkout without symlink support
+materialises a text file containing `../../SKILL.md`, which would then be served as the skill body
+while `check_install` reads through the link locally and passes.
+Installers read adapter-listed files out of that directory and still write them **flat**, so
+`adapters/*/adapter.json` `files` and `.install-manifest.json` keep naming destination-relative
+`SKILL.md` and uninstall deletes the same paths as before — verified by a real install/uninstall
+against a scratch target root.
+**Second `spec-reviewer` pass** (the first covered only the two-copy design) returned 10 findings.
+Its lead finding was fair and self-inflicted: the repo-root guard was landed **code-first**, with
+no contract text authorizing it — the spec commit had deleted the only sentence describing
+`check_parity`'s scan surface and added no replacement. Fixed spec-first: **AC-005 now carries the
+normative single-source clause** (red on any `SKILL.md` other than the canonical one; excludes
+`.git/`, `.venv*/`, `dist/`, `build/`, `evals/_runs/`, and the `.claude/`/`.cursor/` install
+destinations, since an installer aimed at the checkout legitimately writes a body there), and the
+guard was widened from root-only to a pruned whole-tree walk — `docs/SKILL.md` or
+`skills/transon-authoring-v2/SKILL.md` were green before. Also fixed: the canonical-path literal is
+defined once in `scripts/_shared.py` and imported (it had been spelled independently in three
+modules, in a slice whose thesis is single source); a brittle absence-of-old-wording test dropped;
+superseded-design narrative stripped from contract text, docstrings and comments; `.gitignore` now
+carries `.claude/worktrees/` — it was only in `.git/info/exclude`, which hatchling does not read,
+so a maintainer-machine sdist build shipped a stale second `SKILL.md` from a leftover worktree._
 
 _**A5 implementable slice (branch `a5-release`, 4 commits through `2ac5ba6`, UNPUSHED).** Committed: the governed spec change
 (`33f2724`) making the release record normative — repo-root `CHANGELOG.md` named in NFR-008 and
@@ -94,15 +101,12 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. **Finish the single-`SKILL.md` restructure** (see Last action): commit the SPEC edit, then do the
-   `git mv` + call-site sweep, full suite + six gates, and a second `spec-reviewer` pass — the first
-   one reviewed the two-copy design, so it does not cover this.
-2. Push `a5-release` and open the PR (outward-facing; needs the user).
-3. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
+1. Push `a5-release` and open the PR (outward-facing; needs the user).
+2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
-4. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
+3. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
    the `CHANGELOG.md` 0.1.0 entry:
    a. **Entry-condition eval rerun.** The shipped body changed since the accepted baseline (the
       OQ-029 recovery line), so the full 54×3 real-host gate must be re-run before release
@@ -114,13 +118,11 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
    d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.
    e. **Publish.** Register the trusted publishers + environments, dispatch TestPyPI, push `v0.1.0`.
       FR-037b outreach begins only after this.
-5. Flip the NFR-008 traceability row to `[x]` once 4a–4e are recorded.
+4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded.
 
 ## Open blockers / waiting-on
 
-- The `SKILL.md` restructure is mid-flight: SPEC edited, code not swept. Finish it or revert the
-  SPEC edit — do not push the branch in between.
-- A5's DoD cannot close without the maintainer items in Next step 4.
+- A5's DoD cannot close without the maintainer items in Next step 3.
 - Confirm the `marketplace.json` owner identity (`transon-org`, inferred from the git remote) — the
   repo is named `transon-authoring-skill` while the plugin is `transon-authoring`.
 - Watch item: 3 fixtures passed the baseline gate 2/3 — future-flake candidates the ratchet will

@@ -195,8 +195,9 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   MUST physically sit at the plugin-native path — which is why **that path is where the canonical
   body lives**: there is exactly one `SKILL.md` in the repo, at
   `skills/transon-authoring/SKILL.md`, and every other channel (adapters, installers, the eval
-  harness) reads it from there. Single source is preserved by **absence of a second copy**, not by
-  a generated artifact held identical to one (NFR-007). Packaging adds no console-script product (AD-006) and never
+  harness) reads it from there. Single source is preserved by **absence of a second copy**
+  (NFR-007), enforced by `check_parity` under AC-005. Packaging adds no console-script product
+  (AD-006) and never
   runs `pip` (OQ-020); the grounding recipe stays the §11.6 module entry — **identical in every
   channel** (OQ-029). Runtime acquisition is documented, never encoded in the recipe: the plugin
   manifest's `description` MUST contain the literal string `pip install transon-authoring`, and
@@ -516,7 +517,14 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   envelope; adversarial gate 100%.
 - **AC-004** — Without `ok_for_verify` SampleSet → no template; status ∈
   `need-samples`|`deferred`|`aborted`|`samples-rejected`.
-- **AC-005** — Claude/Cursor adapters share one `SKILL.md` and same module recipe.
+- **AC-005** — Claude/Cursor adapters share one `SKILL.md` and same module recipe. `check_parity`
+  is **red** on any `SKILL.md` in the repo other than the canonical
+  `skills/transon-authoring/SKILL.md` (§11.9) — including one re-created at the repo root, the
+  path the body used to occupy. Excluded from the scan: version-control and build directories
+  (`.git/`, `.venv*/`, `dist/`, `build/`, `evals/_runs/`) and the install destinations
+  `.claude/` and `.cursor/`, since running an installer against the checkout itself legitimately
+  writes a body there. This is the enforcement of the FR-037a single-source invariant: with no
+  identity gate left, an unnoticed second copy is the only way the one-body rule can break.
 - **AC-006** — Pin/metadata change without sync → drift gate red until `sync-metadata`.
 - **AC-007** — Clean install/uninstall idempotent on supported platforms (§11.9).
 - **AC-008** — Eval rate below target or fixture regression → gate red (NFR-010).
@@ -674,8 +682,8 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   manifest names disagree with the skill directory, when `source` resolves anywhere other than the
   plugin root (a marketplace entry pointing at, say, `./docs` fetches no plugin manifest and no
   skill body), or when `version` differs from the project
-  version. There is no copy to hold identical: the plugin path **is** the canonical path, so the
-  stale-regeneration failure this AC once guarded against cannot arise. As with FR-019, the check
+  version. The plugin path **is** the canonical path, so this AC makes no identity claim between
+  copies; that the repo holds no second body is AC-005's job. As with FR-019, the check
   claims **packaging integrity only** — never catalog listing or host discoverability.
 - **AC-041** — **Cursor personal scope installs like every other scope (FR-038).**
   `check_install` exercises `cursor/personal` alongside the existing three combinations:
@@ -1530,12 +1538,12 @@ repo**; the layout is relative to the repo root:
 ```
 .claude-plugin/plugin.json          # name, description, version
 .claude-plugin/marketplace.json     # name, owner, plugins[] — lists this plugin by name + source
-skills/transon-authoring/SKILL.md   # the canonical body itself — not a copy
+skills/transon-authoring/SKILL.md   # the canonical body
 ```
 
 Marketplace hosts fetch the tree at the entry's `source`, so the body MUST be committed at that
-path; because it is the canonical file rather than a generated duplicate, no sync step and no
-identity gate stand between an edit and the plugin channel. `install/` is unaffected — it copies
+path; it is the canonical file, so nothing stands between an edit and the plugin
+channel. `install/` is unaffected — it copies
 into a target project's skill directory and never writes this tree. The plugin `name` MUST equal
 the skill directory name `transon-authoring`, and
 `plugin.json.version` MUST equal the `pyproject.toml` project version.

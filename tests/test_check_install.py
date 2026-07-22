@@ -363,26 +363,12 @@ def test_ac040_red_on_non_path_marketplace_source(tmp_path: Path):
 
 
 def test_ac040_red_on_missing_canonical_body(tmp_path: Path):
-    # AC-040(c) — marketplace hosts fetch the repo tree, so a plugin root with
-    # no body at the canonical path is red. There is no second copy and so no
-    # stale-regeneration case left to guard against: the plugin path IS the
-    # canonical path.
+    # AC-040(c) — marketplace hosts fetch the repo tree, and the plugin path IS
+    # the canonical path, so a plugin root with no body there is red.
     root = make_fake_root(tmp_path, omit=("skill",))
     result = run_gate("--root", str(root))
     assert result.returncode == 1
     assert "skills/transon-authoring/SKILL.md" in result.stderr
-
-
-def test_ac040_no_regeneration_or_identity_language_in_output(tmp_path: Path):
-    # FR-037 (a) — single source is preserved by ABSENCE of a second copy, not
-    # by an enforced-identity gate; the gate must not speak of regenerating or
-    # of a byte-identical plugin copy.
-    root = make_fake_root(tmp_path)
-    result = run_gate("--root", str(root))
-    assert result.returncode == 0, result.stderr
-    output = (result.stdout + result.stderr).lower()
-    for stale in ("sync_plugin", "regenerate"):
-        assert stale not in output, stale
 
 
 def test_ac040_red_on_plugin_skill_frontmatter_precondition(tmp_path: Path):

@@ -49,7 +49,7 @@ a claim that release 0.1.0 has shipped.
    - Outcome: _pending — date, machine/OS, index used, result._
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
-   `skills/transon-authoring/SKILL.md` — which is the canonical body itself, not a copy) is
+   `skills/transon-authoring/SKILL.md`, the canonical body) is
    checked by `check_install` (AC-040) on every CI run. Structural packaging integrity only — no
    published package, no catalog claim.
    - Release-commit CI run reference: _pending — to be filled when the release tag is pushed._

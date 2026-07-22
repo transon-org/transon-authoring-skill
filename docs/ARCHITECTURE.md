@@ -252,7 +252,7 @@ transon-authoring/
 ├── .claude-plugin/
 │   ├── plugin.json                # FR-037a plugin manifest
 │   └── marketplace.json           # FR-037a self-hosted marketplace catalog
-├── skills/transon-authoring/SKILL.md  # THE canonical shipped body — the only copy (FR-037a)
+├── skills/transon-authoring/SKILL.md  # the canonical shipped body (FR-037a)
 ├── install/claude.py cursor.py
 ├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)

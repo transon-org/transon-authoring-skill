@@ -37,11 +37,9 @@ outside the install-manifest regime, so it is checked in place, not staged.
 well-formed and agree with each other, with the skill directory name, and with
 the ``pyproject.toml`` project version; the marketplace ``source`` resolves to
 the plugin root itself; the canonical body exists at
-``skills/transon-authoring/SKILL.md`` and satisfies the OQ-010 preconditions
-(AC-040). There is no copy to hold identical — the plugin path **is** the
-canonical path — so the stale-regeneration failure this gate once guarded
-against cannot arise. This claims **packaging integrity only** — never catalog
-listing or host discoverability.
+``skills/transon-authoring/SKILL.md`` — the plugin path **is** the canonical
+path — and satisfies the OQ-010 preconditions (AC-040). This claims
+**packaging integrity only** — never catalog listing or host discoverability.
 
 Plus, once, on the real ``--root``: the NFR-008 release record — repo-root
 ``CHANGELOG.md`` exists and its topmost release record entry (headings naming
@@ -71,10 +69,14 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from _shared import report_failures
+from _shared import SKILL_REL, report_failures
 
 PROG = "check-install"
-SKILL_DIR_NAME = "transon-authoring"
+#: The canonical shipped body: the one editable ``SKILL.md``, sitting at the
+#: plugin-native path so the plugin channel needs no copy of it (FR-037a).
+CANONICAL_SKILL_REL = SKILL_REL.as_posix()
+SKILL_SOURCE_DIR = SKILL_REL.parent.as_posix()
+SKILL_DIR_NAME = SKILL_REL.parent.name
 MANIFEST_NAME = ".install-manifest.json"
 COMBOS = (
     ("claude", "project"),
@@ -84,10 +86,6 @@ COMBOS = (
 )
 PLUGIN_MANIFEST_REL = ".claude-plugin/plugin.json"
 MARKETPLACE_REL = ".claude-plugin/marketplace.json"
-#: The canonical shipped body: the one editable ``SKILL.md``, sitting at the
-#: plugin-native path so the plugin channel needs no copy of it (FR-037a).
-SKILL_SOURCE_DIR = f"skills/{SKILL_DIR_NAME}"
-CANONICAL_SKILL_REL = f"{SKILL_SOURCE_DIR}/SKILL.md"
 CHANGELOG_REL = "CHANGELOG.md"
 SNAPSHOT_PROVENANCE_REL = "resources/metadata-snapshot.md"
 RUNTIME_PREREQ = "pip install transon-authoring"
@@ -542,8 +540,8 @@ def check_marketplace(
 
 
 def check_plugin_skill(root: Path, findings: list[str], oks: list[str]) -> None:
-    """AC-040(c) + (d). The plugin path **is** the canonical path, so there is
-    no copy to hold identical — (c) is simply that the body is there."""
+    """AC-040(c) + (d). The plugin path **is** the canonical path: (c) is that
+    the body is present there, (d) that its frontmatter satisfies OQ-010."""
     canonical = root / CANONICAL_SKILL_REL
     if not canonical.is_file():
         findings.append(
