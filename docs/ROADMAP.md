@@ -65,10 +65,14 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
      fixtures — catches packaging gaps (e.g. bundled `resources/` missing from the wheel)
      that editable installs cannot see.
   2. **Distribution-faithful eval provisioning:** the §11.8 harness workspace is installed
-     by `install/claude.py --target-root <workspace>` from a release-archive-shaped layout
-     before host auto-activation (OQ-027a), so the gate measures the installed-from-
-     distribution configuration; validated first by a targeted `--only` probe. Installed
-     bytes are byte-identical to canonical, so this alone forces no baseline reset — any
+     by `install/claude.py --target-root <workspace>` before host auto-activation (OQ-027a),
+     so the gate measures the installed-from-distribution configuration; validated first by a
+     targeted `--only` probe. The installer's **source root is the staged file subset the eval
+     bundle already carries** — `SKILL.md`, `pyproject.toml`, `resources/metadata-snapshot.json`,
+     `adapters/`, `install/` — not an unpacked sdist: the claim is that the shipped installer
+     provisions the workspace, not that the built archive was exercised (that is ladder step 1's
+     job). Installed bytes are byte-identical to canonical and the added
+     `.install-manifest.json` is inert to the host, so this forces no baseline reset — any
      `harness.kind`/`version` change still follows §11.8 discipline.
   3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008):**
      `cursor-agent -p` in an ephemeral workspace whose skill was installed by
@@ -86,8 +90,9 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
   *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
   post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
   before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8).
-  *DoD:* ladder steps 1–5 green/recorded; release notes cite skill version, engine pin,
-  snapshot hash; first PyPI publish per OQ-020; AC-040 and AC-041 green. **FR-037b (external catalog
+  *DoD:* ladder steps 1–5 green/recorded; the `CHANGELOG.md` release record cites skill version,
+  engine pin, snapshot hash and each ladder outcome (NFR-008); first PyPI publish per OQ-020;
+  AC-040, AC-041, and AC-042 green. **FR-037b (external catalog
   submission) gates nothing** and begins only after the PyPI publish, since a listed skill whose
   runtime is unpublished is inert.
 

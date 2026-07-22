@@ -233,6 +233,7 @@ No console-script product; no MCP.
 ```
 transon-authoring/
 ├── SKILL.md
+├── CHANGELOG.md                   # release record: version, pin, snapshot hash (NFR-008 / AC-042)
 ├── pyproject.toml                 # depends on transon==0.2.3 (AD-007 pin)
 ├── src/transon_authoring/
 │   ├── __main__.py                # §11.6

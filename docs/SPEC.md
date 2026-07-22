@@ -484,7 +484,13 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   round is a new candidate sequence with a fresh `repair_attempts` budget — the machine bound
   applies within a round, never across user-driven rounds.
 - **NFR-007 — Adapter parity.** Claude/Cursor equal capability or documented exclusion.
-- **NFR-008 — Versioned releases.** Record skill version, engine pin, snapshot hash.
+- **NFR-008 — Versioned releases.** Every release is recorded in the repo-root `CHANGELOG.md`
+  under a heading naming the released skill version. Each entry MUST state the **skill version**
+  (the `pyproject.toml` project version), the **engine pin** (`transon==…`), and the **snapshot
+  hash** (`snapshot_sha256` from `resources/metadata-snapshot.md`), and MUST record the outcome of
+  each distribution-verification ladder step (ROADMAP §14) — the deterministic steps by CI run
+  reference, the credentialed and human steps by run reference or date plus result. Verified by
+  `check_install` (AC-042).
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
   smoke**, not host “discoverability”; the Claude check adds only the OQ-010
   discoverability-precondition lint.
@@ -686,6 +692,15 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   **structural** claim: it asserts the install destination and its integrity, never that Cursor
   discovered or activated the personal-scope skill — no credential-free headless listing exists
   (OQ-008).
+- **AC-042** — **The release record carries the version triplet (NFR-008).** `check_install` is
+  **green** when repo-root `CHANGELOG.md` exists and its topmost release entry names the
+  `pyproject.toml` project version and states, verbatim, that version's engine pin
+  (`transon==<pin>` as read textually from `pyproject.toml`) and the `snapshot_sha256` recorded in
+  `resources/metadata-snapshot.md`. It is **red** when the file is missing, when it names no
+  release version, or when any of the three values disagrees with its source of truth — the
+  stale-release-notes failure. Unreleased or in-progress headings above the topmost release entry
+  are ignored. The check asserts **agreement with the repo's own sources**; the ladder outcomes
+  NFR-008 requires are prose recorded by the maintainer and are not mechanically verified.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →
@@ -1571,7 +1586,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | `check_snapshot` | NFR-004 / AD-007 — metadata snapshot + Language Reference drift (FR-036) |
 | `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
-| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging); FR-038 / AC-041 (Cursor personal scope) |
+| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging); FR-038 / AC-041 (Cursor personal scope); NFR-008 / AC-042 (release record triplet) |
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
 | Sandbox evals | AC-015/023/024/028 |
@@ -1629,7 +1644,7 @@ excluded from active coverage.
 | NFR-005 | AC-026 | A1 | envelope unit |
 | NFR-006 | AC-019 | A3 | repair unit |
 | NFR-007 | AC-005 | A4 | check_parity |
-| NFR-008 | AC-006, AC-007 | A4–A5 | release checklist |
+| NFR-008 | AC-006, AC-007, AC-042 | A4–A5 | check_install + release checklist |
 | NFR-009 | AC-007, AC-009 | A4 | check_install |
 | NFR-010 | AC-008, AC-036 | A2–A3 | check_evals |
 | NFR-011 | AC-025 | A2 | fixture lint |
