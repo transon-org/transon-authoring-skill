@@ -1,0 +1,108 @@
+name: Publish Package to PyPI
+
+# OQ-020 — the runtime ships on public PyPI as `transon-authoring`. Mirrors the
+# engine repo's release flow: tag-triggered, tag/version consistency enforced,
+# published with pypa/gh-action-pypi-publish.
+#
+# Publishing is irreversible — a version number can never be reused on PyPI —
+# so this workflow re-runs the A5 ladder step 1 checks on the exact artifacts it
+# is about to upload rather than trusting that CI ran on this commit. TestPyPI
+# first (A5 ladder step 4) via workflow_dispatch; PyPI only on a pushed `v*` tag.
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual runs publish to TestPyPI ONLY. Production is guarded by
+  # `event_name == 'push'` as well as the tag ref, because a workflow_dispatch
+  # run can itself select a `v*` tag — a ref test alone would let a manual run
+  # reach PyPI.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build, verify, publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      # NFR-008 — the tag names the release; a mismatch means the wrong version
+      # would be published under it, and PyPI never lets a version be reused.
+      # Textual parse, same anchor as install/_shared.py (no tomllib — OQ-019).
+      - name: Check tag matches the project version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(python3 -c "import re,pathlib; \
+            print(re.search(r'^version\s*=\s*[\"\x27]([^\"\x27]+)', \
+            pathlib.Path('pyproject.toml').read_text(), re.M).group(1))")
+          tag=${GITHUB_REF#refs/tags/}
+          tag=${tag#v}
+          if [[ "${tag}" != "${version}" ]]; then
+            echo "::error::tag ${tag} does not match project version ${version}"
+            exit 1
+          fi
+          echo "tag and project version agree: ${version}"
+
+      - name: Build wheel + sdist
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build --outdir dist/
+
+      # A5 ladder step 1, re-run against the artifacts being uploaded.
+      - name: Verify the wheel installs and serves the surface offline
+        run: |
+          python3 -m venv /tmp/relenv
+          /tmp/relenv/bin/python -m pip install --quiet --upgrade pip
+          /tmp/relenv/bin/python -m pip install --quiet dist/*.whl
+          /tmp/relenv/bin/python - <<'PY'
+          from importlib.resources import files
+          missing = [
+              name
+              for name in (
+                  "metadata-snapshot.json",
+                  "language-reference.json",
+                  "nl-intents.json",
+              )
+              if not (files("transon_authoring") / "resources" / name).is_file()
+          ]
+          if missing:
+              raise SystemExit(f"refusing to publish: wheel missing {missing}")
+          PY
+          offline() { sudo env "PATH=$PATH" "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" unshare -n "$@"; }
+          py=/tmp/relenv/bin/python
+          offline "$py" -m transon_authoring metadata > /dev/null
+          offline "$py" -m transon_authoring language --list-sections > /dev/null
+          offline "$py" -m transon_authoring examples search "join" > /dev/null
+          offline "$py" -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
+          offline "$py" -m transon_authoring verify \
+            --template tests/fixtures/offline/template.json \
+            --samples tests/fixtures/offline/sample_set.json
+
+      - name: Publish to TestPyPI (manual rehearsal — A5 ladder step 4)
+        if: github.event_name == 'workflow_dispatch'
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+        with:
+          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+
+      # Production. Reachable only from a *pushed* `v*` tag. `github.ref` alone
+      # is not sufficient: a workflow_dispatch run can select a tag ref, which
+      # would satisfy a bare startsWith() and publish from a manual run. The
+      # event_name guard is what makes this path tag-push-only, and it is the
+      # same condition guarding the version check above, so that check can
+      # never be skipped. PyPI never permits a version to be reused.
+      - name: Publish to PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+        with:
+          packages-dir: dist/
+          password: ${{ secrets.PYPI_TOKEN }}

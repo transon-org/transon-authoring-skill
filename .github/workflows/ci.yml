@@ -88,3 +88,58 @@ jobs:
           offline python3 -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
           offline python3 -m transon_authoring verify --template tests/fixtures/offline/template.json --samples tests/fixtures/offline/sample_set.json
           offline python3 -m pytest tests/test_offline.py -q
+
+  # NFR-008 — A5 distribution-verification ladder, step 1. Builds the
+  # distribution artifacts and exercises the §11.6 surface from the installed
+  # **wheel** in a fresh venv, never an editable install: an editable install
+  # resolves `resources/` from the checkout, so it cannot see a packaging gap
+  # (e.g. the hatchling force-include dropping the bundled snapshots). Offline,
+  # via the same network namespace as the job above — a wheel that needs the
+  # network to serve metadata would violate NFR-003.
+  dist-smoke:
+    name: Dist smoke (wheel install, §11.6 offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Build wheel + sdist
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build --outdir dist/
+      - name: Install the built wheel into a fresh venv (never editable)
+        run: |
+          python3 -m venv /tmp/distenv
+          /tmp/distenv/bin/python -m pip install --quiet --upgrade pip
+          /tmp/distenv/bin/python -m pip install --quiet dist/*.whl
+      - name: Assert the bundled resources shipped inside the wheel
+        # The packaging gap this ladder step exists to catch: repo-root
+        # `resources/` is force-included as `transon_authoring/resources/`.
+        run: |
+          /tmp/distenv/bin/python - <<'PY'
+          from importlib.resources import files
+          missing = [
+              name
+              for name in (
+                  "metadata-snapshot.json",
+                  "language-reference.json",
+                  "nl-intents.json",
+              )
+              if not (files("transon_authoring") / "resources" / name).is_file()
+          ]
+          if missing:
+              raise SystemExit(f"wheel is missing bundled resources: {missing}")
+          print("bundled resources present in the installed wheel")
+          PY
+      - name: Run the §11.6 surface offline from the installed wheel
+        run: |
+          offline() { sudo env "PATH=$PATH" "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" unshare -n "$@"; }
+          py=/tmp/distenv/bin/python
+          offline "$py" -m transon_authoring metadata > /dev/null
+          offline "$py" -m transon_authoring language --list-sections > /dev/null
+          offline "$py" -m transon_authoring examples search "join" > /dev/null
+          offline "$py" -m transon_authoring check-samples --samples tests/fixtures/offline/sample_set.json
+          offline "$py" -m transon_authoring verify --template tests/fixtures/offline/template.json --samples tests/fixtures/offline/sample_set.json
