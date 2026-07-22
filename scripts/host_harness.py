@@ -164,6 +164,12 @@ def _episode_result(
     )
 
 
+#: Wall-clock bound on the provisioning subprocess. The installer only parses
+#: pyproject.toml and copies a handful of files, so seconds are ample; the bound
+#: exists so a hung installer cannot stall a credentialed episode indefinitely.
+_INSTALL_TIMEOUT_SECONDS = 120.0
+
+
 def _install_skill(workspace: Path, repo_root: Path) -> None:
     """Provision the ephemeral workspace with the **shipped installer**
     (ROADMAP §14 A5 ladder step 2 / OQ-027a), so the gate measures the
@@ -183,26 +189,33 @@ def _install_skill(workspace: Path, repo_root: Path) -> None:
     The install adds ``.install-manifest.json`` beside the skill body; it is
     inert to the host, so this forces no baseline reset.
 
-    Raises on a missing installer or a non-zero installer exit — the caller
-    classifies that as ``infra_error`` (OQ-016d), never a fixture failure.
+    Raises on a missing installer, a non-zero installer exit, or an installer
+    that outruns :data:`_INSTALL_TIMEOUT_SECONDS` — the caller classifies all
+    three as ``infra_error`` (OQ-016d), never a fixture failure.
     """
     installer = repo_root / "install" / "claude.py"
     if not installer.is_file():
         raise FileNotFoundError(f"missing shipped installer: {installer}")
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(installer),
-            "--scope",
-            "project",
-            "--repo-root",
-            str(repo_root),
-            "--target-root",
-            str(workspace),
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(installer),
+                "--scope",
+                "project",
+                "--repo-root",
+                str(repo_root),
+                "--target-root",
+                str(workspace),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=_INSTALL_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"install/claude.py timed out after {_INSTALL_TIMEOUT_SECONDS}s"
+        ) from exc
     if completed.returncode != 0:
         raise RuntimeError(
             f"install/claude.py exited {completed.returncode}: "

@@ -155,7 +155,9 @@ jobs:
           set -euo pipefail
           tar -C "${RUNNER_TEMP}" -xzf "${RUNNER_TEMP}/cursorbundle.tgz"
           B="${RUNNER_TEMP}/cursorbundle"
-          AGENT="$(find "${B}/cursor" -maxdepth 3 -name 'cursor-agent' -type f | head -n1)"
+          # `-print -quit` rather than `| head -n1`, as in the build job: under
+          # `set -o pipefail` an early-closing head can SIGPIPE find (141).
+          AGENT="$(find "${B}/cursor" -maxdepth 3 -name 'cursor-agent' -type f -print -quit)"
           test -n "${AGENT}" || { echo "cursor-agent missing from the bundle" >&2; exit 1; }
           {
             echo "PYTHONPATH=${B}/pydeps"

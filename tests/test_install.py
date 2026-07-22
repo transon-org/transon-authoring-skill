@@ -224,6 +224,64 @@ def test_nfr_007_scope_absent_from_adapter_descriptor_exits_2(tmp_path: Path):
     assert not (repo / ".cursor").exists()
 
 
+def test_nfr_009_adapter_files_escaping_their_roots_exit_2(tmp_path: Path):
+    # NFR-009 — the installer writes into a user's project, so an adapter
+    # `files` entry that leaves the canonical body directory or the destination
+    # (traversal or absolute) is refused outright, before any read or write.
+    # The adapters here are **synthetic**: the shipped ones are repo-controlled
+    # and linted by check_parity, so this is the only thing driving the guard.
+    escapee = tmp_path / "escaped.md"
+    escapee.write_text("payload\n", encoding="utf-8")
+    absolute = tmp_path / "absolute.md"
+    absolute.write_text("payload\n", encoding="utf-8")
+
+    for name, entry in (
+        ("traversal", "../../../escaped.md"),
+        ("absolute", str(absolute)),
+    ):
+        repo = make_repo(tmp_path, name=f"repo-{name}")
+        adapter_path = repo / "adapters" / "claude" / "adapter.json"
+        adapter = json.loads(adapter_path.read_text(encoding="utf-8"))
+        adapter["files"] = [entry]
+        adapter_path.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+
+        target = tmp_path / f"target-{name}"
+        target.mkdir()
+        result = run_installer(
+            CLAUDE_INSTALLER, "--repo-root", str(repo), "--target-root", str(target)
+        )
+        assert result.returncode == 2, result.stdout
+        assert entry in result.stderr
+
+        # Nothing was written: the destination tree is empty (without the guard
+        # the traversal entry lands at target/escaped.md) and the files the
+        # entries point at are untouched.
+        assert tree_bytes(target) == {}
+        assert escapee.read_text(encoding="utf-8") == "payload\n"
+        assert absolute.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_nfr_009_manifest_paths_escaping_dest_are_not_deleted(tmp_path: Path):
+    # NFR-009 — the same guard on the uninstall side: a manifest `files` entry
+    # pointing outside the destination is refused (exit 2) rather than unlinking
+    # a file the installer never owned.
+    repo = make_repo(tmp_path)
+    result = run_installer(CLAUDE_INSTALLER, "--repo-root", str(repo))
+    assert result.returncode == 0, result.stderr
+
+    dest = repo / ".claude" / "skills" / "transon-authoring"
+    outsider = repo / "victim.md"
+    outsider.write_text("not ours\n", encoding="utf-8")
+    manifest_path = dest / ".install-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = ["../../../victim.md", ".install-manifest.json"]
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    removal = run_installer(CLAUDE_INSTALLER, "--repo-root", str(repo), "--uninstall")
+    assert removal.returncode == 2, removal.stdout
+    assert outsider.read_text(encoding="utf-8") == "not ours\n"
+
+
 def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):
     # FR-015 / NFR-008 — manifest records skill version, engine pin, and
     # snapshot hash; the pin is parsed from pyproject, never hard-coded.

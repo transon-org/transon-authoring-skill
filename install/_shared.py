@@ -55,6 +55,24 @@ def _fail(prog: str, message: str) -> int:
     return 2
 
 
+def _confine(root: Path, name: str) -> Optional[Path]:
+    """Resolve destination-relative entry ``name`` under ``root``, or ``None``
+    when it escapes it. This code writes into (and deletes from) a user's
+    project, so an absolute entry, a ``..`` component or a symlinked path that
+    leaves the canonical root is refused before any read or write — the adapter
+    and manifest ``files`` lists are otherwise trusted verbatim."""
+    candidate = Path(name)
+    if candidate.is_absolute() or candidate.drive or candidate.root:
+        return None
+    if any(part == ".." for part in candidate.parts):
+        return None
+    base = root.resolve()
+    resolved = (base / candidate).resolve()
+    if base not in resolved.parents:
+        return None
+    return resolved
+
+
 def destination(tool: str, scope: str, target_root: Path, home: Path) -> Path:
     """§11.9 install-destination table. ``<repo>`` there is the **target
     project root** (``--target-root``; default: the source checkout root)."""
@@ -110,18 +128,25 @@ def _install(
     if not snapshot.is_file():
         return _fail(prog, f"missing {snapshot}")
 
-    sources: list[tuple[str, bytes]] = []
+    body_root = repo_root / SKILL_SOURCE_DIR
+    planned: list[tuple[Path, Path]] = []
     for name in adapter["files"]:
-        source = repo_root / SKILL_SOURCE_DIR / name
+        source = _confine(body_root, name)
+        target = _confine(dest, name)
+        if source is None or target is None:
+            return _fail(
+                prog,
+                f"adapter file entry escapes its root, refusing to install: {name!r}",
+            )
         if not source.is_file():
             return _fail(
                 prog, f"adapter file missing from the canonical body directory: {source}"
             )
-        sources.append((name, source.read_bytes()))
+        planned.append((source, target))
 
+    payloads = [(target, source.read_bytes()) for source, target in planned]
     dest.mkdir(parents=True, exist_ok=True)
-    for name, payload in sources:
-        target = dest / name
+    for target, payload in payloads:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
 
@@ -155,13 +180,22 @@ def _uninstall(prog: str, tool: str, scope: str, dest: Path) -> int:
         return _report(prog, tool, scope, "uninstall", dest, [])
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    removed: list[str] = []
-    deferred_manifest = False
+    owned: list[tuple[str, Path]] = []
     for name in manifest["files"]:
         if name == MANIFEST_NAME:
-            deferred_manifest = True
             continue
-        target = dest / name
+        target = _confine(dest, name)
+        if target is None:
+            return _fail(
+                prog,
+                f"manifest file entry escapes the destination, refusing to "
+                f"uninstall: {name!r}",
+            )
+        owned.append((name, target))
+
+    removed: list[str] = []
+    deferred_manifest = MANIFEST_NAME in manifest["files"]
+    for name, target in owned:
         if target.is_file():
             target.unlink()
         removed.append(name)

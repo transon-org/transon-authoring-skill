@@ -21,7 +21,9 @@ a claim that release 0.1.0 has shipped.
 
 - Skill version: `0.1.0` (the `pyproject.toml` project version)
 - Engine pin: `transon==0.2.3` (as read textually from `pyproject.toml`)
-- Snapshot hash (`snapshot_sha256` from `resources/metadata-snapshot.md`):
+- Snapshot hash — the sha256 of `resources/metadata-snapshot.json`, as recorded in the
+  `snapshot_sha256` field of its provenance file `resources/metadata-snapshot.md` (which is what
+  `check_install` reads):
   `d4452b950617057a920bfb90101a9806a4aced2b9744766fc82951534cb37a8c`
 
 ### Distribution-verification ladder (ROADMAP §14 A5)
@@ -65,13 +67,16 @@ a claim that release 0.1.0 has shipped.
 (run 29782513843, 54 fixtures ×3, authoring 1.000 / adversarial 1.000 / correction 1.000). That run
 is the AD-007 repin's pin+corpus baseline reset and satisfies the A5 entry condition.
 
-**The baseline predates one edit to the shipped body**: commit `9be1f66` added a five-line paragraph
-naming the runtime prerequisite (`pip install transon-authoring`) for agents that hit
-`No module named transon_authoring`. It is additive and defensive, and it fires no §11.8 reset
+**The baseline predates a few edits to the shipped body**, none of which fires a §11.8 reset
 trigger — pin, corpus, gate model and harness `kind`/`version` are all unchanged — so the corpus was
-deliberately not re-measured for this release. The scores above therefore reflect the shipped body
-minus that paragraph. Three fixtures passed that run 2/3 (`ec2-flatten-inventory`,
-`refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and remain future-flake candidates.
+deliberately not re-measured for this release, and the scores above reflect the body before these
+edits: the runtime-prerequisite paragraph (`pip install transon-authoring` on
+`No module named transon_authoring`); the §6 approve step now passing `--repair-count <N>` so an
+approved success reports its true repair count; and §3 now requiring an explicit `--samples` path or
+`init-config` in a non-interactive run rather than proceeding without a resolved location. All are
+additive or clarifying — no operator, rule, or grounding behavior changed. Three fixtures passed the
+baseline run 2/3 (`ec2-flatten-inventory`, `refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`)
+and remain future-flake candidates.
 
 ### Publication
 

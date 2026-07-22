@@ -57,9 +57,12 @@ ONLY when no samples path was given and you must find where SampleSet files live
    `python -m transon_authoring init-config` once, at the repo root, before any other step.
    It writes `.transon-authoring.json` to the current working directory and prints the
    ProjectConfig.
-3. In CI or any non-interactive run: never prompt, never wait for input. If a config
-   must be created there, pass `--layout` plus `--non-interactive`; otherwise proceed without
-   creating one.
+3. In CI or any non-interactive run: never prompt, never wait for input. A non-interactive run
+   with no explicit `--samples` path and no existing config has no way to locate SampleSet files —
+   so require one of: an explicit `--samples` path from the caller (step 4, the usual CI case), or
+   `init-config --layout <layout> --non-interactive` to establish the config the later steps read.
+   Never guess a location or invent a default; if neither is available, stop and say so rather than
+   proceeding to the sample loop without a resolved path.
 4. An explicit samples path from the caller — a `--samples` value or a CI fixture path — always
    wins over any config-derived location. When the config is already present or a samples path
    is given, there is no layout prompt.
@@ -243,7 +246,8 @@ silence as approval.
 
 - **approve** — the user accepts the template. Emit the final success envelope (`status: "matched"`)
   by running the section 7 `result` command NOW — `python -m transon_authoring result --template
-  <template-path> --samples <samples-path>` — and returning its stdout **verbatim**. Do NOT retype
+  <template-path> --samples <samples-path> --repair-count <N>`, where `<N>` is the number of repairs
+  the approved candidate took — and returning its stdout **verbatim**. Do NOT retype
   or reconstruct the envelope you presented for review: re-typing a template by hand (especially a
   large one) corrupts the JSON, whereas `result` re-verifies and machine-builds a well-formed
   envelope every time — including now, on this later turn after approval.

@@ -123,11 +123,12 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
 3. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
    the `CHANGELOG.md` 0.1.0 entry:
-   a. **Entry-condition eval rerun.** The shipped body changed since the accepted baseline (the
-      OQ-029 recovery line), so the full 54×3 real-host gate must be re-run before release
-      (≈$18–19), with OQ-027f (i)–(iv) confirmed in force.
-   b. **Ladder 2 probe first.** Dispatch one fixture via `--only` under the new installer
-      provisioning and read the per-fixture majority before spending on the full gate.
+   a. ~~Entry-condition eval rerun~~ — **not required**, and deliberately not done. The entry
+      condition was already satisfied by the green gate of 2026-07-20 (run 29782513843); no §11.8
+      reset trigger has fired since. The ≈$18–19 rerun was dropped in `60be2fa`; the release record
+      states that the baseline predates the `9be1f66` body paragraph.
+   b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
+      `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
    c. **Ladder 3.** Add the `CURSOR_API_KEY` secret, then dispatch `cursor-activation-smoke.yml`;
       tighten its egress from `audit` to `block` using the observed host set.
    d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.

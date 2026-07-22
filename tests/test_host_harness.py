@@ -283,6 +283,25 @@ def test_oq_027a_missing_installer_is_infra_error(tmp_path):
     assert host.seen == {}
 
 
+def test_oq_016d_installer_timeout_is_infra_error(tmp_path, monkeypatch):
+    # OQ-016d — a hung installer must not hang the (paid, credentialed) episode:
+    # the provisioning subprocess is bounded and a timeout classifies as
+    # infra_error, never a fixture failure.
+    source_root = tmp_path / "hanging-source"
+    (source_root / "install").mkdir(parents=True)
+    _stage_skill(source_root)
+    (source_root / "install" / "claude.py").write_text(
+        "import time\ntime.sleep(600)\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(host_harness, "_INSTALL_TIMEOUT_SECONDS", 1.0)
+
+    host = FakeHost(HostOutcome(status=STATUS_RESULT, result={"ok": True}))
+    episode = host_harness.run_fixture(_load("matched"), RUNNER_CFG, host, source_root)
+    assert episode["outcome"] == "infra_error"
+    assert "timed out" in episode["error"]
+    assert host.seen == {}  # the host was never invoked
+
+
 def test_oq_027_run_fixture_host_fault_is_infra_error():
     # OQ-016d — a host/transport/credential fault is infra_error, never a crash
     # of the whole multi-fixture run.
