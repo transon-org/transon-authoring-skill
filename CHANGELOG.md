@@ -31,16 +31,19 @@ a claim that release 0.1.0 has shipped.
    (never editable), asserts the bundled `resources/` shipped inside the wheel, and runs the §11.6
    surface offline against the committed fixtures. `.github/workflows/release.yml` re-runs the same
    verification on the built release artifacts before either publish job. Green on the runs that
-   introduced it (29881245086 on `ci-dist-smoke-and-pypi-release`, 29901744596 on `main`); the
-   `a5-release` branch has not been pushed, so it has no CI run of its own yet.
+   introduced it (29881245086 on `ci-dist-smoke-and-pypi-release`, 29901744596 on `main`) and on
+   `a5-release` (run 29961121196, PR #28 — the `dist-smoke` job green).
    - Release-commit CI run reference: _pending — to be filled when the release tag is pushed._
-2. **Distribution-faithful eval provisioning** — *implemented; awaiting its probe.* The §11.8
-   harness workspace is provisioned by `install/claude.py --target-root <workspace>` from the staged
-   file subset, and a provisioning failure classifies as `infra_error` rather than scoring as a
-   fixture failure. The code has **never executed against a real host**: the targeted `--only` probe
-   is what validates it, and no full gate run under this provisioning is required (see the eval
-   baseline note below).
-   - Outcome: _pending — probe run reference, date, result._
+2. **Distribution-faithful eval provisioning** — **validated.** The §11.8 harness workspace is
+   provisioned by `install/claude.py --target-root <workspace>` from the staged file subset, and a
+   provisioning failure classifies as `infra_error` rather than scoring as a fixture failure. No
+   full gate run under this provisioning is required (see the eval baseline note below).
+   - Outcome: targeted `--only` probe, 2026-07-22, run 29961198852 on `a5-release` —
+     `seed-matched-flatten-orders` ×3: majority `pass`, all three episodes `submitted`,
+     **zero `infra_error`**, authoring rate 1.0, $0.49. The zero is the result that matters: the
+     installer-provisioned workspace auto-activated the shipped skill against a real host. The job
+     exits 1 by construction (a single matched fixture leaves the adversarial bucket empty, which
+     `check_evals` reports as a hard red); the pass criterion is the per-fixture majority.
 3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **not yet
    performed.** No `cursor-agent -p` run against a `install/cursor.py --target-root` workspace has
    been executed. Non-gating when it is run.
