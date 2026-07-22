@@ -133,7 +133,9 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
    d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.
    e. **Publish.** Register the trusted publishers + environments, dispatch TestPyPI, push `v0.1.0`.
       FR-037b outreach begins only after this.
-4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded.
+4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded **and** the row's normal
+   bar is met — its cited tests (incl. AC-042's `test_ac042_*`) green and citing the ID, and
+   `check_traceability` consistent. Recording the checklist items alone does not satisfy the row.
 
 ## Open blockers / waiting-on
 

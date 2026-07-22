@@ -1,17 +1,22 @@
 name: Cursor activation smoke (headless)
 
-# A5 distribution-verification ladder, step 3 (OQ-008). Confirms that a fresh
-# headless Cursor ACTUALLY ACTIVATES the shipped skill and grounds through the
-# module recipe, in an ephemeral workspace whose skill was installed by
-# `install/cursor.py --target-root` — i.e. from the shipped artifacts, not from
-# a checkout the agent can read.
+# A5 distribution-verification ladder, step 3 (OQ-008). A fresh headless Cursor,
+# given only an ephemeral workspace whose skill was installed by
+# `install/cursor.py --target-root` (the shipped artifacts, not a checkout the
+# agent can read), runs one episode; the check observes whether the module-recipe
+# marker appears in its output. Text output cannot prove the host ACTIVATED the
+# skill (the agent could have read the installed SKILL.md and quoted the recipe),
+# so this reports a recipe MARKER, never activation — see the pass wording below.
 #
 # CLAIM TIER. OQ-008 resolved that Cursor exposes no credential-free,
 # deterministic command to enumerate discovered skills, so the structural
-# `check_install` gate may never claim activation. This workflow is the ONLY
-# place an activation claim may be made, and it costs a model call — so it is
-# dispatch-only, never a PR gate, and gates no merge and no milestone by itself.
-# Promoting it to a gate requires an eval-policy commit (§11.8 discipline).
+# `check_install` gate may never claim activation. This workflow costs a model
+# call and is the only place that exercises the shipped skill under a real
+# headless Cursor — but its text-only output still cannot PROVE activation (it
+# reports a recipe marker, below), so it too makes no activation claim. It is
+# dispatch-only, never a PR gate, and gates no merge and no milestone. A genuine
+# activation claim would need the CLI's structured skill/tool events and an
+# eval-policy commit (§11.8 discipline).
 #
 # TWO-JOB SPLIT, mirroring evals-smoke.yml: `build` reaches the network to fetch
 # the CLI and the runtime and to provision the workspace; `smoke` downloads that
@@ -246,7 +251,7 @@ jobs:
       # transcript shows. Upgrading to a genuine activation claim means asserting
       # on the CLI's own structured skill/tool events (`--output-format json`)
       # once a dispatch has shown what those events look like.
-      - name: Assert the episode succeeded and used the shipped recipe
+      - name: Assert the episode succeeded and the recipe marker appeared
         if: always() && steps.scan.outcome == 'success'
         run: |
           python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" \
@@ -267,15 +272,15 @@ jobs:
               "### Cursor headless activation smoke",
               "",
               f"- **cursor-agent exit status:** `{status}`",
-              f"- **skill named in transcript:** {named}",
-              f"- **grounded via the module recipe:** {grounded}",
+              f"- **skill name present in transcript:** {named}",
+              f"- **module-recipe marker observed:** {grounded}",
               f"- **transcript bytes:** {len(text)}",
               "",
               "",
               "_Dispatch-tier observation (OQ-008). Text output cannot distinguish "
-              "activation from the agent reading the installed file, so this is "
-              "evidence the recipe was used — not proof the host activated the "
-              "skill. Gates no merge and no milestone._",
+              "activation from the agent reading the installed file, so this is a "
+              "recipe MARKER — not proof the host activated the skill. Gates no "
+              "merge and no milestone._",
           ]
           summary = "\n".join(lines) + "\n"
           print(summary)
@@ -284,19 +289,19 @@ jobs:
               Path(step_summary).open("a", encoding="utf-8").write(summary)
 
           # A nonzero cursor-agent is a failed episode: a crash can still leave the
-          # recipe string in partial output, so the grounding text check alone would
-          # false-pass it. Require BOTH a clean exit and the recipe.
+          # recipe string in partial output, so the marker check alone would
+          # false-pass it. Require BOTH a clean exit and the marker.
           if status != "0":
               print(f"SMOKE FAIL: cursor-agent exited {status!r} — the episode did "
                     "not complete successfully")
               sys.exit(1)
           if not grounded:
-              print("SMOKE FAIL: the transcript shows no use of the shipped "
-                    "grounding recipe")
+              print("SMOKE FAIL: the module-recipe marker did not appear in the "
+                    "transcript")
               sys.exit(1)
-          print("SMOKE PASS: a fresh headless Cursor, given only the "
-                "installer-provisioned workspace, completed the episode and used "
-                "the shipped grounding recipe.")
+          print("SMOKE PASS: the episode completed cleanly and the module-recipe "
+                "marker appeared in the transcript (a marker, not proof of skill "
+                "activation — see the summary note).")
           PY
 
       - name: Upload the transcript (build artifact, never committed)
