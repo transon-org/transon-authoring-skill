@@ -174,7 +174,8 @@ def _install_skill(workspace: Path, repo_root: Path) -> None:
     ``setting_sources=["project"]`` with ``cwd=workspace``, so only the project
     destination (``workspace/.claude/skills/transon-authoring/``) is discovered.
     The installer's source root is ``repo_root`` — the staged file subset the
-    eval bundle carries (``SKILL.md``, ``pyproject.toml``,
+    eval bundle carries (``skills/transon-authoring/SKILL.md``,
+    ``pyproject.toml``,
     ``resources/metadata-snapshot.json``, ``adapters/``, ``install/``), not an
     unpacked sdist: the claim is that the shipped installer provisions the
     workspace, not that the built archive was exercised (that is ladder step 1).

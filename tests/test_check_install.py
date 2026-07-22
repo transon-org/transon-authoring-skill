@@ -87,7 +87,6 @@ def make_fake_root(
     adapter_files: list[str] | None = None,
     plugin_json: dict | None = None,
     marketplace_json: dict | None = None,
-    plugin_skill_md: str | None = None,
     changelog_md: str | None = None,
     snapshot_md: str | None = None,
     omit: tuple[str, ...] = (),
@@ -118,7 +117,11 @@ def make_fake_root(
         snapshot_md if snapshot_md is not None else SNAPSHOT_MD, encoding="utf-8"
     )
     (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
-    (root / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    # The canonical body is the plugin-path file — there is no second copy.
+    if "skill" not in omit:
+        skill_dir = root / "skills" / "transon-authoring"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
     if "CHANGELOG.md" not in omit:
         (root / "CHANGELOG.md").write_text(
             changelog_md if changelog_md is not None else CHANGELOG_MD,
@@ -137,13 +140,6 @@ def make_fake_root(
             json.dumps(
                 marketplace_json if marketplace_json is not None else MARKETPLACE_JSON
             ),
-            encoding="utf-8",
-        )
-    if "skill" not in omit:
-        plugin_skill_dir = root / "skills" / "transon-authoring"
-        plugin_skill_dir.mkdir(parents=True)
-        (plugin_skill_dir / "SKILL.md").write_text(
-            plugin_skill_md if plugin_skill_md is not None else skill_md,
             encoding="utf-8",
         )
     return root
@@ -266,15 +262,17 @@ def test_ac041_gate_exercises_cursor_personal_combo():
 
 
 def test_ac040_plugin_green_on_repo():
-    # AC-040 / FR-037a — the shipped repo's plugin tree is structurally sound:
+    # AC-040 / FR-037 (a) — the shipped repo's plugin tree is structurally
+    # sound:
     # both manifests, the version/name agreement, the local marketplace source,
-    # and the byte-identical generated SKILL.md.
+    # and the canonical body sitting at the plugin-native path.
     result = run_gate("--root", str(REPO_ROOT))
     assert result.returncode == 0, result.stderr
     for check in (
         "plugin: .claude-plugin/plugin.json",
         "plugin: .claude-plugin/marketplace.json",
-        "plugin: skills/transon-authoring/SKILL.md",
+        "plugin: the canonical skill body is present at "
+        "skills/transon-authoring/SKILL.md",
         "plugin: SKILL.md frontmatter discoverability preconditions",
     ):
         assert check in result.stdout, check
@@ -364,19 +362,33 @@ def test_ac040_red_on_non_path_marketplace_source(tmp_path: Path):
     assert "source" in result.stderr
 
 
-def test_ac040_red_on_single_byte_stale_plugin_skill(tmp_path: Path):
-    # AC-040(c) — the stale-regeneration case: one byte of drift is red, and
-    # the finding names the regeneration command.
-    root = make_fake_root(tmp_path, plugin_skill_md=SKILL_MD + "x")
+def test_ac040_red_on_missing_canonical_body(tmp_path: Path):
+    # AC-040(c) — marketplace hosts fetch the repo tree, so a plugin root with
+    # no body at the canonical path is red. There is no second copy and so no
+    # stale-regeneration case left to guard against: the plugin path IS the
+    # canonical path.
+    root = make_fake_root(tmp_path, omit=("skill",))
     result = run_gate("--root", str(root))
     assert result.returncode == 1
-    assert "python3 scripts/sync_plugin.py" in result.stderr
+    assert "skills/transon-authoring/SKILL.md" in result.stderr
+
+
+def test_ac040_no_regeneration_or_identity_language_in_output(tmp_path: Path):
+    # FR-037 (a) — single source is preserved by ABSENCE of a second copy, not
+    # by an enforced-identity gate; the gate must not speak of regenerating or
+    # of a byte-identical plugin copy.
+    root = make_fake_root(tmp_path)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    output = (result.stdout + result.stderr).lower()
+    for stale in ("sync_plugin", "regenerate"):
+        assert stale not in output, stale
 
 
 def test_ac040_red_on_plugin_skill_frontmatter_precondition(tmp_path: Path):
-    # AC-040(d) / OQ-010 — the preconditions are asserted on the plugin copy
-    # too. A canonical body without a description turns both the install lint
-    # and the plugin lint red.
+    # AC-040(d) / OQ-010 — the preconditions are asserted on the canonical
+    # body at the plugin path. A body without a description turns both the
+    # install lint and the plugin lint red.
     root = make_fake_root(
         tmp_path, skill_md="---\nname: transon-authoring\n---\n\n# body\n"
     )

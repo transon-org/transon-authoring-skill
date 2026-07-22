@@ -13,7 +13,8 @@ Per (tool, scope) in {claude/project, claude/personal, cursor/project,
 cursor/personal}:
 
 1. Install: destination matches the §11.9 table; every adapter-listed file
-   (including ``SKILL.md``) is byte-identical to the canonical source;
+   (including ``SKILL.md``) is byte-identical to the canonical source under
+   ``skills/transon-authoring/`` and lands **flat** in the destination;
    ``.install-manifest.json`` carries exactly {schema_version, tool, scope,
    skill_version, engine_pin, snapshot_sha256, files} with correct values
    (NFR-008 triplet from ``pyproject.toml`` + snapshot hash).
@@ -35,10 +36,12 @@ outside the install-manifest regime, so it is checked in place, not staged.
 ``.claude-plugin/plugin.json`` and ``.claude-plugin/marketplace.json`` are
 well-formed and agree with each other, with the skill directory name, and with
 the ``pyproject.toml`` project version; the marketplace ``source`` resolves to
-the plugin root itself; ``skills/transon-authoring/SKILL.md`` is byte-identical
-to the canonical root body and satisfies the OQ-010 preconditions (AC-040).
-This claims **packaging integrity only** — never catalog listing or host
-discoverability.
+the plugin root itself; the canonical body exists at
+``skills/transon-authoring/SKILL.md`` and satisfies the OQ-010 preconditions
+(AC-040). There is no copy to hold identical — the plugin path **is** the
+canonical path — so the stale-regeneration failure this gate once guarded
+against cannot arise. This claims **packaging integrity only** — never catalog
+listing or host discoverability.
 
 Plus, once, on the real ``--root``: the NFR-008 release record — repo-root
 ``CHANGELOG.md`` exists and its topmost release record entry (headings naming
@@ -81,7 +84,10 @@ COMBOS = (
 )
 PLUGIN_MANIFEST_REL = ".claude-plugin/plugin.json"
 MARKETPLACE_REL = ".claude-plugin/marketplace.json"
-PLUGIN_SKILL_REL = f"skills/{SKILL_DIR_NAME}/SKILL.md"
+#: The canonical shipped body: the one editable ``SKILL.md``, sitting at the
+#: plugin-native path so the plugin channel needs no copy of it (FR-037a).
+SKILL_SOURCE_DIR = f"skills/{SKILL_DIR_NAME}"
+CANONICAL_SKILL_REL = f"{SKILL_SOURCE_DIR}/SKILL.md"
 CHANGELOG_REL = "CHANGELOG.md"
 SNAPSHOT_PROVENANCE_REL = "resources/metadata-snapshot.md"
 RUNTIME_PREREQ = "pip install transon-authoring"
@@ -149,7 +155,11 @@ def stage_source(root: Path, staged: Path, findings: list[str]) -> Optional[list
     """Copy only what the installers read from *root* into the temp *staged*
     root; return the union of adapter ``files`` lists, or None when the
     source tree cannot be rehearsed at all."""
-    required = ("SKILL.md", "pyproject.toml", "resources/metadata-snapshot.json")
+    required = (
+        CANONICAL_SKILL_REL,
+        "pyproject.toml",
+        "resources/metadata-snapshot.json",
+    )
     missing = [rel for rel in required if not (root / rel).is_file()]
     adapters = root / "adapters"
     if not adapters.is_dir():
@@ -182,10 +192,12 @@ def stage_source(root: Path, staged: Path, findings: list[str]) -> Optional[list
             return None
         listed.extend(name for name in files if name not in listed)
     # Copy adapter-listed extras that exist; a listed-but-missing file is
-    # left for the installer to fail on (surfaced as a finding).
+    # left for the installer to fail on (surfaced as a finding). Adapter
+    # ``files`` entries are destination-relative names read out of
+    # ``skills/transon-authoring/`` (§11.9 canonical body location).
     for name in listed:
-        source = root / name
-        target = staged / name
+        source = root / SKILL_SOURCE_DIR / name
+        target = staged / SKILL_SOURCE_DIR / name
         if source.is_file() and not target.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
@@ -338,10 +350,12 @@ def rehearse(
     oks.append(f"{combo}: installed at the install-table destination")
 
     for name in listed:
-        if (dest / name).read_bytes() != (staged / name).read_bytes():
+        source = staged / SKILL_SOURCE_DIR / name
+        if (dest / name).read_bytes() != source.read_bytes():
             findings.append(
                 f"{combo}: installed {name} is not byte-identical to the "
-                "canonical source file (FR-019 / AC-009)"
+                f"canonical source file {SKILL_SOURCE_DIR}/{name} "
+                "(FR-019 / AC-009)"
             )
             break
     else:
@@ -511,14 +525,14 @@ def check_marketplace(
         else:
             target = (root / source).resolve()
             complete = (target / PLUGIN_MANIFEST_REL).is_file() and (
-                target / PLUGIN_SKILL_REL
+                target / CANONICAL_SKILL_REL
             ).is_file()
             if target != root.resolve() or not complete:
                 findings.append(
                     f"plugin: {MARKETPLACE_REL} entry source {source!r} "
                     f"resolves to {target}, not to the plugin root {root} "
-                    f"carrying {PLUGIN_MANIFEST_REL} and {PLUGIN_SKILL_REL} "
-                    "(AC-040)"
+                    f"carrying {PLUGIN_MANIFEST_REL} and "
+                    f"{CANONICAL_SKILL_REL} (AC-040)"
                 )
     if len(findings) == before:
         oks.append(
@@ -528,33 +542,20 @@ def check_marketplace(
 
 
 def check_plugin_skill(root: Path, findings: list[str], oks: list[str]) -> None:
-    """AC-040(c) + (d)."""
-    canonical = root / "SKILL.md"
-    copy = root / PLUGIN_SKILL_REL
+    """AC-040(c) + (d). The plugin path **is** the canonical path, so there is
+    no copy to hold identical — (c) is simply that the body is there."""
+    canonical = root / CANONICAL_SKILL_REL
     if not canonical.is_file():
         findings.append(
-            f"plugin: no canonical SKILL.md under {root} to compare the "
-            "generated plugin body against (AC-040)"
-        )
-        return
-    if not copy.is_file():
-        findings.append(
-            f"plugin: {PLUGIN_SKILL_REL} is missing — regenerate it with "
-            "`python3 scripts/sync_plugin.py` (AC-040)"
-        )
-        return
-    if copy.read_bytes() != canonical.read_bytes():
-        findings.append(
-            f"plugin: {PLUGIN_SKILL_REL} is not byte-identical to the "
-            "canonical root SKILL.md — regenerate it with "
-            "`python3 scripts/sync_plugin.py` (NFR-007 / AC-040)"
+            f"plugin: the canonical skill body is missing from "
+            f"{CANONICAL_SKILL_REL} under {root} — marketplace hosts fetch the "
+            "repo tree, so the body must sit at that path (AC-040)"
         )
         return
     oks.append(
-        f"plugin: {PLUGIN_SKILL_REL} byte-identical to the canonical root "
-        "SKILL.md"
+        f"plugin: the canonical skill body is present at {CANONICAL_SKILL_REL}"
     )
-    lint_frontmatter("plugin", copy.parent, findings, oks, ac="AC-040")
+    lint_frontmatter("plugin", canonical.parent, findings, oks, ac="AC-040")
 
 
 def check_plugin(root: Path, findings: list[str], oks: list[str]) -> None:
@@ -734,8 +735,9 @@ def main(argv: list[str] | None = None) -> int:
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
-        help="source root containing SKILL.md, adapters/, pyproject.toml and "
-        "resources/metadata-snapshot.json (default: this script's repo)",
+        help="source root containing skills/transon-authoring/SKILL.md, "
+        "adapters/, pyproject.toml and resources/metadata-snapshot.json "
+        "(default: this script's repo)",
     )
     args = parser.parse_args(argv)
     root: Path = args.root.resolve()

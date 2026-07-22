@@ -5,11 +5,15 @@ Runs standalone from a repo checkout or release archive: stdlib-only, never
 imports from ``scripts/`` or ``src/``, and never runs ``pip`` (OQ-020) — the
 runtime package is installed separately (``pip install transon-authoring``).
 
-Strategy per §11.9: **copy** the adapter-listed files (never symlink) into the
-tool's skill directory under the target project root (``--target-root``;
-default: the source checkout) and record ``.install-manifest.json`` listing
-owned paths + versions. Upgrade = re-run install (idempotent replace of owned
-files). Uninstall deletes only manifest paths.
+Strategy per §11.9: **copy** the adapter-listed files (never symlink) out of the
+canonical body directory ``skills/transon-authoring/`` into the tool's skill
+directory under the target project root (``--target-root``; default: the source
+checkout), where they land **flat**, and record ``.install-manifest.json``
+listing owned paths + versions. Adapter ``files`` entries and manifest ``files``
+entries are destination-relative names (``SKILL.md``) — the source directory is
+a repo-layout detail and never appears in a destination path or a manifest.
+Upgrade = re-run install (idempotent replace of owned files). Uninstall deletes
+only manifest paths.
 """
 
 from __future__ import annotations
@@ -24,6 +28,9 @@ from typing import Any, Optional
 
 MANIFEST_NAME = ".install-manifest.json"
 SKILL_DIR_NAME = "transon-authoring"
+#: Where the canonical shipped body lives in the source checkout (§11.9): the
+#: plugin-native path, so the plugin channel needs no copy of it.
+SKILL_SOURCE_DIR = Path("skills") / SKILL_DIR_NAME
 
 # Textual pyproject parses on purpose: no ``tomllib`` — the Python floor is
 # 3.10 (OQ-019). Pin anchored to the ``dependencies`` line, same as
@@ -105,9 +112,11 @@ def _install(
 
     sources: list[tuple[str, bytes]] = []
     for name in adapter["files"]:
-        source = repo_root / name
+        source = repo_root / SKILL_SOURCE_DIR / name
         if not source.is_file():
-            return _fail(prog, f"adapter file missing from repo root: {source}")
+            return _fail(
+                prog, f"adapter file missing from the canonical body directory: {source}"
+            )
         sources.append((name, source.read_bytes()))
 
     dest.mkdir(parents=True, exist_ok=True)

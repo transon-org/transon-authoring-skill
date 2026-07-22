@@ -100,7 +100,7 @@ jobs:
           # install/, adapters/, pyproject.toml and
           # resources/metadata-snapshot.json (not an unpacked sdist).
           mkdir -p "${BUNDLE}/repo/resources"
-          cp -R scripts evals install adapters SKILL.md pyproject.toml "${BUNDLE}/repo/"
+          cp -R scripts evals install adapters skills pyproject.toml "${BUNDLE}/repo/"
           cp resources/metadata-snapshot.json "${BUNDLE}/repo/resources/"
 
           tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/evalbundle.tgz" evalbundle
@@ -186,7 +186,8 @@ jobs:
           # infra_error — AFTER provider spend — so assert the staged files are
           # present here, before any model call.
           R="${RUNNER_TEMP}/evalbundle/repo"
-          for f in SKILL.md pyproject.toml resources/metadata-snapshot.json \
+          for f in skills/transon-authoring/SKILL.md pyproject.toml \
+                   resources/metadata-snapshot.json \
                    adapters/claude/adapter.json install/claude.py install/_shared.py; do
             test -f "${R}/${f}" || { echo "eval bundle is missing ${f}" >&2; exit 1; }
           done
@@ -203,7 +204,9 @@ jobs:
           ROOT="${RUNNER_TEMP}/smoke-root"
           FIXTURE="seed-matched-flatten-orders"
           mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds" "${ROOT}/resources"
-          cp "${B}/SKILL.md" "${ROOT}/SKILL.md"
+          mkdir -p "${ROOT}/skills/transon-authoring"
+          cp "${B}/skills/transon-authoring/SKILL.md" \
+             "${ROOT}/skills/transon-authoring/SKILL.md"
           # This throwaway root is also the driver's INSTALLER SOURCE ROOT
           # (--root is passed straight to run_fixture as repo_root), so it needs
           # everything install/claude.py reads (A5 ladder step 2 / OQ-027a).

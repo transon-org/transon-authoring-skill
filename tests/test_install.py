@@ -52,7 +52,11 @@ def make_repo(tmp_path: Path, name: str = "repo", pyproject: str = PYPROJECT) ->
     (root / "resources").mkdir()
     (root / "resources" / "metadata-snapshot.json").write_bytes(SNAPSHOT_BYTES)
     (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
-    (root / "SKILL.md").write_text(SKILL_BODY, encoding="utf-8")
+    # SPEC 11.9: adapter `files` are destination-relative names read out of the
+    # canonical body directory; they land flat in the destination.
+    skill_dir = root / "skills" / "transon-authoring"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(SKILL_BODY, encoding="utf-8")
     return root
 
 

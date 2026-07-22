@@ -64,8 +64,9 @@ No console-script product; no MCP.
 - **AD-004 — Verify-before-return.** Success only if `verify` → `ok: true`, `assurance: "matched"`.
   `verify` **re-validates** the SampleSet via `check_samples` and rejects unless
   `ok_for_verify` (AD-019). Structured failure otherwise (§11.5).
-- **AD-005 — Single-source, multi-tool.** One **editable** `SKILL.md`; generated copies are
-  gate-enforced byte-identical to it (FR-037a / AC-040); Claude + Cursor adapters; parity gate.
+- **AD-005 — Single-source, multi-tool.** Exactly one `SKILL.md` in the repo, at the
+  plugin-native canonical path (FR-037a / §11.9) — every channel reads that file, none copies it;
+  Claude + Cursor adapters; parity gate.
 - **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
   `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
   `python -m transon_authoring` (§11.6).

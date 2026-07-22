@@ -68,7 +68,8 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
      by `install/claude.py --target-root <workspace>` before host auto-activation (OQ-027a),
      so the gate measures the installed-from-distribution configuration; validated first by a
      targeted `--only` probe. The installer's **source root is the staged file subset the eval
-     bundle already carries** — `SKILL.md`, `pyproject.toml`, `resources/metadata-snapshot.json`,
+     bundle already carries** — `skills/transon-authoring/SKILL.md`, `pyproject.toml`,
+     `resources/metadata-snapshot.json`,
      `adapters/`, `install/` — not an unpacked sdist: the claim is that the shipped installer
      provisions the workspace, not that the built archive was exercised (that is ladder step 1's
      job). Installed bytes are byte-identical to canonical and the added

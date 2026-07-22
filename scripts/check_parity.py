@@ -2,14 +2,16 @@
 """check-parity — adapter parity + shipped self-sufficiency gate
 (NFR-007 / AC-005; NFR-012 / AC-032; SPEC §13).
 
-Pure offline text/tree scan over the shipped surface: the root ``SKILL.md``
-plus every file under ``adapters/``. Findings are deterministic — sorted by
-file path, then line number — and reported on stderr.
+Pure offline text/tree scan over the shipped surface: the canonical
+``skills/transon-authoring/SKILL.md`` plus every file under ``adapters/``.
+Findings are deterministic — sorted by file path, then line number — and
+reported on stderr.
 
 Parity half (NFR-007 / AC-005):
 
-1. Exactly one ``SKILL.md`` in the shipped surface: the repo root. Any file
-   named ``SKILL.md`` under ``adapters/`` is red (single-source rule).
+1. Exactly one ``SKILL.md`` in the shipped surface, at the canonical path
+   ``skills/transon-authoring/SKILL.md``. Any file named ``SKILL.md`` under
+   ``adapters/`` is red (single-source rule).
 2. ``adapters/claude/adapter.json`` and ``adapters/cursor/adapter.json``
    both parse; their ``files`` lists are equal; every scope/capability
    difference appears in the narrower adapter's ``exclusions`` with a
@@ -63,6 +65,10 @@ SUBCOMMANDS = frozenset(
         "init-config",
     }
 )
+
+#: The canonical shipped body: the one editable ``SKILL.md``, sitting at the
+#: plugin-native path so the plugin channel needs no copy of it (FR-037a).
+SKILL_REL = "skills/transon-authoring/SKILL.md"
 
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 RECIPE_RE = re.compile(r"python3?\s+-m\s+transon_authoring\s+([A-Za-z0-9_-]+)")
@@ -236,11 +242,11 @@ def check_adapter_parity(root: Path, findings: list) -> None:
 def scan(root: Path) -> list[tuple[str, int, str]]:
     findings: list[tuple[str, int, str]] = []
 
-    skill_path = root / "SKILL.md"
+    skill_path = root / SKILL_REL
     if not skill_path.is_file():
         findings.append(
-            ("SKILL.md", 0, "missing root SKILL.md — the single shipped "
-             "skill body lives at the repo root (NFR-007 / AC-005)")
+            (SKILL_REL, 0, f"missing {SKILL_REL} — the single shipped skill "
+             "body lives at that canonical path (NFR-007 / AC-005)")
         )
 
     adapters_dir = root / "adapters"
@@ -254,7 +260,20 @@ def scan(root: Path) -> list[tuple[str, int, str]]:
             ("adapters", 0, "missing adapters/ directory (NFR-007 / AC-005)")
         )
 
-    # Parity check 1: exactly one SKILL.md, at the repo root.
+    # Parity check 1: exactly one SKILL.md in the shipped surface, at the
+    # canonical path. The repo root is the path a re-created duplicate would
+    # land on — single source is now by absence of a second copy (AD-005 /
+    # FR-037a), so nothing else would notice one.
+    if (root / "SKILL.md").is_file():
+        findings.append(
+            (
+                "SKILL.md",
+                0,
+                f"second SKILL.md at the repo root — the one body lives at "
+                f"{SKILL_REL} and is never copied (NFR-007 / AC-005)",
+            )
+        )
+
     for path in adapter_files:
         if path.name == "SKILL.md":
             rel = path.relative_to(root).as_posix()
@@ -263,7 +282,7 @@ def scan(root: Path) -> list[tuple[str, int, str]]:
                     rel,
                     0,
                     "adapter-side SKILL.md copy — adapters share the ONE "
-                    "root SKILL.md, never a fork (NFR-007 / AC-005)",
+                    f"canonical {SKILL_REL}, never a fork (NFR-007 / AC-005)",
                 )
             )
 
@@ -296,7 +315,8 @@ def main(argv: list[str] | None = None) -> int:
         "--root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
-        help="repo root containing SKILL.md and adapters/ "
+        help="repo root containing skills/transon-authoring/SKILL.md and "
+        "adapters/ "
         "(default: this script's repo)",
     )
     args = parser.parse_args(argv)

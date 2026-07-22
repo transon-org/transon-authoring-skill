@@ -15,7 +15,8 @@ def test_ac005_single_skill_source():
     claude = json.loads((ADAPTERS_DIR / "claude" / "adapter.json").read_text())
     cursor = json.loads((ADAPTERS_DIR / "cursor" / "adapter.json").read_text())
 
-    # Both adapters point at the same file list (the canonical repo-root SKILL.md).
+    # Both adapters point at the same file list: destination-relative names,
+    # read out of the canonical skills/transon-authoring/ body directory.
     assert claude["files"] == cursor["files"]
 
     # NFR-007: every scope one adapter has and the other lacks must be a

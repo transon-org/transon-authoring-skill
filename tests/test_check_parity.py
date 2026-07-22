@@ -1,7 +1,8 @@
 """NFR-007 / AC-005 + NFR-012 / AC-032 — `check_parity` gate.
 
 Parity half (NFR-007 / AC-005): exactly one `SKILL.md` in the shipped surface
-(repo root; any adapter-side copy is red), the Claude/Cursor `adapter.json`
+(the canonical `skills/transon-authoring/SKILL.md`; any adapter-side copy is
+red), the Claude/Cursor `adapter.json`
 files ship the same `files` list, every scope/capability difference is a
 documented exclusion (non-empty `reason`) in the narrower adapter, and every
 `python -m transon_authoring <sub>` recipe in the shipped files names a real
@@ -30,6 +31,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHECK = REPO_ROOT / "scripts" / "check_parity.py"
+SKILL_REL = Path("skills") / "transon-authoring" / "SKILL.md"
 
 SKILL_BODY = """\
 # transon-authoring
@@ -69,8 +71,9 @@ def run_check(root: Path) -> subprocess.CompletedProcess:
 
 @pytest.fixture
 def shipped_tree(tmp_path: Path) -> Path:
-    """A minimal green shipped surface: root SKILL.md + both adapters."""
-    (tmp_path / "SKILL.md").write_text(SKILL_BODY, encoding="utf-8")
+    """A minimal green shipped surface: the canonical SKILL.md + adapters."""
+    (tmp_path / SKILL_REL).parent.mkdir(parents=True)
+    (tmp_path / SKILL_REL).write_text(SKILL_BODY, encoding="utf-8")
     for tool, adapter in (("claude", CLAUDE_ADAPTER), ("cursor", CURSOR_ADAPTER)):
         adapter_dir = tmp_path / "adapters" / tool
         adapter_dir.mkdir(parents=True)
@@ -78,7 +81,7 @@ def shipped_tree(tmp_path: Path) -> Path:
             json.dumps(adapter, indent=2) + "\n", encoding="utf-8"
         )
         (adapter_dir / "README.md").write_text(
-            f"# {tool} adapter\n\nInstalls the canonical root skill file.\n",
+            f"# {tool} adapter\n\nInstalls the canonical skill file.\n",
             encoding="utf-8",
         )
     return tmp_path
@@ -102,7 +105,7 @@ def test_ac005_fixture_tree_green(shipped_tree: Path):
 
 def test_ac005_red_on_adapter_skill_copy(shipped_tree: Path):
     # NFR-007 / AC-005 — a second SKILL.md under adapters/ breaks the
-    # single-source rule (exactly one SKILL.md, at the repo root).
+    # single-source rule (exactly one SKILL.md, at the canonical path).
     copy = shipped_tree / "adapters" / "claude" / "SKILL.md"
     copy.write_text(SKILL_BODY, encoding="utf-8")
     result = run_check(shipped_tree)
@@ -110,10 +113,21 @@ def test_ac005_red_on_adapter_skill_copy(shipped_tree: Path):
     assert "adapters/claude/SKILL.md" in result.stderr
 
 
+def test_ac005_red_on_recreated_root_skill_copy(shipped_tree: Path):
+    # NFR-007 / AC-005 — single source is by ABSENCE of a second copy
+    # (AD-005 / FR-037a), so a body re-created at the old repo-root path is
+    # red; nothing else in the tree would notice it.
+    copy = shipped_tree / "SKILL.md"
+    copy.write_text(SKILL_BODY, encoding="utf-8")
+    result = run_check(shipped_tree)
+    assert result.returncode == 1
+    assert "second SKILL.md at the repo root" in result.stderr
+
+
 def test_ac005_red_on_unknown_subcommand_recipe(shipped_tree: Path):
     # NFR-007 / AC-005 — a shipped recipe naming a subcommand outside the
     # module CLI's closed set is red.
-    skill = shipped_tree / "SKILL.md"
+    skill = shipped_tree / SKILL_REL
     skill.write_text(
         skill.read_text(encoding="utf-8")
         + "\nAlso run `python -m transon_authoring frobnicate` daily.\n",
@@ -173,7 +187,7 @@ def test_ac005_red_on_missing_files_key(shipped_tree: Path):
 
 
 def append_to_skill(root: Path, text: str) -> None:
-    skill = root / "SKILL.md"
+    skill = root / SKILL_REL
     skill.write_text(skill.read_text(encoding="utf-8") + text, encoding="utf-8")
 
 
@@ -309,7 +323,7 @@ def test_ac032_green_on_id_inside_html_comment(shipped_tree: Path):
 
 
 def test_ac032_repo_skill_and_adapters_lint_green():
-    # NFR-012 / AC-032 — the real root SKILL.md + adapters/ pass the
+    # NFR-012 / AC-032 — the real canonical SKILL.md + adapters/ pass the
     # self-sufficiency lint (shipped surface is standalone).
     result = run_check(REPO_ROOT)
     assert result.returncode == 0, result.stderr
@@ -330,7 +344,7 @@ def test_ac032_findings_are_deterministically_ordered(shipped_tree: Path):
     assert first.stderr == second.stderr
     lines = [line for line in first.stderr.splitlines() if "FAIL" in line]
     assert len(lines) == 3
-    # Sorted by path ("SKILL.md" < "adapters/..." in ASCII), then by line.
-    assert "AD-004" in lines[0]
-    assert "tests/" in lines[1]
-    assert "adapters/claude/README.md" in lines[2]
+    # Sorted by path ("adapters/..." < "skills/..." in ASCII), then by line.
+    assert "adapters/claude/README.md" in lines[0]
+    assert "AD-004" in lines[1]
+    assert "tests/" in lines[2]

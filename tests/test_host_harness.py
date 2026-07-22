@@ -18,6 +18,18 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CASES = REPO_ROOT / "evals" / "cases"
+#: The one canonical skill body (SPEC §11.9) — installers and the harness both
+#: read it from here.
+SKILL_REL = Path("skills") / "transon-authoring" / "SKILL.md"
+CANONICAL_SKILL = REPO_ROOT / SKILL_REL
+
+
+def _stage_skill(source_root: Path) -> None:
+    """Put the canonical body at its canonical relative path in a fake source
+    root, the way a staged eval bundle carries it."""
+    target = source_root / SKILL_REL
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(CANONICAL_SKILL, target)
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import check_evals  # noqa: E402
@@ -229,7 +241,7 @@ def test_oq_027a_run_fixture_provisions_workspace_via_installer():
     assert episode["submitted"] == {"ok": True}
     assert matched["intent_nl"] in host.seen["prompt"]
     assert host.seen["skill_installed"] is True
-    assert host.seen["installed_bytes"] == (REPO_ROOT / "SKILL.md").read_bytes()
+    assert host.seen["installed_bytes"] == CANONICAL_SKILL.read_bytes()
     manifest = host.seen["manifest"]
     assert manifest is not None
     assert manifest["tool"] == "claude"
@@ -246,7 +258,7 @@ def test_oq_027a_installer_failure_is_infra_error(tmp_path):
     # infra_error, never a fixture failure scored against the authoring target.
     source_root = tmp_path / "broken-source"
     (source_root / "install").mkdir(parents=True)
-    shutil.copy2(REPO_ROOT / "SKILL.md", source_root / "SKILL.md")
+    _stage_skill(source_root)
     for name in ("claude.py", "_shared.py"):
         shutil.copy2(REPO_ROOT / "install" / name, source_root / "install" / name)
 
@@ -262,7 +274,7 @@ def test_oq_027a_missing_installer_is_infra_error(tmp_path):
     # infra_error before any model call, not a fixture failure (OQ-016d).
     source_root = tmp_path / "no-installer"
     source_root.mkdir()
-    shutil.copy2(REPO_ROOT / "SKILL.md", source_root / "SKILL.md")
+    _stage_skill(source_root)
 
     host = FakeHost(HostOutcome(status=STATUS_RESULT, result={"ok": True}))
     episode = host_harness.run_fixture(_load("refuse"), RUNNER_CFG, host, source_root)
