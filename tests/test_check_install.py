@@ -402,7 +402,10 @@ def test_ac042_release_record_green_on_repo():
     # engine pin, resources/metadata-snapshot.md snapshot_sha256).
     result = run_gate("--root", str(REPO_ROOT))
     assert result.returncode == 0, result.stderr
-    assert "release: CHANGELOG.md topmost release entry" in result.stdout
+    assert "release: CHANGELOG.md topmost release record entry" in result.stdout
+    # The OK line claims agreement with the repo's sources, never that the
+    # release was published (the entry exists before the tag is pushed).
+    assert "agrees with" in result.stdout
 
 
 def test_ac042_red_on_missing_changelog(tmp_path: Path):
@@ -461,6 +464,53 @@ def test_ac042_red_on_stale_snapshot_hash(tmp_path: Path):
     assert FIXTURE_SNAPSHOT_SHA in result.stderr
 
 
+def test_ac042_v_prefixed_release_heading_is_recognised(tmp_path: Path):
+    # AC-042 — the release trigger is `refs/tags/v*`, so `## v0.0.1 — <date>`
+    # is exactly what a maintainer writes at tag time. The leading `v` is
+    # stripped before the version token is read: the entry names 0.0.1 and
+    # agrees with all three sources, so the gate is green.
+    root = make_fake_root(
+        tmp_path,
+        changelog_md=CHANGELOG_MD.replace("## 0.0.1", "## v0.0.1"),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
+
+
+def test_ac042_unreleased_heading_naming_a_version_is_not_a_release_entry(
+    tmp_path: Path,
+):
+    # AC-042 — "Unreleased or in-progress headings above the topmost release
+    # entry are ignored", whatever version token they carry. An
+    # `## Unreleased — targeting 0.0.1` heading must not be taken as the
+    # release entry even though it names the pyproject version; the entry
+    # below it is the release record.
+    changelog = (
+        "# Changelog\n\n"
+        "## Unreleased — targeting 0.0.1\n\n"
+        "- not yet released\n\n" + CHANGELOG_MD.split("\n", 2)[2]
+    )
+    root = make_fake_root(tmp_path, changelog_md=changelog)
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
+
+    # …and when the in-progress heading is the *only* heading naming a
+    # version, the file records no release at all: red, not green.
+    only_unreleased = (
+        "# Changelog\n\n"
+        "## In progress — 0.0.1\n\n"
+        "- Skill version: `0.0.1`\n"
+        "- Engine pin: `transon==0.2.3`\n"
+        f"- Snapshot hash (`snapshot_sha256`): `{FIXTURE_SNAPSHOT_SHA}`\n"
+    )
+    root2 = make_fake_root(tmp_path, name="root2", changelog_md=only_unreleased)
+    result2 = run_gate("--root", str(root2))
+    assert result2.returncode == 1
+    assert "names a release version" in result2.stderr
+
+
 def test_nfr008_unreleased_heading_above_release_entry_is_ignored(tmp_path: Path):
     # AC-042 / NFR-008 — headings above the topmost release entry that name no
     # release version are ignored, values inside them included: only the
@@ -477,7 +527,7 @@ def test_nfr008_unreleased_heading_above_release_entry_is_ignored(tmp_path: Path
     )
     result = run_gate("--root", str(root))
     assert result.returncode == 0, result.stderr
-    assert "release: CHANGELOG.md topmost release entry 0.0.1" in result.stdout
+    assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
 
 
 def test_ac009_no_discoverability_claim_in_output(tmp_path: Path):

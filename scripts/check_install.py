@@ -41,13 +41,16 @@ This claims **packaging integrity only** — never catalog listing or host
 discoverability.
 
 Plus, once, on the real ``--root``: the NFR-008 release record — repo-root
-``CHANGELOG.md`` exists and its topmost release entry (headings naming no
-release version, e.g. "Unreleased", are skipped) names the ``pyproject.toml``
-project version and states that version's engine pin (``transon==…``, read
-textually from ``pyproject.toml``) and the ``snapshot_sha256`` recorded in
-``resources/metadata-snapshot.md`` — the stale-release-record failure
-(AC-042). Agreement with the repo's own sources only; the ladder outcomes
-NFR-008 requires are maintainer prose and are not mechanically verified.
+``CHANGELOG.md`` exists and its topmost release record entry (headings naming
+no release version, and "Unreleased"/"In progress" headings whatever version
+they name, are skipped; a tag-style ``v`` prefix is stripped) names the
+``pyproject.toml`` project version and states that version's engine pin
+(``transon==…``, read textually from ``pyproject.toml``) and the
+``snapshot_sha256`` recorded in ``resources/metadata-snapshot.md`` — the
+stale-release-record failure (AC-042). This is agreement between the record and
+the repo's own sources only: the entry exists before the tag is pushed, so a
+green result is never evidence that the version was published, and the ladder
+outcomes NFR-008 requires are maintainer prose, not mechanically verified.
 
 Exit codes: 0 all green, 1 any finding.
 """
@@ -105,11 +108,14 @@ _VERSION_RE = re.compile(r"^version\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
 _FRONTMATTER_LINE_RE = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*)$")
 
 # Release-record parses (AC-042). Markdown ATX headings only; a heading names a
-# release when it carries a dotted version token (dates are dash-separated and
-# never match).
+# release when it carries a dotted version token, optionally tag-style
+# ``v``-prefixed as the ``refs/tags/v*`` release trigger writes it (dates are
+# dash-separated and never match). Headings that open with "Unreleased" or
+# "In progress" are never release entries, whatever version they name.
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(\S.*)$")
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
-_RELEASE_VERSION_RE = re.compile(r"(?<![\w.])(\d+\.\d+(?:\.[0-9A-Za-z.+-]+)?)")
+_RELEASE_VERSION_RE = re.compile(r"(?<![\w.])[vV]?(\d+\.\d+(?:\.[0-9A-Za-z.+-]+)?)")
+_UNRELEASED_HEADING_RE = re.compile(r"^\W*(unreleased|in[\s-]?progress)", re.IGNORECASE)
 _SNAPSHOT_SHA_RE = re.compile(
     r"[\"']snapshot_sha256[\"']\s*:\s*[\"']([0-9a-fA-F]{64})[\"']"
 )
@@ -563,9 +569,12 @@ def check_plugin(root: Path, findings: list[str], oks: list[str]) -> None:
 def find_release_entry(text: str) -> Optional[tuple[str, str]]:
     """Return ``(version, entry_text)`` for the topmost heading naming a
     release version, or None when no heading names one. Headings above it that
-    name no version (an "Unreleased" section) are skipped, and the entry runs
+    name no version, and headings that open with "Unreleased" / "In progress"
+    (whatever version token they carry — a heading saying the release has not
+    happened is never a release entry, AC-042), are skipped. The entry runs
     until the next heading at the same or a higher level. Fenced blocks are not
-    scanned for headings."""
+    scanned for headings. A tag-style leading ``v``/``V`` is stripped from the
+    version token, since the release trigger is ``refs/tags/v*``."""
     lines = text.splitlines()
     fenced = False
     for index, line in enumerate(lines):
@@ -577,7 +586,10 @@ def find_release_entry(text: str) -> Optional[tuple[str, str]]:
         heading = _HEADING_RE.match(line)
         if heading is None:
             continue
-        version = _RELEASE_VERSION_RE.search(heading.group(2))
+        title = heading.group(2)
+        if _UNRELEASED_HEADING_RE.match(title):
+            continue
+        version = _RELEASE_VERSION_RE.search(title)
         if version is None:
             continue
         level = len(heading.group(1))
@@ -599,8 +611,9 @@ def find_release_entry(text: str) -> Optional[tuple[str, str]]:
 
 def check_release_record(root: Path, findings: list[str], oks: list[str]) -> None:
     """AC-042 — the repo-root release record carries the NFR-008 version
-    triplet. Asserts agreement with the repo's own sources of truth only; the
-    ladder outcomes NFR-008 requires are maintainer prose, unverified here."""
+    triplet. Asserts agreement with the repo's own sources of truth only —
+    never that the version was published; the ladder outcomes NFR-008 requires
+    are maintainer prose, unverified here."""
     path = root / CHANGELOG_REL
     if not path.is_file():
         findings.append(
@@ -665,9 +678,10 @@ def check_release_record(root: Path, findings: list[str], oks: list[str]) -> Non
 
     if len(findings) == before:
         oks.append(
-            f"release: {CHANGELOG_REL} topmost release entry {version} states "
-            "the project version, engine pin and snapshot hash (NFR-008 "
-            "triplet)"
+            f"release: {CHANGELOG_REL} topmost release record entry {version} "
+            "agrees with the repo's sources — project version, engine pin and "
+            "snapshot hash (NFR-008 triplet); source agreement only, not "
+            "evidence that this version was published"
         )
 
 

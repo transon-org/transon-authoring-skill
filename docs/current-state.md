@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `5140202` — feat: Cursor personal scope and Claude Code plugin packaging |
+| Repo HEAD | `b55a15d` — feat: release record, distribution-faithful eval provisioning, ladder-3 smoke |
 | Branch | `a5-release` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -25,17 +25,31 @@ superseded artifacts were swept together and `check_install` now exercises `curs
 **FR-037a/AC-040** (the §11.9 plugin tree, `scripts/sync_plugin.py`, byte-identity gate); project
 version bumped `0.0.1` → `0.1.0`, which AC-040 forces `plugin.json` to match and `release.yml`
 forces the tag to match.
-Uncommitted at this point: `CHANGELOG.md` + the AC-042 check (NFR-008 row deliberately stays `[ ]`
-— the mechanical half is green and cited, the release-checklist half has not happened), the ladder-3
-`cursor-activation-smoke.yml` scaffold (dispatch-only; needs a `CURSOR_API_KEY` secret that does not
-exist yet, installs the Cursor CLI via an unpinned `curl | bash` because Cursor publishes no
-versioned artifact, and audits rather than blocks egress because Cursor publishes no endpoint list),
-and the ladder-2 eval-provisioning slice, still in flight._
+Then `b55a15d`: **NFR-008/AC-042** (`CHANGELOG.md` + the release-record check; the row deliberately
+stays `[ ]` — the mechanical half is green and cited, the release-checklist half has not happened),
+**ladder 2** (`host_harness` provisions the workspace by running the shipped
+`install/claude.py --target-root`; provisioning failure classifies `infra_error`; both eval
+workflows bundle what the installer reads and assert it before provider spend; SPEC §11.8 reworded
+to name the installer), and **ladder 3** (`cursor-activation-smoke.yml`, dispatch-only).
+**`spec-reviewer` caught two falsehoods in the release record**, both since corrected and both
+verified independently: `transon-authoring 0.0.1` **is already on TestPyPI** (uploaded 2026-07-22
+from `main`, run 29915374804) — the record had claimed no upload existed; and ladder 1 was recorded
+"green on the CI runs of this branch" when `a5-release` has never been pushed and has no runs. The
+gate that governs this file cannot catch either: AC-042 checks only that the triplet agrees with
+`pyproject.toml` and the snapshot provenance, so **every ladder/publication line is unverified
+prose and must be checked by a human against `gh run list` before release**.
+Ladder-3 caveats to settle before it is ever dispatched: it needs a `CURSOR_API_KEY` secret that
+does not exist; OQ-027f(ii) is **not** satisfiable there (the key is the agent's own credential —
+no proxy equivalent to the Anthropic path), so it is documented as accepted residual risk needing a
+dedicated low-privilege key; the Cursor CLI installs via an unpinned `curl | bash` (Cursor ships no
+versioned artifact); egress audits rather than blocks (Cursor publishes no endpoint list); and the
+claim is limited to "the shipped recipe was used" — text output cannot distinguish activation from
+the agent reading the installed file, since its cwd is the workspace._
 
 _**OQ-028 and OQ-029 resolved (branch `spec-oq028-oq029-resolution`) — no open OQs remain.**
 **OQ-029:** one §11.6 grounding recipe in every channel; acquisition is documented, never encoded in the recipe. Decided on measurement, not assumption — a `uv run --with` prototype against a locally built wheel worked (0.11s warm, exit codes preserved, engine 0.2.3 resolved transitively, no console script needed) but was rejected on two counts: its command form differs from the native recipe, which is the forked recipe OQ-029 itself forbade, and its offline behavior depends on a prunable shared cache (cold cache + no network = exit 2), weakening NFR-003. No `SessionStart` hook, since packaging never runs `pip` (OQ-020). FR-037a requires the plugin manifest `description` to contain the literal `pip install transon-authoring` (gated by AC-040), and the shipped `SKILL.md` now carries a channel-independent recovery line for `No module named transon_authoring` — without it a catalog user hit an unrecoverable error, since the manifest description is rendered at browse time and the agent never sees it. **This edits the shipped body the eval baseline was measured against.** No baseline reset is triggered (§11.8 resets are for pin/corpus/gate-model/harness changes), and the A5 pre-release rerun already covers it, but the current baseline now reflects slightly older text.
 **OQ-028:** Cursor gains a personal scope, so the adapters reach equal capability rather than a documented exclusion (NFR-007). New **FR-038 / AC-041** (A5, `[ ]`); §11.9 install table gains the Cursor personal destination. Evidence for the premise: Cursor's own Agent Skills docs (`cursor.com/docs/skills`, read 2026-07-21) list `~/.cursor/skills/` and `~/.agents/skills/` as user-level discovery locations — FR-038 adopts only `~/.cursor/skills/`. AC-041 is **structural only** and makes no host-discovery claim (OQ-008), so that premise stays unverified by any gate; A5 ladder step 3 exercises project scope only.
-Deliberately SPEC-only, and the gap is **four artifacts**, not one: `adapters/cursor/adapter.json` (the exclusion), the shipped `adapters/cursor/README.md` ("project scope only — Cursor has no personal skill scope in v1"), `install/cursor.py` (docstring + scope-rejection path), and three tests that pin the superseded rule (`test_adapters.py`, `test_install.py::test_fr015_cursor_personal_scope_exit2`, the `test_check_parity.py` exclusion fixture). FR-038 names all of them so the implementer sweeps them together. `check_parity` stays green through the gap — verified in `scripts/check_parity.py`, it compares the two adapter manifests to each other, never to the contract._
+`check_parity` stayed green through the SPEC-only gap — verified in `scripts/check_parity.py`, it compares the two adapter manifests to each other, never to the contract. (The four-artifact gap this entry described was closed by FR-038 on `a5-release`.)_
 
 _**Contract split into SPEC + ARCHITECTURE + ROADMAP (branch `docs-split-spec-architecture-roadmap`).** Matches the `transon-blockly` convention. `docs/SPEC.md` keeps §0–4, §7–9, §11–13, §17; `docs/ARCHITECTURE.md` takes §5, §6, §10 (all 26 `AD-*`); `docs/ROADMAP.md` takes §14–16, §18 (all `OQ-*`). **Section numbers are preserved and globally unique across the three docs**, so the ~100 files citing bare `§N` stay correct — only file+section pointers were rewritten. The move itself was verbatim (scripted split with a line-conservation assert). Follow-up commits then corrected the contract text the move made false: §0's now-completed "extract ARCHITECTURE.md" instruction, SPEC's preamble still calling itself the whole contract, §12 now naming the three-document contract, and ARCHITECTURE §10's package layout — which gained the two new docs, `id-ledger.json`, and the AD-026 `resources/language-reference.json` it had been missing since the repin. `CONTRACT_DOCS` widened in both harness gates — without it the ID lock goes red on 55 migrated AD/OQ IDs, which it correctly did before the fix. Gate messages genericized off `docs/SPEC.md`. Pointers updated in AGENTS.md, CLAUDE.md, README.md, harness/ (README, commands, agents, hygiene), and the `update_memory.py` generator. All six gates green._
 

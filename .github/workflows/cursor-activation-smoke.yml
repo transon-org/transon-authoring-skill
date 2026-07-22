@@ -17,6 +17,20 @@ name: Cursor activation smoke (headless)
 # the CLI and the runtime and to provision the workspace; `smoke` downloads that
 # bundle, installs nothing, and makes the credentialed call.
 #
+# CREDENTIAL EXPOSURE — ACCEPTED RESIDUAL RISK, read before adding the secret.
+# OQ-027f(ii) (withhold the provider key from the tool sandbox) is NOT satisfied
+# here. `evals.yml` withholds the Anthropic key by routing the host through a
+# loopback key proxy and unsetting the real key before the run; Cursor's CLI
+# offers no equivalent — `CURSOR_API_KEY` is the credential the agent process
+# itself authenticates with, so it is necessarily present in the environment of a
+# process that also runs shell tools. Consequences, all accepted deliberately:
+#   - use a DEDICATED, low-privilege, revocable Cursor key for this workflow —
+#     never a personal or org-wide one;
+#   - the episode transcript is secret-scanned BEFORE anything is echoed to the
+#     job log or uploaded (a leak reaching the log cannot be recalled);
+#   - the prompt is fixed and maintainer-authored, so unlike the eval gate this
+#     job runs no untrusted corpus input.
+#
 # SUPPLY-CHAIN NOTE. Cursor publishes no versioned or pinnable installer for
 # `cursor-agent` — the documented method is `curl https://cursor.com/install |
 # bash`, which is unpinned by construction. That unpinned fetch is confined to
@@ -46,6 +60,8 @@ jobs:
   build:
     name: Build Cursor smoke bundle (CLI + runtime + installed workspace)
     runs-on: ubuntu-latest
+    # Bounded because this job runs an unpinned `curl | bash` (see header).
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -74,7 +90,12 @@ jobs:
           # bundle rather than assuming a path.
           curl https://cursor.com/install -fsS | bash
           mkdir -p "${BUNDLE}/cursor"
-          AGENT="$(command -v cursor-agent || find "${HOME}" -maxdepth 4 -name 'cursor-agent' -type f -perm -u+x | head -n1)"
+          # `-print -quit` rather than `| head -n1`: under `set -o pipefail` an
+          # early-closing head can SIGPIPE find (141) and abort the step even
+          # though the binary was found. The fallback is the likely path — the
+          # installer drops the binary in ~/.local/bin via a shell profile this
+          # non-interactive step never sources.
+          AGENT="$(command -v cursor-agent || find "${HOME}" -maxdepth 4 -name 'cursor-agent' -type f -perm -u+x -print -quit)"
           test -n "${AGENT}" || { echo "cursor-agent not found after install" >&2; exit 1; }
           cp -RL "$(dirname "$(readlink -f "${AGENT}")")/." "${BUNDLE}/cursor/"
           find "${BUNDLE}/cursor" -maxdepth 2 -name 'cursor-agent*' | sort
@@ -164,14 +185,31 @@ jobs:
             "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
           echo "cursor-agent exit code: $?"
           set -e
-          tail -c 4000 "${OUT}/episode.txt" || true
+          # Deliberately NO echo of the transcript here — the secret scan runs in
+          # the next step, and anything printed to the job log before it has
+          # bypassed the scan permanently.
+          wc -c "${OUT}/episode.txt" "${OUT}/episode.err"
 
-      # The activation claim, and the only place one may be made (OQ-008): the
-      # transcript must show the shipped grounding recipe being used. A negative
-      # result fails this dispatch loudly — it gates no merge, but a silent red
-      # would defeat the point of running it.
-      - name: Assert the shipped skill activated and grounded
+      # Runs BEFORE anything reads or reports on the transcript, so a leaked
+      # credential cannot reach the job log or the artifact. See the credential
+      # note in the header.
+      - name: Secret-scan the transcript (OQ-027f(iv) / NFR-011)
+        id: scan
         if: always()
+        run: |
+          python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
+            "${RUNNER_TEMP}/cursor-transcript"
+
+      # OQ-008 permits an activation claim only at this credentialed tier — but
+      # the claim still has to be earned, and text output alone cannot earn the
+      # strong form: the agent's cwd IS the provisioned workspace, so it could
+      # simply have read the installed SKILL.md and quoted the recipe without the
+      # host ever activating it as a skill. So this step claims only what the
+      # transcript shows. Upgrading to a genuine activation claim means asserting
+      # on the CLI's own structured skill/tool events (`--output-format json`)
+      # once a dispatch has shown what those events look like.
+      - name: Assert the shipped grounding recipe was used
+        if: always() && steps.scan.outcome == 'success'
         run: |
           python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" <<'PY'
           import os, sys
@@ -189,7 +227,11 @@ jobs:
               f"- **grounded via the module recipe:** {grounded}",
               f"- **transcript bytes:** {len(text)}",
               "",
-              "_Dispatch-tier claim (OQ-008). Gates no merge and no milestone._",
+              "",
+              "_Dispatch-tier observation (OQ-008). Text output cannot distinguish "
+              "activation from the agent reading the installed file, so this is "
+              "evidence the recipe was used — not proof the host activated the "
+              "skill. Gates no merge and no milestone._",
           ]
           summary = "\n".join(lines) + "\n"
           print(summary)
@@ -198,19 +240,13 @@ jobs:
               Path(step_summary).open("a", encoding="utf-8").write(summary)
 
           if not grounded:
-              print("SMOKE FAIL: no evidence the shipped skill was activated and "
-                    "grounded through the module recipe")
+              print("SMOKE FAIL: the transcript shows no use of the shipped "
+                    "grounding recipe")
               sys.exit(1)
-          print("SMOKE PASS: a fresh headless Cursor activated the installed "
-                "skill and grounded through the module recipe.")
+          print("SMOKE PASS: a fresh headless Cursor, given only the "
+                "installer-provisioned workspace, used the shipped grounding "
+                "recipe.")
           PY
-
-      - name: Secret-scan the transcript (OQ-027f(iv) / NFR-011)
-        id: scan
-        if: always()
-        run: |
-          python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
-            "${RUNNER_TEMP}/cursor-transcript"
 
       - name: Upload the transcript (build artifact, never committed)
         if: always() && steps.scan.outcome == 'success'

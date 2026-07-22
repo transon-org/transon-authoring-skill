@@ -693,9 +693,13 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   (`transon==<pin>` as read textually from `pyproject.toml`) and the `snapshot_sha256` recorded in
   `resources/metadata-snapshot.md`. It is **red** when the file is missing, when it names no
   release version, or when any of the three values disagrees with its source of truth — the
-  stale-release-notes failure. Unreleased or in-progress headings above the topmost release entry
-  are ignored. The check asserts **agreement with the repo's own sources**; the ladder outcomes
-  NFR-008 requires are prose recorded by the maintainer and are not mechanically verified.
+  stale-release-notes failure. A heading names a release version whether or not the version carries
+  the `v` prefix the `refs/tags/v*` publish trigger uses. Headings that open with `Unreleased` or
+  `In progress` are never release entries, even when they name a version. The check asserts **agreement with the repo's own sources** and nothing more: a
+  green result is never evidence that a release was published, only that the record and the repo
+  agree — by construction the topmost entry names an unpublished version for the whole interval
+  between a version bump and its publish. The ladder outcomes NFR-008 requires are prose recorded
+  by the maintainer and are not mechanically verified.
 
 ### Use cases
 - **UC-001** — Claude Code: samples → confirm → author → `verify` → user review (approve) →

@@ -30,8 +30,9 @@ a claim that release 0.1.0 has shipped.
    `.github/workflows/ci.yml` builds the wheel and sdist, installs the **wheel** into a fresh venv
    (never editable), asserts the bundled `resources/` shipped inside the wheel, and runs the §11.6
    surface offline against the committed fixtures. `.github/workflows/release.yml` re-runs the same
-   verification on the built release artifacts before either publish job. Green on the CI runs of
-   this branch; the release-commit run reference is recorded here at tag time.
+   verification on the built release artifacts before either publish job. Green on the runs that
+   introduced it (29881245086 on `ci-dist-smoke-and-pypi-release`, 29901744596 on `main`); the
+   `a5-release` branch has not been pushed, so it has no CI run of its own yet.
    - Release-commit CI run reference: _pending — to be filled when the release tag is pushed._
 2. **Distribution-faithful eval provisioning** — **not yet performed.** The §11.8 harness workspace
    is not yet provisioned by `install/claude.py --target-root <workspace>` from the staged file
@@ -55,12 +56,16 @@ a claim that release 0.1.0 has shipped.
 
 ### Publication
 
-- PyPI (`transon-authoring`, OQ-020): **not yet published.** No TestPyPI or PyPI upload has been
-  made from `.github/workflows/release.yml`.
-  - Outcome: _pending — tag, run reference, date, index, result._
+- **TestPyPI:** `transon-authoring 0.0.1` (sdist + wheel) was uploaded 2026-07-22 from
+  `.github/workflows/release.yml` on `main`, run 29915374804 — a validation of the publish path,
+  at the pre-bump version. Nothing at `0.1.0` has been uploaded to any index.
+- **PyPI (OQ-020): not yet published.** No upload to the production index has been made. The
+  production job requires a pushed `v*` tag, and no tag exists.
+  - Outcome: _pending — tag, run reference, date, result._
 - FR-037b external catalog submission: not started; it gates nothing and begins only after the
   PyPI publish.
 
 ### Notes
 
-- No prior release exists; this is the first entry.
+- No production release exists; this is the first entry. The `0.0.1` artifacts on TestPyPI above
+  are a publish-path validation, not a release.

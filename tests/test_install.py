@@ -190,6 +190,36 @@ def test_fr038_cursor_personal_uninstall_removes_only_manifest_paths(tmp_path: P
     assert report["files"] == ["SKILL.md", ".install-manifest.json"]
 
 
+def test_nfr_007_scope_absent_from_adapter_descriptor_exits_2(tmp_path: Path):
+    # NFR-007 / FR-015 — the installer refuses a scope its adapter descriptor
+    # does not list (SPEC §11.9 documented exclusion): exit 2, and nothing is
+    # created at the destination. The narrower adapter here is **synthetic** —
+    # the shipped Cursor adapter reaches both scopes since FR-038, so this is
+    # the only thing driving the `adapter["scopes"]` guard in
+    # install/_shared.py from tests/test_install.py.
+    repo = make_repo(tmp_path)
+    adapter_path = repo / "adapters" / "cursor" / "adapter.json"
+    adapter = json.loads(adapter_path.read_text(encoding="utf-8"))
+    adapter["scopes"] = ["project"]
+    adapter_path.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run_installer(
+        CURSOR_INSTALLER,
+        "--scope",
+        "personal",
+        "--repo-root",
+        str(repo),
+        "--home",
+        str(home),
+    )
+    assert result.returncode == 2, result.stdout
+    assert "personal" in result.stderr
+    assert not (home / ".cursor").exists()
+    assert not (repo / ".cursor").exists()
+
+
 def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):
     # FR-015 / NFR-008 — manifest records skill version, engine pin, and
     # snapshot hash; the pin is parsed from pyproject, never hard-coded.
