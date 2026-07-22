@@ -88,9 +88,14 @@ Milestones and their Definitions of Done, open questions (`OQ-*`), risks, and re
   5. **Plugin packaging (FR-037a, offline deterministic):** the §11.9 plugin layout, gated by
      `check_install` (AC-040). Structural only — it needs no published package and makes no
      catalog claim.
-  *Entry:* the real-host eval baseline reflects the shipped `SKILL.md` at the current pin —
-  post-repin metadata + Language Reference snapshots and the packaged-reference authority; re-run it
-  before release (this run is the AD-007 repin's pin+corpus baseline reset, §11.8).
+  *Entry:* **satisfied** — the AD-007 repin's pin+corpus baseline reset (§11.8) was measured by the
+  green real-host gate of 2026-07-20 (run 29782513843, 54 fixtures ×3), so the baseline reflects the
+  shipped `SKILL.md` at the current pin with the post-repin metadata + Language Reference snapshots
+  and the packaged-reference authority. A further full gate is **not** an A5 entry requirement: no
+  §11.8 reset trigger — pin, corpus, gate model, harness `kind`/`version` — has fired since. The
+  body has changed once since that run, by one additive paragraph naming the runtime prerequisite;
+  the release record states that the baseline predates it. Ladder step 2's provisioning change is
+  validated by its own targeted `--only` probe, not by re-measuring the corpus.
   *DoD:* ladder steps 1–5 green/recorded; the `CHANGELOG.md` release record cites skill version,
   engine pin, snapshot hash and each ladder outcome (NFR-008); first PyPI publish per OQ-020;
   AC-040, AC-041, and AC-042 green. **FR-037b (external catalog

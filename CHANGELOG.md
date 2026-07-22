@@ -34,11 +34,13 @@ a claim that release 0.1.0 has shipped.
    introduced it (29881245086 on `ci-dist-smoke-and-pypi-release`, 29901744596 on `main`); the
    `a5-release` branch has not been pushed, so it has no CI run of its own yet.
    - Release-commit CI run reference: _pending — to be filled when the release tag is pushed._
-2. **Distribution-faithful eval provisioning** — **not yet performed.** The §11.8 harness workspace
-   is not yet provisioned by `install/claude.py --target-root <workspace>` from the staged file
-   subset; neither the targeted `--only` probe nor a full gate run under that provisioning has been
-   executed.
-   - Outcome: _pending — probe run reference, full-gate run reference, date, result._
+2. **Distribution-faithful eval provisioning** — *implemented; awaiting its probe.* The §11.8
+   harness workspace is provisioned by `install/claude.py --target-root <workspace>` from the staged
+   file subset, and a provisioning failure classifies as `infra_error` rather than scoring as a
+   fixture failure. The code has **never executed against a real host**: the targeted `--only` probe
+   is what validates it, and no full gate run under this provisioning is required (see the eval
+   baseline note below).
+   - Outcome: _pending — probe run reference, date, result._
 3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **not yet
    performed.** No `cursor-agent -p` run against a `install/cursor.py --target-root` workspace has
    been executed. Non-gating when it is run.
@@ -53,6 +55,20 @@ a claim that release 0.1.0 has shipped.
    checked by `check_install` (AC-040) on every CI run. Structural packaging integrity only — no
    published package, no catalog claim.
    - Release-commit CI run reference: _pending — to be filled when the release tag is pushed._
+
+### Eval baseline
+
+`evals/baseline.json` holds the 54 majority-passers of the green real-host gate of 2026-07-20
+(run 29782513843, 54 fixtures ×3, authoring 1.000 / adversarial 1.000 / correction 1.000). That run
+is the AD-007 repin's pin+corpus baseline reset and satisfies the A5 entry condition.
+
+**The baseline predates one edit to the shipped body**: commit `9be1f66` added a five-line paragraph
+naming the runtime prerequisite (`pip install transon-authoring`) for agents that hit
+`No module named transon_authoring`. It is additive and defensive, and it fires no §11.8 reset
+trigger — pin, corpus, gate model and harness `kind`/`version` are all unchanged — so the corpus was
+deliberately not re-measured for this release. The scores above therefore reflect the shipped body
+minus that paragraph. Three fixtures passed that run 2/3 (`ec2-flatten-inventory`,
+`refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and remain future-flake candidates.
 
 ### Publication
 
