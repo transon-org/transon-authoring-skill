@@ -1,13 +1,18 @@
 name: Publish Package to PyPI
 
-# OQ-020 — the runtime ships on public PyPI as `transon-authoring`. Mirrors the
-# engine repo's release flow: tag-triggered, tag/version consistency enforced,
-# published with pypa/gh-action-pypi-publish.
+# OQ-020 — the runtime ships on public PyPI as `transon-authoring`.
 #
-# Publishing is irreversible — a version number can never be reused on PyPI —
-# so this workflow re-runs the A5 ladder step 1 checks on the exact artifacts it
-# is about to upload rather than trusting that CI ran on this commit. TestPyPI
-# first (A5 ladder step 4) via workflow_dispatch; PyPI only on a pushed `v*` tag.
+# Authentication is PyPI **Trusted Publishing** (OIDC): no long-lived token is
+# stored in this repository. Each publish job mints a short-lived OIDC identity
+# and exchanges it with the index, so the credential cannot outlive the run.
+# The identity is bound to (owner, repo, workflow filename, environment) — which
+# is why the two publish jobs are separate: a job can only declare one
+# environment, and TestPyPI and PyPI are registered as distinct publishers.
+#
+# Publishing is irreversible — a version number can never be reused — so the
+# build job verifies the exact artifacts that get uploaded (A5 ladder step 1)
+# rather than trusting that CI ran on this commit. TestPyPI (A5 ladder step 4)
+# via workflow_dispatch; PyPI only on a pushed `v*` tag.
 
 on:
   push:
@@ -23,8 +28,8 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Build, verify, publish
+  build:
+    name: Build and verify the distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -86,23 +91,53 @@ jobs:
             --template tests/fixtures/offline/template.json \
             --samples tests/fixtures/offline/sample_set.json
 
-      - name: Publish to TestPyPI (manual rehearsal — A5 ladder step 4)
-        if: github.event_name == 'workflow_dispatch'
-        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+      - name: Hand the verified artifacts to the publish jobs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # Manual rehearsal — A5 ladder step 4. Trusted publisher registered on
+  # test.pypi.org against this workflow filename + the `testpypi` environment.
+  publish-testpypi:
+    name: Publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write # mandatory for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
         with:
           packages-dir: dist/
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
 
-      # Production. Reachable only from a *pushed* `v*` tag. `github.ref` alone
-      # is not sufficient: a workflow_dispatch run can select a tag ref, which
-      # would satisfy a bare startsWith() and publish from a manual run. The
-      # event_name guard is what makes this path tag-push-only, and it is the
-      # same condition guarding the version check above, so that check can
-      # never be skipped. PyPI never permits a version to be reused.
-      - name: Publish to PyPI
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+  # Production. Reachable only from a *pushed* `v*` tag — `github.ref` alone is
+  # not sufficient, since a workflow_dispatch run can select a tag ref. This is
+  # the same condition guarding the version check above, so that check can never
+  # be skipped. The `pypi` environment is the attachment point for required
+  # reviewers; configure them in repository settings to gate production.
+  publish-pypi:
+    name: Publish to PyPI
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # mandatory for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
         with:
           packages-dir: dist/
-          password: ${{ secrets.PYPI_TOKEN }}
