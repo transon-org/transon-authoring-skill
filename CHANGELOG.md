@@ -57,7 +57,8 @@ a claim that release 0.1.0 has shipped.
    - Outcome: _pending — run reference or date, result._
 4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
    repo-free machine (`pip install transon-authoring` from TestPyPI, then PyPI; both installers;
-   activation in real Claude Code and real Cursor; one authored template) has been done.
+   activation in real Claude Code and real Cursor; one authored template) has been done. The
+   TestPyPI `0.1.0` artifact is now installable (see Publication), so the walkthrough is unblocked.
    - Outcome: _pending — date, machine/OS, index used, result._
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
@@ -85,11 +86,18 @@ and remain future-flake candidates.
 
 ### Publication
 
-- **TestPyPI:** `transon-authoring 0.0.1` (sdist + wheel) was uploaded 2026-07-22 from
-  `.github/workflows/release.yml` on `main`, run 29915374804 — a validation of the publish path,
-  at the pre-bump version. Nothing at `0.1.0` has been uploaded to any index.
-- **PyPI (OQ-020): not yet published.** No upload to the production index has been made. The
-  production job requires a pushed `v*` tag, and no tag exists.
+- **TestPyPI: `0.1.0` published** 2026-07-25 (sdist + wheel, with provenance attestations) from
+  `.github/workflows/release.yml` on `main`, run 30179949576. An earlier `0.0.1` upload
+  (2026-07-22, run 29915374804) validated the publish path at the pre-bump version.
+  - Post-publish verification of the **published artifact** (not the checkout): installed into a
+    clean venv from TestPyPI, `transon==0.2.3` resolved transitively from PyPI, and `metadata`,
+    `language --list-sections`, `examples search`, `check-samples` and `verify` all exit 0 with
+    valid JSON. This is evidence the distribution is sound; it is **not** ladder step 4, which
+    additionally requires a repo-free machine and real-host activation.
+- **PyPI (OQ-020): not yet published.** No upload to the production index has been made; the
+  project does not exist there. The production job requires a pushed `v*` tag, and no tag exists.
+  A pending Trusted Publisher is registered (repo `transon-org/transon-authoring-skill`, workflow
+  `release.yml`, environment `pypi`) and converts to a normal publisher on the first upload.
   - Outcome: _pending — tag, run reference, date, result._
 - FR-037b external catalog submission: not started; it gates nothing and begins only after the
   PyPI publish.
