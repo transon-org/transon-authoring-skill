@@ -10,12 +10,12 @@ written as pending, never as a result.
 
 Dates are UTC. Run references are GitHub Actions run URLs or ids.
 
-## 0.1.0 — prepared 2026-07-22, not yet published
+## 0.1.0 — published 2026-07-25
 
-Status: **release record prepared; the artifacts are not published.** The version triplet below is
-current; ladder steps 1, 2 and 5 are done, steps 3 and 4 and the PyPI publish are pending. This
-entry is amended in place — with run references and dates — as those steps complete, and it is not
-a claim that release 0.1.0 has shipped.
+First production release: `transon-authoring 0.1.0` is on PyPI (tag `v0.1.0`, run 30180068652).
+Ladder steps 1, 2 and 5 are green and step 4's runtime prerequisite is satisfied; **ladder step 4
+(the UC-004 human walkthrough) has not been performed**, and step 3 (the Cursor headless smoke) is
+non-gating and unrun. This entry is amended in place as those complete.
 
 ### Version triplet
 
@@ -56,9 +56,10 @@ a claim that release 0.1.0 has shipped.
    header.
    - Outcome: _pending — run reference or date, result._
 4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
-   repo-free machine (`pip install transon-authoring` from TestPyPI, then PyPI; both installers;
-   activation in real Claude Code and real Cursor; one authored template) has been done. The
-   TestPyPI `0.1.0` artifact is now installable (see Publication), so the walkthrough is unblocked.
+   repo-free machine (`pip install transon-authoring`; both installers; activation in real Claude
+   Code and real Cursor; one authored template) has been done. **This is the last outstanding
+   gating item in the A5 Definition of Done.** `0.1.0` is on production PyPI, so the walkthrough
+   now installs from the real index with no `--index-url` override.
    - Outcome: _pending — date, machine/OS, index used, result._
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
@@ -94,15 +95,17 @@ and remain future-flake candidates.
     `language --list-sections`, `examples search`, `check-samples` and `verify` all exit 0 with
     valid JSON. This is evidence the distribution is sound; it is **not** ladder step 4, which
     additionally requires a repo-free machine and real-host activation.
-- **PyPI (OQ-020): not yet published.** No upload to the production index has been made; the
-  project does not exist there. The production job requires a pushed `v*` tag, and no tag exists.
-  A pending Trusted Publisher is registered (repo `transon-org/transon-authoring-skill`, workflow
-  `release.yml`, environment `pypi`) and converts to a normal publisher on the first upload.
-  - Outcome: _pending — tag, run reference, date, result._
-- FR-037b external catalog submission: not started; it gates nothing and begins only after the
-  PyPI publish.
+- **PyPI (OQ-020): `0.1.0` PUBLISHED** 2026-07-25 — the first production release. Tag `v0.1.0`
+  (commit `fedbd19`) triggered `.github/workflows/release.yml`, run 30180068652; wheel + sdist
+  uploaded via Trusted Publishing under the `pypi` environment. The build job re-verified the
+  artifacts and the tag↔version agreement before upload.
+  - Post-publish verification of the **published artifact**: `pip install transon-authoring` into a
+    clean venv resolved `transon-authoring 0.1.0` with `transon==0.2.3` transitively, and
+    `metadata`, `language --list-sections`, `examples search` and `verify` all exit 0.
+- FR-037b external catalog submission: **now eligible** (the PyPI publish it waited on has
+  happened) but not started. It gates nothing.
 
 ### Notes
 
-- No production release exists; this is the first entry. The `0.0.1` artifacts on TestPyPI above
-  are a publish-path validation, not a release.
+- This is the first entry. The `0.0.1` artifacts on TestPyPI are a publish-path validation, not a
+  release; `0.1.0` is the first version on production PyPI.

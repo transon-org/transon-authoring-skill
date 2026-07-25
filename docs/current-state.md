@@ -8,12 +8,19 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `d98d440` — Merge pull request #28 from transon-org/a5-release |
+| Repo HEAD | `fedbd19` — docs: record the TestPyPI 0.1.0 publish |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
+
+_**`transon-authoring 0.1.0` IS PUBLISHED ON PyPI** (2026-07-25, tag `v0.1.0`, run 30180068652) —
+OQ-020's first production release. `pip install transon-authoring` works from a clean venv and pulls
+`transon==0.2.3` transitively; the full CLI surface exits 0. TestPyPI carries `0.1.0` too (run
+30179949576). **The only gating item left in A5's DoD is ladder step 4**, the UC-004 human
+walkthrough on a repo-free machine. `docs/release-runbook.md` is the operational how-to for this and
+future releases._
 
 _**A5 release slice — MERGED to `main` 2026-07-25 (PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28), merge `d98d440`); all gates green on `main`.**
 The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
@@ -86,11 +93,16 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
       states that the baseline predates the `9be1f66` body paragraph.
    b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
       `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
-   c. **Ladder 3.** Add the `CURSOR_API_KEY` secret, then dispatch `cursor-activation-smoke.yml`;
-      tighten its egress from `audit` to `block` using the observed host set.
-   d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.
-   e. **Publish.** Register the trusted publishers + environments, dispatch TestPyPI, push `v0.1.0`.
-      FR-037b outreach begins only after this.
+   c. **Ladder 3** (non-gating, optional). Add the `CURSOR_API_KEY` secret, then dispatch
+      `cursor-activation-smoke.yml` with `accept_unverified_cli_risk=yes`; tighten its egress from
+      `audit` to `block` using the observed host set.
+   d. **Ladder 4 — THE LAST GATING ITEM.** UC-004 walkthrough on a repo-free machine:
+      `pip install transon-authoring` (production PyPI, no index override), both installers,
+      activation in real Claude Code and real Cursor, one authored template.
+   e. ~~Publish~~ — **done** 2026-07-25. TestPyPI `0.1.0` run 30179949576; **production PyPI
+      `0.1.0` run 30180068652 from tag `v0.1.0`** (OQ-020 satisfied — first production release).
+      Both artifacts verified post-publish by installing into clean venvs. FR-037b outreach is now
+      eligible.
 4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded **and** the row's normal
    bar is met — its cited tests (incl. AC-042's `test_ac042_*`) green and citing the ID, and
    `check_traceability` consistent. Recording the checklist items alone does not satisfy the row.

@@ -267,6 +267,7 @@ transon-authoring/
     ├── ARCHITECTURE.md            # §5, §6, §10
     ├── ROADMAP.md                 # §14–16, §18
     ├── id-ledger.json             # every ID ever issued (§12 append-only lock)
+    ├── release-runbook.md         # non-normative: how to execute a release (NFR-008 / §14 ladder)
     └── traceability.md            # generated or maintained matrix (§17)
 ```
 
