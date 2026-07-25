@@ -93,7 +93,15 @@ jobs:
 
           # Repo files the eval job runs — it checks out NOTHING, so ship the
           # gate/harness scripts, the corpus and SKILL.md in the bundle.
-          cp -R scripts evals SKILL.md "${BUNDLE}/repo/"
+          #
+          # A5 ladder step 2 (OQ-027a): the driver provisions each episode
+          # workspace by RUNNING the shipped installer over its source root, so
+          # the bundle must also carry everything install/claude.py reads —
+          # install/, adapters/, pyproject.toml and
+          # resources/metadata-snapshot.json (not an unpacked sdist).
+          mkdir -p "${BUNDLE}/repo/resources"
+          cp -R scripts evals install adapters skills pyproject.toml "${BUNDLE}/repo/"
+          cp resources/metadata-snapshot.json "${BUNDLE}/repo/resources/"
 
           tar -C "${RUNNER_TEMP}" -czf "${RUNNER_TEMP}/evalbundle.tgz" evalbundle
           ls -la "${RUNNER_TEMP}/evalbundle.tgz"
@@ -172,6 +180,18 @@ jobs:
           # spend), not opaquely mid-episode.
           PYTHONPATH="${PYDEPS}" python3 -c "import transon_authoring, transon, claude_agent_sdk; print('bundled deps import OK')"
           "${CLI}" --version
+          # A5 ladder step 2 (OQ-027a): the driver provisions every episode
+          # workspace by running install/claude.py over its source root. A
+          # missing installer input would surface only as a per-episode
+          # infra_error — AFTER provider spend — so assert the staged files are
+          # present here, before any model call.
+          R="${RUNNER_TEMP}/evalbundle/repo"
+          for f in skills/transon-authoring/SKILL.md pyproject.toml \
+                   resources/metadata-snapshot.json \
+                   adapters/claude/adapter.json install/claude.py install/_shared.py; do
+            test -f "${R}/${f}" || { echo "eval bundle is missing ${f}" >&2; exit 1; }
+          done
+          echo "installer source root complete"
 
       # ONE seedless matched fixture + empty seeds/ => the seed lint treats it as
       # hand-authored (no provenance/regen check); the empty throwaway baseline
@@ -183,8 +203,16 @@ jobs:
           B="${RUNNER_TEMP}/evalbundle/repo"
           ROOT="${RUNNER_TEMP}/smoke-root"
           FIXTURE="seed-matched-flatten-orders"
-          mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds"
-          cp "${B}/SKILL.md" "${ROOT}/SKILL.md"
+          mkdir -p "${ROOT}/evals/cases" "${ROOT}/evals/seeds" "${ROOT}/resources"
+          mkdir -p "${ROOT}/skills/transon-authoring"
+          cp "${B}/skills/transon-authoring/SKILL.md" \
+             "${ROOT}/skills/transon-authoring/SKILL.md"
+          # This throwaway root is also the driver's INSTALLER SOURCE ROOT
+          # (--root is passed straight to run_fixture as repo_root), so it needs
+          # everything install/claude.py reads (A5 ladder step 2 / OQ-027a).
+          cp -R "${B}/install" "${B}/adapters" "${ROOT}/"
+          cp "${B}/pyproject.toml" "${ROOT}/pyproject.toml"
+          cp "${B}/resources/metadata-snapshot.json" "${ROOT}/resources/"
           cp "${B}/evals/runner.json" "${B}/evals/targets.json" "${ROOT}/evals/"
           printf '%s\n' '{ "schema_version": "1.0", "passing": [] }' > "${ROOT}/evals/baseline.json"
           cp "${B}/evals/cases/${FIXTURE}.json" "${ROOT}/evals/cases/"

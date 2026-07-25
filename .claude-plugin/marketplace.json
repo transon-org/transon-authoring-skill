@@ -1,0 +1,13 @@
+{
+  "name": "transon-authoring",
+  "owner": {
+    "name": "transon-org",
+    "url": "https://github.com/transon-org"
+  },
+  "plugins": [
+    {
+      "name": "transon-authoring",
+      "source": "./"
+    }
+  ]
+}

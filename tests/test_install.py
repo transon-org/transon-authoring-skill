@@ -35,13 +35,12 @@ def make_repo(tmp_path: Path, name: str = "repo", pyproject: str = PYPROJECT) ->
     for tool in ("claude", "cursor"):
         adapter_dir = root / "adapters" / tool
         adapter_dir.mkdir(parents=True)
-        scopes = ["project", "personal"] if tool == "claude" else ["project"]
         (adapter_dir / "adapter.json").write_text(
             json.dumps(
                 {
                     "schema_version": "1.0",
                     "tool": tool,
-                    "scopes": scopes,
+                    "scopes": ["project", "personal"],
                     "files": ["SKILL.md"],
                     "exclusions": [],
                 },
@@ -53,7 +52,11 @@ def make_repo(tmp_path: Path, name: str = "repo", pyproject: str = PYPROJECT) ->
     (root / "resources").mkdir()
     (root / "resources" / "metadata-snapshot.json").write_bytes(SNAPSHOT_BYTES)
     (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
-    (root / "SKILL.md").write_text(SKILL_BODY, encoding="utf-8")
+    # SPEC 11.9: adapter `files` are destination-relative names read out of the
+    # canonical body directory; they land flat in the destination.
+    skill_dir = root / "skills" / "transon-authoring"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(SKILL_BODY, encoding="utf-8")
     return root
 
 
@@ -123,9 +126,11 @@ def test_fr015_claude_personal_scope_uses_home_override(tmp_path: Path):
     assert not (repo / ".claude").exists()
 
 
-def test_fr015_cursor_personal_scope_exit2(tmp_path: Path):
-    # FR-015 / NFR-007 — Cursor is project-only in v1 (documented exclusion,
-    # §11.9 install table): personal scope is a config error, exit 2.
+def test_fr038_cursor_personal_scope_uses_home_override(tmp_path: Path):
+    # FR-038 / AC-041 — Cursor personal scope installs at the §11.9
+    # destination under --home, with the same manifest discipline as every
+    # other scope. Structural claim only (OQ-008): nothing here asserts that
+    # Cursor discovered or activated the skill.
     repo = make_repo(tmp_path)
     home = tmp_path / "home"
     home.mkdir()
@@ -138,17 +143,143 @@ def test_fr015_cursor_personal_scope_exit2(tmp_path: Path):
         "--home",
         str(home),
     )
-    assert result.returncode == 2
+    assert result.returncode == 0, result.stderr
+
+    dest = home / ".cursor" / "skills" / "transon-authoring"
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == SKILL_BODY
+    report = json.loads(result.stdout)
+    assert report["tool"] == "cursor"
+    assert report["scope"] == "personal"
+    assert report["dest"] == str(dest)
+    assert not (repo / ".cursor").exists()
+
+    manifest = json.loads((dest / ".install-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["tool"] == "cursor"
+    assert manifest["scope"] == "personal"
+    assert manifest["skill_version"] == "0.0.1"
+    assert manifest["engine_pin"] == "transon==0.2.3"
+    assert manifest["snapshot_sha256"] == hashlib.sha256(SNAPSHOT_BYTES).hexdigest()
+    assert manifest["files"] == ["SKILL.md", ".install-manifest.json"]
+
+
+def test_fr038_cursor_personal_uninstall_removes_only_manifest_paths(tmp_path: Path):
+    # FR-038 / AC-041 (with FR-016) — personal-scope uninstall deletes only
+    # manifest-listed paths; stray user files under the destination survive.
+    repo = make_repo(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    scope_argv = (
+        "--scope",
+        "personal",
+        "--repo-root",
+        str(repo),
+        "--home",
+        str(home),
+    )
+    assert run_installer(CURSOR_INSTALLER, *scope_argv).returncode == 0
+
+    dest = home / ".cursor" / "skills" / "transon-authoring"
+    stray = dest / "user-note.txt"
+    stray.write_text("keep me\n", encoding="utf-8")
+
+    result = run_installer(CURSOR_INSTALLER, *scope_argv, "--uninstall")
+    assert result.returncode == 0, result.stderr
+    assert stray.read_text(encoding="utf-8") == "keep me\n"
+    assert not (dest / "SKILL.md").exists()
+    assert not (dest / ".install-manifest.json").exists()
+    assert dest.is_dir()
+    report = json.loads(result.stdout)
+    assert report["action"] == "uninstall"
+    assert report["files"] == ["SKILL.md", ".install-manifest.json"]
+
+
+def test_nfr_007_scope_absent_from_adapter_descriptor_exits_2(tmp_path: Path):
+    # NFR-007 / FR-015 — the installer refuses a scope its adapter descriptor
+    # does not list (SPEC §11.9 documented exclusion): exit 2, and nothing is
+    # created at the destination. The narrower adapter here is **synthetic** —
+    # the shipped Cursor adapter reaches both scopes since FR-038, so this is
+    # the only thing driving the `adapter["scopes"]` guard in
+    # install/_shared.py from tests/test_install.py.
+    repo = make_repo(tmp_path)
+    adapter_path = repo / "adapters" / "cursor" / "adapter.json"
+    adapter = json.loads(adapter_path.read_text(encoding="utf-8"))
+    adapter["scopes"] = ["project"]
+    adapter_path.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run_installer(
+        CURSOR_INSTALLER,
+        "--scope",
+        "personal",
+        "--repo-root",
+        str(repo),
+        "--home",
+        str(home),
+    )
+    assert result.returncode == 2, result.stdout
     assert "personal" in result.stderr
-    assert result.stdout == ""
     assert not (home / ".cursor").exists()
     assert not (repo / ".cursor").exists()
 
-    project = run_installer(CURSOR_INSTALLER, "--repo-root", str(repo))
-    assert project.returncode == 0, project.stderr
-    dest = repo / ".cursor" / "skills" / "transon-authoring"
-    assert (dest / "SKILL.md").is_file()
-    assert json.loads(project.stdout)["tool"] == "cursor"
+
+def test_nfr_009_adapter_files_escaping_their_roots_exit_2(tmp_path: Path):
+    # NFR-009 — the installer writes into a user's project, so an adapter
+    # `files` entry that leaves the canonical body directory or the destination
+    # (traversal or absolute) is refused outright, before any read or write.
+    # The adapters here are **synthetic**: the shipped ones are repo-controlled
+    # and linted by check_parity, so this is the only thing driving the guard.
+    escapee = tmp_path / "escaped.md"
+    escapee.write_text("payload\n", encoding="utf-8")
+    absolute = tmp_path / "absolute.md"
+    absolute.write_text("payload\n", encoding="utf-8")
+
+    for name, entry in (
+        ("traversal", "../../../escaped.md"),
+        ("absolute", str(absolute)),
+    ):
+        repo = make_repo(tmp_path, name=f"repo-{name}")
+        adapter_path = repo / "adapters" / "claude" / "adapter.json"
+        adapter = json.loads(adapter_path.read_text(encoding="utf-8"))
+        adapter["files"] = [entry]
+        adapter_path.write_text(json.dumps(adapter, indent=2) + "\n", encoding="utf-8")
+
+        target = tmp_path / f"target-{name}"
+        target.mkdir()
+        result = run_installer(
+            CLAUDE_INSTALLER, "--repo-root", str(repo), "--target-root", str(target)
+        )
+        assert result.returncode == 2, result.stdout
+        assert entry in result.stderr
+
+        # Nothing was written: the destination tree is empty (without the guard
+        # the traversal entry lands at target/escaped.md) and the files the
+        # entries point at are untouched.
+        assert tree_bytes(target) == {}
+        assert escapee.read_text(encoding="utf-8") == "payload\n"
+        assert absolute.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_nfr_009_manifest_paths_escaping_dest_are_not_deleted(tmp_path: Path):
+    # NFR-009 — the same guard on the uninstall side: a manifest `files` entry
+    # pointing outside the destination is refused (exit 2) rather than unlinking
+    # a file the installer never owned.
+    repo = make_repo(tmp_path)
+    result = run_installer(CLAUDE_INSTALLER, "--repo-root", str(repo))
+    assert result.returncode == 0, result.stderr
+
+    dest = repo / ".claude" / "skills" / "transon-authoring"
+    outsider = repo / "victim.md"
+    outsider.write_text("not ours\n", encoding="utf-8")
+    manifest_path = dest / ".install-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = ["../../../victim.md", ".install-manifest.json"]
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    removal = run_installer(CLAUDE_INSTALLER, "--repo-root", str(repo), "--uninstall")
+    assert removal.returncode == 2, removal.stdout
+    assert outsider.read_text(encoding="utf-8") == "not ours\n"
 
 
 def test_fr015_manifest_records_nfr008_triplet(tmp_path: Path):

@@ -11,8 +11,9 @@ setup, EpisodeResult shape, token telemetry) live in :mod:`_shared`.
 Runs a single eval fixture as one episode against a provider (SPEC §11.8
 "Harness (OQ-017)"):
 
-- The system prompt is the verbatim bytes of the repo-root ``SKILL.md`` plus
-  the fixed :data:`HARNESS_PREAMBLE` (OQ-017a).
+- The system prompt is the verbatim bytes of the canonical
+  ``skills/transon-authoring/SKILL.md`` plus the fixed
+  :data:`HARNESS_PREAMBLE` (OQ-017a).
 - Exactly three tools are exposed (OQ-017b): ``write_file`` (workspace-confined
   relative paths only), ``transon_authoring`` (runs
   ``python -m transon_authoring <argv…>`` with cwd = workspace) and

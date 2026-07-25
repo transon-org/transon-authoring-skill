@@ -319,7 +319,9 @@ def test_fr_017_oq_017_samples_written_and_skill_md_injected(monkeypatch):
     assert seen["samples_exists"] is True
     assert seen["samples"] == fixture["samples"]
 
-    skill_md = (REPO_ROOT / "SKILL.md").read_bytes().decode("utf-8")
+    skill_md = (
+        REPO_ROOT / "skills" / "transon-authoring" / "SKILL.md"
+    ).read_bytes().decode("utf-8")
     assert provider.systems[0].startswith(skill_md)  # verbatim bytes, then preamble
     assert provider.systems[0] == skill_md + harness.HARNESS_PREAMBLE
     assert "samples.json" in provider.message_log[0]["content"]

@@ -81,7 +81,11 @@ def _fixture_paths(only: list[str], limit: int | None) -> list[Path]:
 
 def setup(out: Path, only: list[str], limit: int | None) -> int:
     out.mkdir(parents=True, exist_ok=True)
-    skill = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    # The canonical body lives at the plugin-native path (SPEC §11.9); each
+    # sandbox workspace still gets it flat, as a host would see it installed.
+    skill = (REPO / "skills" / "transon-authoring" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
     manifest = []
     for path in _fixture_paths(only, limit):
         fx = json.loads(path.read_text(encoding="utf-8"))

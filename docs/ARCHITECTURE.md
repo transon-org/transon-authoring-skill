@@ -64,8 +64,9 @@ No console-script product; no MCP.
 - **AD-004 — Verify-before-return.** Success only if `verify` → `ok: true`, `assurance: "matched"`.
   `verify` **re-validates** the SampleSet via `check_samples` and rejects unless
   `ok_for_verify` (AD-019). Structured failure otherwise (§11.5).
-- **AD-005 — Single-source, multi-tool.** One **editable** `SKILL.md`; generated copies are
-  gate-enforced byte-identical to it (FR-037a / AC-040); Claude + Cursor adapters; parity gate.
+- **AD-005 — Single-source, multi-tool.** Exactly one `SKILL.md` in the repo, at the
+  plugin-native canonical path (FR-037a / §11.9) — every channel reads that file, none copies it;
+  Claude + Cursor adapters; parity gate.
 - **AD-006 — Library-first; module entry.** APIs: `get_metadata`, `search_examples`,
   `check_samples`, `verify` (+ debug `validate` / `dry_run`). Invoked via
   `python -m transon_authoring` (§11.6).
@@ -232,7 +233,7 @@ No console-script product; no MCP.
 
 ```
 transon-authoring/
-├── SKILL.md
+├── CHANGELOG.md                   # release record: version, pin, snapshot hash (NFR-008 / AC-042)
 ├── pyproject.toml                 # depends on transon==0.2.3 (AD-007 pin)
 ├── src/transon_authoring/
 │   ├── __main__.py                # §11.6
@@ -251,9 +252,9 @@ transon-authoring/
 ├── .claude-plugin/
 │   ├── plugin.json                # FR-037a plugin manifest
 │   └── marketplace.json           # FR-037a self-hosted marketplace catalog
-├── skills/transon-authoring/SKILL.md  # generated from root SKILL.md, committed (AC-040)
+├── skills/transon-authoring/SKILL.md  # the canonical shipped body (FR-037a)
 ├── install/claude.py cursor.py
-├── scripts/sync_metadata.py sync_plugin.py check_snapshot.py check_parity.py check_evals.py check_install.py
+├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
