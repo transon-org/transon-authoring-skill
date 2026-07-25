@@ -8,16 +8,17 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `18e00f1` — fix: report a recipe marker, not activation; tighten the NFR-008 flip note (review) |
-| Branch | `a5-release` |
+| Repo HEAD | `d98d440` — Merge pull request #28 from transon-org/a5-release |
+| Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
 
-_**A5 release slice — on `a5-release`, PUSHED, PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28) open, all gates green.**
+_**A5 release slice — MERGED to `main` 2026-07-25 (PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28), merge `d98d440`); all gates green on `main`.**
 The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
-Delivered across the branch:_
+The `marketplace.json` owner stays `transon-org` (org abstraction, no personal data published).
+Delivered:_
 - _**FR-037a/AC-040** — the §11.9 Claude Code plugin tree (`.claude-plugin/plugin.json` +
   `marketplace.json`), then restructured so **the plugin-native `skills/transon-authoring/SKILL.md`
   is THE canonical body** — one `SKILL.md` in the repo, single source by absence of a second copy
@@ -72,8 +73,7 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Review and merge PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28)
-   (pushed, gates green, CodeRabbit settled).
+1. ~~Merge PR #28~~ — **done** 2026-07-25 (`d98d440`).
 2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
