@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `c18454d` — docs: record the UC-004 automated half (PASS); human half outstanding |
+| Repo HEAD | `52c0bff` — fix: keep the authored template out of the host workspace; record both hosts |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -18,9 +18,20 @@
 _**`transon-authoring 0.1.0` IS PUBLISHED ON PyPI** (2026-07-25, tag `v0.1.0`, run 30180068652) —
 OQ-020's first production release. `pip install transon-authoring` works from a clean venv and pulls
 `transon==0.2.3` transitively; the full CLI surface exits 0. TestPyPI carries `0.1.0` too (run
-30179949576). **Ladder steps 1, 2, 3 and 5 are green; the only gating item left in A5's DoD is
-ladder step 4**, the UC-004 human walkthrough on a repo-free machine.
-`docs/release-runbook.md` is the operational how-to for this and future releases._
+30179949576), plus a GitHub Release at `v0.1.0`. **A5's Definition of Done is MET** — all five
+ladder steps green/recorded, the `CHANGELOG.md` record cites the triplet and every outcome, the
+first PyPI publish is done, and AC-040/041/042 are green. `NFR-008` is `[x]`; **no unchecked rows
+remain in `traceability.md`**. `docs/release-runbook.md` is the how-to for future releases._
+
+_**Ladder 4 closed by interactive human attestation (2026-07-26).** In both real interactive Claude
+Code and real interactive Cursor, from an un-nudged prompt in a workspace holding only the two
+installer-provisioned skill files plus a SampleSet: the skill activated, verified to
+`assurance: "matched"` on the first candidate, and **stopped at the FR-030 review loop** offering
+approve/revise/stop rather than auto-emitting. On `approve` both returned the final envelope
+**byte-identical to `python -m transon_authoring result`'s own stdout** — proof the approve exit
+re-ran `result` instead of re-typing from memory, the failure that path historically had. Nothing
+else exercises that gate: ladder 2 synthesises the approval, and headless runs emit directly.
+Stated limit: outside any checkout, but on a machine that has the repo._
 
 _**A5 release slice — MERGED to `main` 2026-07-25 (PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28), merge `d98d440`); all gates green on `main`.**
 The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
@@ -34,8 +45,8 @@ Delivered:_
 - _**FR-038/AC-041** — Cursor personal scope; the project-only exclusion was a product choice, so
   all four superseded artifacts were swept and `check_install` exercises `cursor/personal`._
 - _**NFR-008/AC-042** — repo-root `CHANGELOG.md` as the release record; `check_install` verifies its
-  version triplet against `pyproject.toml` + `resources/metadata-snapshot.md`. Row stays `[ ]`: the
-  mechanical half is green+cited, the release-checklist half is unperformed._
+  version triplet against `pyproject.toml` + `resources/metadata-snapshot.md`. Row is `[x]` since
+  the release checklist completed._
 - _**Ladder 1** dist smoke (pre-existing) and **ladder 2** installer-provisioned eval workspace —
   ladder 2 validated by a targeted `--only` probe (run 29961198852, majority `pass`, zero
   `infra_error`, $0.49). **Ladder 3** = `cursor-activation-smoke.yml`, dispatch-only, non-gating._
@@ -81,47 +92,30 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. ~~Merge PR #28~~ — **done** 2026-07-25 (`d98d440`).
+**A5 is complete.** The A5 section of this list is closed; what remains is post-release and
+non-gating.
+
+1. **FR-037b — external catalog submission** (non-gating, now eligible since the runtime is
+   published). Submit the plugin to third-party agent-skill catalogs as adoption warrants. CI never
+   claims catalog presence or host discoverability.
 2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
-3. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
-   the `CHANGELOG.md` 0.1.0 entry:
-   a. ~~Entry-condition eval rerun~~ — **not required**, and deliberately not done. The entry
-      condition was already satisfied by the green gate of 2026-07-20 (run 29782513843); no §11.8
-      reset trigger has fired since. The ≈$18–19 rerun was dropped in `60be2fa`; the release record
-      states that the baseline predates the `9be1f66` body paragraph.
-   b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
-      `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
-   c. ~~Ladder 3~~ — **GREEN** (non-gating), run 30182409724, reproduced on 30182303844. From a
-      prompt that **never named the skill**, a real headless Cursor emitted a schema-valid
-      `AuthoringResult` at `assurance: "matched"` (template `{"$":"attr","name":"x"}`). Four
-      dispatches got there, every failure a harness defect and none a skill defect: `--trust`,
-      `--force`, a missing SampleSet (the skill correctly stopped at the §3 gate), and an assertion
-      that grepped for the recipe string — which a **correct** run never emits, since §7 mandates
-      returning `result` stdout verbatim and that stdout is pure JSON. The criterion is now a
-      matched envelope, which the module can only produce by running against the pinned engine.
-      Egress is now **`block`** on a derived allowlist (`*.cursor.sh`, `registry.npmjs.org`, GitHub
-      infra), verified green under it (run 30196218752). Nothing open on this rung.
-   d. **Ladder 4 — THE LAST GATING ITEM.** UC-004 walkthrough on a repo-free machine:
-      `pip install transon-authoring` (production PyPI, no index override), both installers,
-      activation in real Claude Code and real Cursor, one authored template.
-   e. ~~Publish~~ — **done** 2026-07-25. TestPyPI `0.1.0` run 30179949576; **production PyPI
-      `0.1.0` run 30180068652 from tag `v0.1.0`** (OQ-020 satisfied — first production release).
-      Both artifacts verified post-publish by installing into clean venvs. FR-037b outreach is now
-      eligible.
-4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded **and** the row's normal
-   bar is met — its cited tests (incl. AC-042's `test_ac042_*`) green and citing the ID, and
-   `check_traceability` consistent. Recording the checklist items alone does not satisfy the row.
+3. Optional hardening for the next release: create the `pypi` GitHub environment with **required
+   reviewers** — it was auto-created by the tag run and is therefore unprotected, so a future tag
+   push publishes with no human gate.
+4. Watch items carried forward: three fixtures passed the accepted baseline 2/3
+   (`ec2-flatten-inventory`, `refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and are
+   future-flake candidates the ratchet will surface via `failure_modes`; the eval baseline predates
+   a few additive `SKILL.md` edits (disclosed in `CHANGELOG.md`, no §11.8 reset trigger fired).
 
 ## Open blockers / waiting-on
 
-- A5's DoD cannot close without the maintainer items in Next step 3.
-- Confirm the `marketplace.json` owner identity (`transon-org`, inferred from the git remote) — the
-  repo is named `transon-authoring-skill` while the plugin is `transon-authoring`.
-- Watch item: 3 fixtures passed the baseline gate 2/3 — future-flake candidates the ratchet will
-  surface via `failure_modes`.
+- **None blocking.** A5's DoD is met and `0.1.0` is published; remaining work is post-release and
+  non-gating (Next steps).
+- The `pypi` GitHub environment is unprotected (auto-created by the tag run) — a future tag push
+  publishes with no human gate. Add required reviewers before the next release if you want one.
 
 ## Do-not-relitigate (pointers, not copies)
 

@@ -12,10 +12,10 @@ Dates are UTC. Run references are GitHub Actions run URLs or ids.
 
 ## 0.1.0 — published 2026-07-25
 
-First production release: `transon-authoring 0.1.0` is on PyPI (tag `v0.1.0`, run 30180068652).
-Ladder steps 1, 2, 3 and 5 are green; **step 4 (the UC-004 human walkthrough) has not been
-performed** and is the last outstanding gating item. This entry is amended in place as it
-completes.
+First production release: `transon-authoring 0.1.0` is on PyPI (tag `v0.1.0`, run 30180068652),
+with a GitHub Release at `v0.1.0`. **All five distribution-verification ladder steps are green or
+recorded**, so the A5 Definition of Done is met. FR-037b (external catalog submission) gates
+nothing and is now eligible.
 
 ### Version triplet
 
@@ -73,8 +73,7 @@ completes.
      stopped at the §3 gate per FR-002/AD-014 and made no module call), and 30182303844 (the
      assertion grepped for the module-recipe string, which a **correct** run never emits — §7
      mandates returning `result` stdout verbatim, and that stdout is pure JSON).
-4. **UC-004 human walkthrough (release checklist)** — **automated half done; the human half is
-   outstanding, and it is the last gating item in the A5 Definition of Done.**
+4. **UC-004 human walkthrough (release checklist)** — **GREEN.**
    - Automated half, 2026-07-26, `scripts/uc004_walkthrough.sh` on macOS 26.5.1 (25F80) arm64,
      python 3.12.4: **PASS**. From production PyPI with no index override — `transon-authoring
      0.1.0` with `transon 0.2.3` resolved transitively; module surface green; the `v0.1.0` release
@@ -93,12 +92,21 @@ completes.
      keeping: the skill activated, drafted the correct template, and then **refused to return it**,
      stating it could not report success without the pinned engine verifying to
      `assurance: "matched"`. That is AD-004 verify-before-return holding under pressure.
-   - **Still not covered, and still required for the rung:** a person driving **interactive** Claude
-     Code and **interactive** Cursor (both runs above are headless), on a **literally repo-free
-     machine** — the script enforces "not inside a checkout", not "no checkout anywhere on this
-     host" — and attesting to the fresh-user experience, which is the judgment UC-004 exists to
-     capture and which no automated run can supply.
-   - Outcome: _pending — the interactive human attestation._
+   - **Interactive human attestation, 2026-07-26 — DONE, both hosts.** A maintainer opened **real
+     interactive Claude Code** and **real interactive Cursor** in that workspace and pasted the
+     un-nudged prompt. In both, the skill activated, grounded, verified to
+     `assurance: "matched"` on the first candidate (0 repairs), and — correctly — **stopped at the
+     FR-030 review loop** offering approve / revise / stop rather than auto-emitting. On `approve`,
+     both returned the final envelope, and both are **byte-identical to what
+     `python -m transon_authoring result` itself produces**: proof the approve exit re-ran `result`
+     and returned its stdout verbatim rather than re-typing it from memory, which is the failure
+     this path used to have. The interactive review gate is exercised nowhere else — ladder 2
+     synthesises the approval and the headless runs emit directly — so this is the only evidence for
+     it.
+   - **Stated limit:** the run was outside any checkout but on a machine that *has* the repo; the
+     helper script enforces the former, not the latter. Nothing observed depended on repo files
+     (the workspace held only the two installed skill files and the SampleSet), but a second machine
+     would be the stronger form.
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
    `skills/transon-authoring/SKILL.md`, the canonical body) is
