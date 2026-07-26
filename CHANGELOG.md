@@ -10,6 +10,40 @@ written as pending, never as a result.
 
 Dates are UTC. Run references are GitHub Actions run URLs or ids.
 
+## 0.1.1 — 2026-07-26
+
+**Adds the license.** `0.1.0` shipped with no license at all — no `LICENSE` file, no `license`
+field, and `license: None` on PyPI — which left it "all rights reserved" by default and therefore
+not legally usable by anyone who installed it. `AGENTS.md` had flagged that license details settle
+at release; the obligation was missed. This release exists to correct that, and is otherwise
+functionally identical to `0.1.0`.
+
+- **MIT**, declared three ways so every consumer sees it: repo-root `LICENSE`, `license = "MIT"` +
+  `license-files` in `pyproject.toml` (the wheel carries `License-Expression: MIT` and bundles the
+  file), and PyPI classifiers.
+- `README.md` rewritten. It still described the project as **"Pre-A0"** — false since A5 — and was
+  contract-facing rather than user-facing. Now leads with install for all three channels, states
+  plainly that `pip install` does not deliver the skill body, and links the contract docs below.
+- No change to the skill body, the engine pin, the metadata snapshot, or any gate.
+
+### Version triplet
+
+- Skill version: `0.1.1` (the `pyproject.toml` project version)
+- Engine pin: `transon==0.2.3` (unchanged)
+- Snapshot hash (`snapshot_sha256` from `resources/metadata-snapshot.md`, unchanged):
+  `d4452b950617057a920bfb90101a9806a4aced2b9744766fc82951534cb37a8c`
+
+### Distribution-verification ladder
+
+Unchanged from `0.1.0` and not re-run: this release alters packaging metadata and documentation
+only, leaving the shipped `SKILL.md`, the engine pin and the snapshot byte-identical. Ladder 1
+(dist smoke) re-runs automatically against the built artifacts as part of the publish.
+
+### Publication
+
+- PyPI: _pending — tag `v0.1.1`, run reference, date._ The `pypi` environment now requires
+  deployment approval, so the tag push pauses until it is approved.
+
 ## 0.1.0 — published 2026-07-25
 
 First production release: `transon-authoring 0.1.0` is on PyPI (tag `v0.1.0`, run 30180068652),

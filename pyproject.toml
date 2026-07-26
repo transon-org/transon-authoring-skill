@@ -4,10 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "transon-authoring"
-version = "0.1.0"
+version = "0.1.1"
 description = "Authoring capability for AI agents that produces engine-valid Transon JSON, verified to assurance: matched (docs/SPEC.md)"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Text Processing :: Markup",
+    "Typing :: Typed",
+]
 # AD-007 — initial engine pin (A0 baseline). Bumping this pin is a deliberate,
 # reviewed change: sync the metadata snapshot and refresh the NL sidecar with it.
 dependencies = [

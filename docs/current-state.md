@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `8e573c4` — docs: A5 complete — ladder 4 attested, NFR-008 flipped |
+| Repo HEAD | `909f393` — docs: record the pypi environment protection |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -22,6 +22,21 @@ OQ-020's first production release. `pip install transon-authoring` works from a 
 ladder steps green/recorded, the `CHANGELOG.md` record cites the triplet and every outcome, the
 first PyPI publish is done, and AC-040/041/042 are green. `NFR-008` is `[x]`; **no unchecked rows
 remain in `traceability.md`**. `docs/release-runbook.md` is the how-to for future releases._
+
+_**LICENSE GAP FOUND AND FIXED — `0.1.1` prepared (2026-07-26).** Auditing the repo for FR-037b
+catalog readiness surfaced that **`0.1.0` shipped with no license at all**: no `LICENSE`, no
+`license` field, no classifiers, `license: None` on PyPI. That makes it "all rights reserved" — not
+legally usable by anyone who installed it. `AGENTS.md:61` had flagged that license details settle at
+release and the obligation was simply missed; it did not break A5's DoD because NFR-008's normative
+text (which I wrote) requires only version/pin/hash + ladder outcomes and never carried the license
+in. **Now MIT**, declared three ways — repo-root `LICENSE`, `license`/`license-files` in
+`pyproject.toml` (wheel verified carrying `License-Expression: MIT` and bundling the file), and PyPI
+classifiers. Copyright line reads `Eugene Chernyshov`; swap to an entity if preferred.
+Also fixed, all catalog-facing: `README.md` still said **"Status: Pre-A0"** for a shipped product and
+was contract-facing rather than user-facing (rewritten around install + how-it-works); the repo had
+**no description, homepage or topics** (set, 8 topics). `0.1.1` is committed with its CHANGELOG entry
+and AC-042 green — **it needs a `v0.1.1` tag to publish**, which will pause for deployment approval.
+FR-037b submissions deliberately deferred (its own framing is "driven by real adoption")._
 
 _**Ladder 4 closed by interactive human attestation (2026-07-26).** In both real interactive Claude
 Code and real interactive Cursor, from an un-nudged prompt in a workspace holding only the two
@@ -95,17 +110,24 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 **A5 is complete.** The A5 section of this list is closed; what remains is post-release and
 non-gating.
 
-1. **FR-037b — external catalog submission** (non-gating, now eligible since the runtime is
-   published). Submit the plugin to third-party agent-skill catalogs as adoption warrants. CI never
-   claims catalog presence or host discoverability.
-2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
+1. **Publish `0.1.1`** — prepared and committed; needs the tag:
+   `git tag v0.1.1 && git push origin v0.1.1`. The run now **pauses at `Review pending`** (the
+   `pypi` environment gained required reviewers), so approve the deployment in the run's page. Then
+   fill the Publication slot in the `CHANGELOG.md` `0.1.1` entry.
+2. **FR-037b — external catalog submission** (non-gating). Deliberately **deferred**: FR-037b frames
+   listing as "driven by real adoption", and the package is days old. Presentation blockers are now
+   cleared (license, README, description, topics). Targets when wanted — official Anthropic
+   directory via the web form at `clau.de/plugin-directory-submission` (a form, so maintainer-only),
+   and PR-based community lists (`ComposioHQ/awesome-claude-plugins`,
+   `Chat2AnyLLM/awesome-claude-plugins`). CI never claims catalog presence or host discoverability.
+3. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
-3. ~~Protect the `pypi` environment~~ — **done** 2026-07-26: required reviewer `Evgenus`, plus a
+4. ~~Protect the `pypi` environment~~ — **done** 2026-07-26: required reviewer `Evgenus`, plus a
    deployment branch policy restricting it to **`v*` tags**, so its Trusted Publishing identity is
    unreachable from a branch. `testpypi` left unprotected on purpose (rehearsal channel).
-4. Watch items carried forward: three fixtures passed the accepted baseline 2/3
+5. Watch items carried forward: three fixtures passed the accepted baseline 2/3
    (`ec2-flatten-inventory`, `refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and are
    future-flake candidates the ratchet will surface via `failure_modes`; the eval baseline predates
    a few additive `SKILL.md` edits (disclosed in `CHANGELOG.md`, no §11.8 reset trigger fired).
