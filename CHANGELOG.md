@@ -82,15 +82,23 @@ completes.
      byte-identical to canonical with a complete manifest (`skill_version` `0.1.0`, `engine_pin`
      `transon==0.2.3`, `snapshot_sha256` `d4452b95…`); `check-samples` `ok_for_verify` and `result`
      returning a matched `AuthoringResult`.
-   - **Not covered, and still required:** a person opening **real interactive Claude Code and real
-     interactive Cursor** and confirming the skill activates and authors a template. Also, the run
-     above executed outside any checkout but on a machine that *has* the repo — the script enforces
-     the former, not the latter — so it is not the literal repo-free machine UC-004 specifies.
-   - Adjacent evidence that narrows what remains: ladder 2 (run 29961198852) auto-activated the
-     shipped skill in the real Claude Code host from an `install/claude.py --target-root`
-     workspace, and ladder 3 (run 30182409724) did the same in a real headless Cursor. Both reached
-     a matched result. Neither is interactive, and neither substitutes for the walkthrough.
-   - Outcome: _pending — the two host confirmations._
+   - **Both real hosts, driven headlessly against that same workspace, 2026-07-26 — each returned a
+     matched `AuthoringResult`** (`{"$":"attr","name":"x"}`, `assurance: "matched"`,
+     `repair_count` 0) from a prompt that **never named the skill**, with the skill discovered from
+     the project-scope install made out of the published `v0.1.0` archive:
+     - **Claude Code** 2.1.207 — `claude -p` with tool access scoped to
+       `Bash(python -m transon_authoring:*)`, `Write`, `Read`.
+     - **Cursor** — `cursor-agent -p --trust --force`.
+     The first Claude Code attempt, run with **no** tool permissions, is itself a result worth
+     keeping: the skill activated, drafted the correct template, and then **refused to return it**,
+     stating it could not report success without the pinned engine verifying to
+     `assurance: "matched"`. That is AD-004 verify-before-return holding under pressure.
+   - **Still not covered, and still required for the rung:** a person driving **interactive** Claude
+     Code and **interactive** Cursor (both runs above are headless), on a **literally repo-free
+     machine** — the script enforces "not inside a checkout", not "no checkout anywhere on this
+     host" — and attesting to the fresh-user experience, which is the judgment UC-004 exists to
+     capture and which no automated run can supply.
+   - Outcome: _pending — the interactive human attestation._
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
    `skills/transon-authoring/SKILL.md`, the canonical body) is

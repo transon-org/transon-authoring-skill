@@ -140,8 +140,15 @@ fi
 
 # ── 4. The authoring flow, from the installed runtime ───────────────────────
 say "4. Authoring flow against the pinned engine"
+# The task's SampleSet belongs in the workspace — it is the input the manual
+# prompt refers to. The template does NOT: this check authors the very answer a
+# host is later asked to produce, so it runs in a scratch directory. Leaving
+# template.json beside the samples would let the host read the answer off disk
+# and turn the manual step into a false pass.
 cp "$SRC/tests/fixtures/offline/sample_set.json" "$PROJECT/samples.json"
-cd "$PROJECT"
+FLOW="$WORK/flowcheck"; mkdir -p "$FLOW"
+cp "$PROJECT/samples.json" "$FLOW/samples.json"
+cd "$FLOW"
 flow_ok=1
 "$PY" -m transon_authoring check-samples --samples samples.json \
   | python3 -c "import json,sys;sys.exit(0 if json.load(sys.stdin).get('ok_for_verify') else 1)" \
