@@ -30,10 +30,23 @@ separate publish jobs — a job may declare only one environment. Before a proje
 index, the registration shows as a **pending publisher**; it converts to a normal one on the first
 upload.
 
-**GitHub environments.** `release.yml` references `testpypi` and `pypi`. GitHub auto-creates a
-referenced environment at run time, but auto-created environments have **no protection rules** — so
-if you want a human approval gate before production, create `pypi` in Settings → Environments and
-add required reviewers *before* the first tag push.
+**GitHub environments.** `release.yml` references `testpypi` and `pypi`; both exist.
+
+`pypi` is protected: **required reviewer** (`Evgenus`) and a deployment branch policy allowing only
+**`v*` tags**. Two consequences to plan for:
+
+- **A tag push now pauses.** `publish-pypi` waits in `Review pending` until the deployment is
+  approved in the run's page (Actions → the run → *Review deployments*). Nothing reaches PyPI until
+  then, so a mistaken tag is recoverable — reject the deployment and delete the tag.
+- **Self-review is deliberately allowed** (`prevent_self_review: false`). With a single reviewer who
+  is also the person pushing tags, forbidding it would deadlock every release. If a second
+  maintainer joins, add them and consider turning it on.
+
+The branch policy is defence in depth: the `pypi` environment — and therefore its Trusted Publishing
+identity — is unreachable from a branch even if a workflow were edited to reference it.
+
+`testpypi` is intentionally left unprotected: it is the rehearsal channel, dispatched manually to a
+test index, and a review gate there would only add friction.
 
 ---
 
@@ -147,7 +160,8 @@ tag disagrees with the project version.
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-Watch the run, then confirm:
+The run then **waits for deployment approval** (see §0). Approve it in the run's page; only after
+that does the upload happen. Watch the run, then confirm:
 
 ```bash
 curl -fsS https://pypi.org/simple/transon-authoring/ | grep -oE 'transon_authoring-[^"#<]+\.(whl|tar\.gz)' | sort -u

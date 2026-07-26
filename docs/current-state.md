@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `52c0bff` — fix: keep the authored template out of the host workspace; record both hosts |
+| Repo HEAD | `8e573c4` — docs: A5 complete — ladder 4 attested, NFR-008 flipped |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -102,9 +102,9 @@ non-gating.
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
-3. Optional hardening for the next release: create the `pypi` GitHub environment with **required
-   reviewers** — it was auto-created by the tag run and is therefore unprotected, so a future tag
-   push publishes with no human gate.
+3. ~~Protect the `pypi` environment~~ — **done** 2026-07-26: required reviewer `Evgenus`, plus a
+   deployment branch policy restricting it to **`v*` tags**, so its Trusted Publishing identity is
+   unreachable from a branch. `testpypi` left unprotected on purpose (rehearsal channel).
 4. Watch items carried forward: three fixtures passed the accepted baseline 2/3
    (`ec2-flatten-inventory`, `refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and are
    future-flake candidates the ratchet will surface via `failure_modes`; the eval baseline predates
@@ -114,8 +114,9 @@ non-gating.
 
 - **None blocking.** A5's DoD is met and `0.1.0` is published; remaining work is post-release and
   non-gating (Next steps).
-- The `pypi` GitHub environment is unprotected (auto-created by the tag run) — a future tag push
-  publishes with no human gate. Add required reviewers before the next release if you want one.
+- Note for the next release: the `pypi` environment now requires **deployment approval**, so a tag
+  push pauses at `Review pending` until approved in the run's page. Self-review is deliberately
+  allowed — a sole reviewer who also pushes tags would otherwise deadlock releases.
 
 ## Do-not-relitigate (pointers, not copies)
 
