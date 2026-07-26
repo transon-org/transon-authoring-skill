@@ -41,7 +41,10 @@ the plugin root itself; the canonical body exists at
 path — and satisfies the OQ-010 preconditions (AC-040). This claims
 **packaging integrity only** — never catalog listing or host discoverability.
 
-Plus, once, on the real ``--root``: the NFR-008 release record — repo-root
+Plus, once, on the real ``--root``: the NFR-008 release record — a repo-root
+``LICENSE`` file exists and is non-empty and ``pyproject.toml`` declares a
+non-empty ``license``, so the published distribution states its terms (the gate
+asserts that terms are *declared*, never which terms); and repo-root
 ``CHANGELOG.md`` exists and its topmost release record entry (headings naming
 no release version, and "Unreleased"/"In progress" headings whatever version
 they name, are skipped; a tag-style ``v`` prefix is stripped) names the
@@ -87,6 +90,7 @@ COMBOS = (
 PLUGIN_MANIFEST_REL = ".claude-plugin/plugin.json"
 MARKETPLACE_REL = ".claude-plugin/marketplace.json"
 CHANGELOG_REL = "CHANGELOG.md"
+LICENSE_REL = "LICENSE"
 SNAPSHOT_PROVENANCE_REL = "resources/metadata-snapshot.md"
 RUNTIME_PREREQ = "pip install transon-authoring"
 MANIFEST_FIELDS = frozenset(
@@ -108,6 +112,19 @@ _PIN_RE = re.compile(
     re.MULTILINE,
 )
 _VERSION_RE = re.compile(r"^version\s*=\s*[\"']([^\"']+)[\"']", re.MULTILINE)
+# AC-042 scopes the declaration to the ``[project]`` table: a ``license`` key in
+# any other table (``[tool.poetry]``, a linter's table) declares nothing about
+# this distribution, and matching one would bless a wheel that ships no license
+# metadata at all. So isolate the ``[project]`` body first, then search it.
+# Leading whitespace is allowed — indented keys are valid TOML.
+_PROJECT_TABLE_RE = re.compile(r"^\[project\][^\S\n]*$\n(.*?)(?=^\[|\Z)", re.MULTILINE | re.DOTALL)
+# Both accepted spellings: the PEP 639 string form and the older table form.
+# ``license-files`` never matches (no ``=`` follows the bare key).
+_LICENSE_STRING_RE = re.compile(r"^[ \t]*license\s*=\s*[\"']([^\"']*)[\"']", re.MULTILINE)
+_LICENSE_TABLE_RE = re.compile(
+    r"^[ \t]*license\s*=\s*\{[^}]*\b(?:text|file)\s*=\s*[\"']([^\"']*)[\"']",
+    re.MULTILINE,
+)
 
 _FRONTMATTER_LINE_RE = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*)$")
 
@@ -608,11 +625,70 @@ def find_release_entry(text: str) -> Optional[tuple[str, str]]:
     return None
 
 
+def read_license_declaration(text: str) -> Optional[str]:
+    """Textual read of the ``[project] license`` declaration — no ``tomllib``
+    (OQ-019 bars it from pin-reading scripts). Either spelling declares terms:
+    the PEP 639 string form or the older ``{text = …}`` / ``{file = …}`` table.
+    Returns None when nothing is declared."""
+    table = _PROJECT_TABLE_RE.search(text)
+    if table is None:
+        return None
+    body = table.group(1)
+    match = _LICENSE_STRING_RE.search(body) or _LICENSE_TABLE_RE.search(body)
+    return match.group(1) if match else None
+
+
+def check_license(root: Path, findings: list[str], oks: list[str]) -> None:
+    """AC-042, license half — the release states its terms: a non-empty
+    repo-root ``LICENSE`` file and a non-empty ``license`` in
+    ``pyproject.toml``. Only that terms are **declared** is asserted; the gate
+    takes no position on the choice and matches against no identifier list."""
+    before = len(findings)
+    path = root / LICENSE_REL
+    if not path.is_file():
+        findings.append(
+            f"release: {LICENSE_REL} is missing under {root} — an unlicensed "
+            "publication states no terms (NFR-008 / AC-042)"
+        )
+    elif not path.read_bytes().strip():
+        findings.append(
+            f"release: {LICENSE_REL} under {root} is empty — an unlicensed "
+            "publication states no terms (NFR-008 / AC-042)"
+        )
+
+    pyproject = root / "pyproject.toml"
+    declaration = (
+        read_license_declaration(pyproject.read_text(encoding="utf-8"))
+        if pyproject.is_file()
+        else None
+    )
+    if declaration is None:
+        findings.append(
+            f"release: no [project] license declared in {pyproject} — the "
+            "built distribution would carry no license metadata "
+            "(NFR-008 / AC-042)"
+        )
+    elif not declaration.strip():
+        findings.append(
+            f"release: the [project] license in {pyproject} is empty — the "
+            "built distribution would carry no license metadata "
+            "(NFR-008 / AC-042)"
+        )
+
+    if len(findings) == before:
+        oks.append(
+            f"release: {LICENSE_REL} is present and non-empty and "
+            "pyproject.toml declares a license — terms are declared; the gate "
+            "takes no position on which terms (NFR-008)"
+        )
+
+
 def check_release_record(root: Path, findings: list[str], oks: list[str]) -> None:
-    """AC-042 — the repo-root release record carries the NFR-008 version
-    triplet. Asserts agreement with the repo's own sources of truth only —
-    never that the version was published; the ladder outcomes NFR-008 requires
-    are maintainer prose, unverified here."""
+    """AC-042 — the release is licensed and the repo-root release record
+    carries the NFR-008 version triplet. Asserts agreement with the repo's own
+    sources of truth only — never that the version was published; the ladder
+    outcomes NFR-008 requires are maintainer prose, unverified here."""
+    check_license(root, findings, oks)
     path = root / CHANGELOG_REL
     if not path.is_file():
         findings.append(
@@ -725,8 +801,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="check_install",
         description="Rehearse skill install/uninstall in temp dirs and fail "
         "on any integrity, idempotency, uninstall, OQ-010 "
-        "discoverability-precondition, runtime-smoke, plugin-packaging or "
-        "release-record violation (FR-019 / NFR-009 / AC-007 / AC-009 / "
+        "discoverability-precondition, runtime-smoke, plugin-packaging, "
+        "release-record or license-declaration violation "
+        "(FR-019 / NFR-009 / AC-007 / AC-009 / "
         "AC-040 / AC-042).",
     )
     parser.add_argument(

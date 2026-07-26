@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `909f393` — docs: record the pypi environment protection |
+| Repo HEAD | `fb59713` — docs: state how the skill is tested and verified in the README |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -22,6 +22,24 @@ OQ-020's first production release. `pip install transon-authoring` works from a 
 ladder steps green/recorded, the `CHANGELOG.md` record cites the triplet and every outcome, the
 first PyPI publish is done, and AC-040/041/042 are green. `NFR-008` is `[x]`; **no unchecked rows
 remain in `traceability.md`**. `docs/release-runbook.md` is the how-to for future releases._
+
+_**NFR-008 now requires a license, and AC-042 enforces it (2026-07-26).** Governed change, SPEC
+first: NFR-008 requires a non-empty repo-root `LICENSE` and a non-empty **`[project] license`** in
+`pyproject.toml`; AC-042 gained the mechanical half. This closes the hole that let `0.1.0` ship
+unusable while its own gate stayed green.
+**`spec-reviewer` caught a false green that would have made the whole change pointless:** the first
+implementation matched a `license` key in **any** table, so a `pyproject.toml` with no `[project]`
+license but a `[tool.something] license = "MIT"` exited 0 with "terms are declared" — blessing the
+exact defect the gate exists to catch. Reproduced end to end. Same root cause gave two false reds
+(column-0 anchoring rejected valid indented keys, and an earlier `[tool.x] license = ""` masked the
+real declaration). Fixed by isolating the `[project]` table body before searching it; verified
+against seven probe cases and confirmed red-first by reverting the scoping.
+Two further findings were contract-precision and went into SPEC, not code: AC-042 now names
+`[project]` scope and the two accepted spellings (the `{text=…}`/`{file=…}` tolerance had been
+invented inline and frozen by a test), and NFR-008/AC-042 no longer disagree on the file needing to
+be non-empty. Also cut two sentences of legal advocacy from NFR-008 (hygiene: constraints, not
+argument) and normalised a "licence"/"license" split. Deliberately NOT enforced: that a
+`{file = …}` target exists — AC-042 asserts terms are *declared*, not which terms, and says so._
 
 _**LICENSE GAP FOUND AND FIXED — `0.1.1` prepared (2026-07-26).** Auditing the repo for FR-037b
 catalog readiness surfaced that **`0.1.0` shipped with no license at all**: no `LICENSE`, no
@@ -110,7 +128,8 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 **A5 is complete.** The A5 section of this list is closed; what remains is post-release and
 non-gating.
 
-1. **Publish `0.1.1`** — prepared and committed; needs the tag:
+1. **Publish `0.1.1`** — prepared and committed (now also carries the NFR-008/AC-042 license
+   requirement); needs the tag:
    `git tag v0.1.1 && git push origin v0.1.1`. The run now **pauses at `Review pending`** (the
    `pypi` environment gained required reviewers), so approve the deployment in the run's page. Then
    fill the Publication slot in the `CHANGELOG.md` `0.1.1` entry.

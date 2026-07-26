@@ -70,7 +70,7 @@ real agent host, and end-to-end verification of what actually ships.
 
 | | |
 |---|---|
-| **698 tests** (pytest) | schemas, matching, sandbox, preflight, CLI surface, installers, gates |
+| **707 tests** (pytest) | schemas, matching, sandbox, preflight, CLI surface, installers, gates |
 | **`check_snapshot`** | the bundled metadata snapshot and Language Reference match the pinned engine exactly; stale provenance is red |
 | **`check_parity`** | Claude/Cursor adapters stay at equal capability; exactly one `SKILL.md` in the repo; the shipped body cites no repo paths, no spec sections, no requirement IDs |
 | **`check_install`** | installs into throwaway roots for all four tool/scope combinations, asserts byte-identical bodies, complete manifests, idempotent re-install, uninstall touching only recorded paths |
