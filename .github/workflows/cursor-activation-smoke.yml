@@ -57,9 +57,17 @@ on:
       prompt:
         description: "Task handed to the headless agent"
         required: false
+        # Deliberately does NOT name the skill. This is an ACTIVATION smoke: the
+        # host must route to the shipped SKILL.md on its frontmatter description
+        # alone (OQ-027a faithful engagement — no injection, no coercion), exactly
+        # as the §11.8 eval harness does. Naming the skill would prove only that
+        # the agent can follow an instruction. The task matches the SampleSet
+        # provisioned into the workspace, and cites it by path so the run is not
+        # blocked at the §3 samples gate.
         default: >-
-          Author a Transon template that renames the top-level key "amount" to
-          "total". Use the transon-authoring skill.
+          Author a Transon template that returns the value of the top-level key
+          "x". A confirmed SampleSet for this task is at samples.json in the
+          current directory — use it as the samples path.
       accept_unverified_cli_risk:
         description: >-
           Set to "yes" to acknowledge the unverified-binary + exposed-key risk in
@@ -120,12 +128,22 @@ jobs:
           find "${BUNDLE}/cursor" -maxdepth 2 -name 'cursor-agent*' | sort
 
           # The workspace the agent runs in: skill files installed BY THE SHIPPED
-          # INSTALLER into a target root that is not this checkout. Nothing else
-          # from the repo is copied in — if the skill does not carry what it
-          # needs, the agent cannot fall back on repo files (NFR-012).
+          # INSTALLER into a target root that is not this checkout. The only other
+          # thing placed here is the task's SampleSet — caller-supplied input, the
+          # same shape the eval harness gives an episode. No repo docs, no source:
+          # if the skill does not carry what it needs, the agent cannot fall back
+          # on repo files (NFR-012).
           WORKSPACE="${BUNDLE}/workspace"
           mkdir -p "${WORKSPACE}"
           python3 install/cursor.py --scope project --target-root "${WORKSPACE}"
+
+          # A PRE-CONFIRMED SampleSet (confirmed + coverage_complete =>
+          # ok_for_verify), so the episode can reach the authoring path at all.
+          # Without one the skill correctly refuses to draft (FR-002 / AD-014) and
+          # stops at the §3 gate, which is what run 30181831690 observed. The
+          # library never sets `confirmed` itself, so this is the CI-fixture form:
+          # a committed SampleSet whose content_fingerprint came from check-samples.
+          cp tests/fixtures/offline/sample_set.json "${WORKSPACE}/samples.json"
           echo "Provisioned workspace:"
           find "${WORKSPACE}" -type f | sort
 
@@ -204,6 +222,14 @@ jobs:
           echo "runtime recipe OK"
           test -f "${B}/workspace/.cursor/skills/transon-authoring/SKILL.md"
           echo "installed skill present"
+          # The episode cannot reach the authoring path unless the SampleSet is
+          # present AND ok_for_verify — assert both here rather than discovering
+          # it from a confusing transcript after the credentialed call.
+          test -f "${B}/workspace/samples.json"
+          PYTHONPATH="${B}/pydeps" python3 -m transon_authoring check-samples \
+            --samples "${B}/workspace/samples.json" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('ok_for_verify') else 1)"
+          echo "workspace SampleSet is ok_for_verify"
 
       - name: Run the headless episode
         env:
