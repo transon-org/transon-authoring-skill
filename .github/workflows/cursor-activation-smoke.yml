@@ -212,7 +212,13 @@ jobs:
           mkdir -p "${OUT}"
           cd "${WORKSPACE}"
           set +e
-          "${CURSOR_AGENT}" -p --output-format text \
+          # `--trust` is required: cursor-agent refuses to run in an untrusted
+          # directory and exits 1 with an empty transcript. It is the minimal
+          # grant for this — headless-only, and it trusts the directory without
+          # force-allowing commands the way `--yolo`/`--force` would. The
+          # workspace is ephemeral and holds only installer-provisioned skill
+          # files, so there is nothing here to trust beyond what we put there.
+          "${CURSOR_AGENT}" -p --trust --output-format text \
             "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
           STATUS=$?
           set -e
