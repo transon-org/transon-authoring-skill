@@ -284,11 +284,12 @@ jobs:
           python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
             "${RUNNER_TEMP}/cursor-transcript"
 
-      # Claims only what the transcript shows — a recipe marker, not activation.
-      # The agent's cwd IS the provisioned workspace, so it could read the
-      # installed SKILL.md and quote the recipe without the host activating it as
-      # a skill; plain text output cannot tell the two apart.
-      - name: Assert the episode succeeded and the recipe marker appeared
+      # Claims only what the transcript shows. A matched AuthoringResult means the
+      # shipped flow ran end to end against the pinned engine — verdict/assurance/
+      # repair_count come from the module, so quoting a command cannot forge one.
+      # It is still not a claim about the host's internal skill routing, which no
+      # credential-free command exposes (OQ-008).
+      - name: Assert the episode emitted a matched AuthoringResult
         if: always() && steps.scan.outcome == 'success'
         run: |
           python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" \

@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `14ea81f` — fix: cursor smoke needs --force to auto-approve commands |
+| Repo HEAD | `f94227f` — fix: assert a matched AuthoringResult, not a recipe substring |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -18,9 +18,9 @@
 _**`transon-authoring 0.1.0` IS PUBLISHED ON PyPI** (2026-07-25, tag `v0.1.0`, run 30180068652) —
 OQ-020's first production release. `pip install transon-authoring` works from a clean venv and pulls
 `transon==0.2.3` transitively; the full CLI surface exits 0. TestPyPI carries `0.1.0` too (run
-30179949576). **The only gating item left in A5's DoD is ladder step 4**, the UC-004 human
-walkthrough on a repo-free machine. `docs/release-runbook.md` is the operational how-to for this and
-future releases._
+30179949576). **Ladder steps 1, 2, 3 and 5 are green; the only gating item left in A5's DoD is
+ladder step 4**, the UC-004 human walkthrough on a repo-free machine.
+`docs/release-runbook.md` is the operational how-to for this and future releases._
 
 _**A5 release slice — MERGED to `main` 2026-07-25 (PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28), merge `d98d440`); all gates green on `main`.**
 The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
@@ -93,15 +93,14 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
       states that the baseline predates the `9be1f66` body paragraph.
    b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
       `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
-   c. **Ladder 3** (non-gating) — **run, and it produced a real finding.** Run 30181831690: exit 0,
-      489-byte transcript, marker absent because the agent correctly **stopped at the §3
-      non-interactive gate** (no `--samples` path, no config → no draft, per FR-002/AD-014). Its
-      reply names `init-config`, the three §11.9 layouts and `transon-samples`, so **the skill
-      demonstrably activated**. The assertion is mis-specified, not the skill: to exercise the
-      recipe the workspace needs a **pre-confirmed SampleSet** (`confirmed: true` + `confirmed_by` +
-      a real `content_fingerprint` from `check-samples` — the offline fixture is unconfirmed and
-      will not do) and a prompt naming it via `--samples`. Two earlier runs died on harness gaps,
-      both fixed in-workflow: `--trust` (untrusted dir) and `--force` (command approval).
+   c. ~~Ladder 3~~ — **GREEN** (non-gating), run 30182409724, reproduced on 30182303844. From a
+      prompt that **never named the skill**, a real headless Cursor emitted a schema-valid
+      `AuthoringResult` at `assurance: "matched"` (template `{"$":"attr","name":"x"}`). Four
+      dispatches got there, every failure a harness defect and none a skill defect: `--trust`,
+      `--force`, a missing SampleSet (the skill correctly stopped at the §3 gate), and an assertion
+      that grepped for the recipe string — which a **correct** run never emits, since §7 mandates
+      returning `result` stdout verbatim and that stdout is pure JSON. The criterion is now a
+      matched envelope, which the module can only produce by running against the pinned engine.
       Still open: tighten egress `audit`→`block` from the observed host set.
    d. **Ladder 4 — THE LAST GATING ITEM.** UC-004 walkthrough on a repo-free machine:
       `pip install transon-authoring` (production PyPI, no index override), both installers,
