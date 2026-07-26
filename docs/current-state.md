@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `f94227f` — fix: assert a matched AuthoringResult, not a recipe substring |
+| Repo HEAD | `d790c2f` — security: block egress in the cursor smoke, from the observed host set |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -47,9 +47,10 @@ trigger has fired; the `CHANGELOG` discloses that the baseline predates a few ad
 **`transon-authoring 0.0.1` is already on TestPyPI** (run 29915374804) — AC-042 checks only the
 triplet, so every ladder/publication line in the `CHANGELOG` is unverified prose to check against
 `gh run list` before release. **Ladder 3 carries an unresolved credential-exposure risk** the
-platform blocks closing (Cursor ships no pinnable artifact / endpoint list / key-proxy): it runs an
-unverified `curl|bash` binary with `CURSOR_API_KEY` under audit-only egress, now gated behind an
-`accept_unverified_cli_risk=yes` dispatch input and a mandatory throwaway key. **Three
+platform blocks closing (Cursor ships no pinnable artifact and no key-proxy): it runs an unverified
+`curl|bash` binary with `CURSOR_API_KEY` present. Bounded by an `accept_unverified_cli_risk=yes`
+dispatch gate, a mandatory throwaway key, and egress blocked to a derived allowlist — which cannot
+eliminate the path, since Cursor's own API must stay reachable. **Three
 `spec-reviewer` passes** (two-copy design; the restructure — whose lead finding was a guard landed
 code-first, since fixed spec-first via AC-005; the CodeRabbit-fix commit) and **four CodeRabbit
 rounds** are all settled._
@@ -101,7 +102,8 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
       that grepped for the recipe string — which a **correct** run never emits, since §7 mandates
       returning `result` stdout verbatim and that stdout is pure JSON. The criterion is now a
       matched envelope, which the module can only produce by running against the pinned engine.
-      Still open: tighten egress `audit`→`block` from the observed host set.
+      Egress is now **`block`** on a derived allowlist (`*.cursor.sh`, `registry.npmjs.org`, GitHub
+      infra), verified green under it (run 30196218752). Nothing open on this rung.
    d. **Ladder 4 — THE LAST GATING ITEM.** UC-004 walkthrough on a repo-free machine:
       `pip install transon-authoring` (production PyPI, no index override), both installers,
       activation in real Claude Code and real Cursor, one authored template.

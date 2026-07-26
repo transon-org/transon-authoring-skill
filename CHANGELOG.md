@@ -48,10 +48,16 @@ completes.
      `check_evals` reports as a hard red); the pass criterion is the per-fixture majority.
 3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **GREEN.**
    Non-gating. Carries an **unresolved credential-exposure risk** the platform prevents closing:
-   the job runs an unverifiable `curl | bash` Cursor binary with `CURSOR_API_KEY` present under
-   audit-only egress (Cursor ships no pinnable artifact, no endpoint list, and no key-proxy).
-   Bounded, not closed — the job refuses to run without `accept_unverified_cli_risk=yes`, and a
-   dedicated revocable key is mandatory. See the workflow header.
+   the job runs an unverifiable `curl | bash` Cursor binary with `CURSOR_API_KEY` present (Cursor
+   ships no pinnable artifact and no key-proxy). Bounded, not closed — the job refuses to run
+   without `accept_unverified_cli_risk=yes`, a dedicated revocable key is mandatory, and **egress
+   is denied except a derived allowlist** (`*.cursor.sh`, `registry.npmjs.org`, GitHub infra;
+   OQ-027f(iii)). The block bounds where a leaked key could go but cannot eliminate the path, since
+   Cursor's own API is necessarily reachable. See the workflow header.
+   - Egress tightened `audit` → `block` and **verified green under it** (run 30196218752, same
+     matched envelope, no blocked-host annotations). The allowlist was derived from what the
+     audit-tier runs observed, not guessed — it includes `registry.npmjs.org`, which the CLI
+     contacts at runtime in a job that installs nothing; a hand-written list would have blocked it.
    - Outcome, 2026-07-26, run 30182409724 (`main`): `cursor-agent` **exit 0**, secret scan clean,
      and the episode emitted a **schema-valid `AuthoringResult` at `assurance: "matched"`**
      (template `{"$":"attr","name":"x"}`, `repair_count` 0) — **from a prompt that never named the
