@@ -40,7 +40,12 @@ name: Cursor activation smoke (headless)
 #     job refuses to run otherwise);
 #   - use a DEDICATED, low-privilege, REVOCABLE Cursor key — never a personal or
 #     org-wide one — so the blast radius of a leak is one throwaway key;
-#   - the prompt is fixed and maintainer-authored (no untrusted corpus input);
+#   - the prompt is fixed and maintainer-authored (no untrusted corpus input) —
+#     which is what makes `--force` (auto-approve commands, required for the
+#     agent to run the skill's recipe at all) acceptable here: the model executes
+#     shell in the ephemeral workspace with no approval gate, so the absence of
+#     untrusted input is load-bearing. Do not point this workflow at a
+#     caller-supplied or corpus-derived prompt without revisiting that;
 #   - the transcript is still secret-scanned before it can reach the log/artifact,
 #     which covers accidental leakage into the transcript (not binary exfil).
 # Close it properly the day Cursor ships a pinnable/checksummed artifact or a
@@ -212,14 +217,23 @@ jobs:
           mkdir -p "${OUT}"
           cd "${WORKSPACE}"
           set +e
-          # `--trust` is required: cursor-agent refuses to run in an untrusted
-          # directory and exits 1 with an empty transcript. It is the minimal
-          # grant for this — headless-only, and it trusts the directory without
-          # force-allowing commands the way `--yolo`/`--force` would. The
-          # workspace is ephemeral and holds only installer-provisioned skill
-          # files, so there is nothing here to trust beyond what we put there.
-          "${CURSOR_AGENT}" -p --trust --output-format text \
-            "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
+          # Both flags are required to run at all:
+          #   --trust  cursor-agent refuses an untrusted directory (exit 1).
+          #   --force  auto-approves commands. Without it the agent blocks on the
+          #            approval prompt for its first shell command with nowhere to
+          #            render it, and hangs producing zero bytes on both streams.
+          # The skill's whole procedure is `python -m transon_authoring …` calls,
+          # so command approval is not optional here. `-p` already grants tool
+          # access including shell, so --force removes an approval gate rather
+          # than widening capability. Bounded by: an ephemeral workspace holding
+          # only installer-provisioned files, a fixed maintainer-authored prompt
+          # (no untrusted corpus input), and a dedicated revocable key.
+          #
+          # stdin from /dev/null so nothing can wait on a terminal; the step
+          # timeout keeps a future hang cheap instead of burning the job budget.
+          timeout 480 "${CURSOR_AGENT}" -p --trust --force --output-format text \
+            "${SMOKE_PROMPT}" \
+            < /dev/null > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
           STATUS=$?
           set -e
           # Persist the exit status for the post-scan assertion. It must NOT gate
