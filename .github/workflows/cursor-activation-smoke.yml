@@ -27,13 +27,13 @@ name: Cursor activation smoke (headless)
 #   2. The `smoke` job then EXECUTES that unverified binary with `CURSOR_API_KEY`
 #      in its environment (the key IS the agent's own credential — unlike the
 #      Anthropic path in evals.yml, Cursor exposes no proxy to withhold it, so
-#      OQ-027f(ii) is unsatisfiable here), under AUDIT-only egress (Cursor
-#      publishes no endpoint list to build a block allowlist from, and the first
-#      dispatch is what would discover it — a chicken-and-egg the block can't win
-#      on run one).
-# So a compromised installer or binary could exfiltrate the key over its OWN
-# network calls BEFORE the transcript scan runs — the scan sees the transcript,
-# never the binary's traffic, so scan-before-log does nothing against this path.
+#      OQ-027f(ii) is unsatisfiable here). Egress is now BLOCKED to a derived
+#      allowlist (see the harden-runner step), which bounds where a leaked key
+#      could go — but Cursor's own API is necessarily reachable, so it does not
+#      eliminate the path.
+# A compromised installer or binary could still exfiltrate the key over its OWN
+# calls to an allowed host, BEFORE the transcript scan runs — the scan sees the
+# transcript, never the binary's traffic, so scan-before-log does nothing here.
 # This is NOT closed. It is bounded, and enabling it is a deliberate choice:
 #   - the risk is inert until a maintainer both creates the CURSOR_API_KEY secret
 #     AND sets the `accept_unverified_cli_risk` dispatch input to "yes" (the smoke
@@ -183,14 +183,29 @@ jobs:
             exit 1
           fi
 
-      # Cursor publishes no endpoint list for the CLI, so an allow-list block
-      # here would be invented rather than derived — and a wrong one would look
-      # like a failed activation. AUDIT records every host this run touches;
-      # tighten to `block` with the observed set once a dispatch has produced it.
-      - name: Audit egress (OQ-027f(iii), audit tier)
+      # OQ-027f(iii). Cursor publishes no endpoint list, so this allowlist is
+      # DERIVED from what audit-tier dispatches actually observed (runs
+      # 30182303844 / 30182409724): api2, api3, agentn.global.api5 and repo42
+      # under cursor.sh, plus registry.npmjs.org — the CLI fetches from npm at
+      # runtime even though this job installs nothing. `*.cursor.sh` rather than
+      # the four exact hosts, mirroring how evals.yml allows `*.anthropic.com`:
+      # the vendor rotates subdomains, and pinning them would turn a routine
+      # change into a failure that looks like a broken skill. Everything else is
+      # denied — a compromised CLI has nowhere to send the key.
+      #
+      # The unpinned `curl | bash` install runs in the BUILD job, which holds no
+      # credential and is deliberately not blocked; this job fetches nothing.
+      - name: Deny egress except Cursor + GitHub infra (OQ-027f(iii))
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            *.cursor.sh:443
+            registry.npmjs.org:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
