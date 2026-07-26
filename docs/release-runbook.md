@@ -104,6 +104,20 @@ python3 -m venv /tmp/tpv && /tmp/tpv/bin/python -m pip install -i https://test.p
 Irreducibly human, and **must run on a machine without this repository** — the point is to
 experience the fresh-user path, which a checkout would short-circuit.
 
+On macOS, `scripts/uc004_walkthrough.sh` does the mechanizable half and prompts for the rest. Copy
+it to a repo-free directory (it refuses to run inside a checkout) and run it; it emits a report
+block for the `CHANGELOG.md` entry:
+
+```bash
+bash uc004_walkthrough.sh --keep        # add --personal to exercise the ~ destinations too
+```
+
+It installs the runtime from PyPI into a throwaway venv, checks the module surface, unpacks the
+release archive for the installed version, runs both installers into a throwaway project, asserts
+the installed `SKILL.md` is byte-identical to canonical with a complete manifest, and drives
+`check-samples` → `result` to a matched `AuthoringResult`. It then prints the workspace path and the
+prompt to paste into each host. The manual steps below are what it cannot do for you.
+
 1. Install the runtime — `pip install transon-authoring` (the project is on production PyPI; use
    the TestPyPI form from §2 only when rehearsing an unreleased version).
 2. Obtain the skill files (a release archive or a clone) and run both installers:
