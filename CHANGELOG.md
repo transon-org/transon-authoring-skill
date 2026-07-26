@@ -73,12 +73,24 @@ completes.
      stopped at the §3 gate per FR-002/AD-014 and made no module call), and 30182303844 (the
      assertion grepped for the module-recipe string, which a **correct** run never emits — §7
      mandates returning `result` stdout verbatim, and that stdout is pure JSON).
-4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
-   repo-free machine (`pip install transon-authoring`; both installers; activation in real Claude
-   Code and real Cursor; one authored template) has been done. **This is the last outstanding
-   gating item in the A5 Definition of Done.** `0.1.0` is on production PyPI, so the walkthrough
-   now installs from the real index with no `--index-url` override.
-   - Outcome: _pending — date, machine/OS, index used, result._
+4. **UC-004 human walkthrough (release checklist)** — **automated half done; the human half is
+   outstanding, and it is the last gating item in the A5 Definition of Done.**
+   - Automated half, 2026-07-26, `scripts/uc004_walkthrough.sh` on macOS 26.5.1 (25F80) arm64,
+     python 3.12.4: **PASS**. From production PyPI with no index override — `transon-authoring
+     0.1.0` with `transon 0.2.3` resolved transitively; module surface green; the `v0.1.0` release
+     archive unpacked and **both** installers run into a throwaway project; installed `SKILL.md`
+     byte-identical to canonical with a complete manifest (`skill_version` `0.1.0`, `engine_pin`
+     `transon==0.2.3`, `snapshot_sha256` `d4452b95…`); `check-samples` `ok_for_verify` and `result`
+     returning a matched `AuthoringResult`.
+   - **Not covered, and still required:** a person opening **real interactive Claude Code and real
+     interactive Cursor** and confirming the skill activates and authors a template. Also, the run
+     above executed outside any checkout but on a machine that *has* the repo — the script enforces
+     the former, not the latter — so it is not the literal repo-free machine UC-004 specifies.
+   - Adjacent evidence that narrows what remains: ladder 2 (run 29961198852) auto-activated the
+     shipped skill in the real Claude Code host from an `install/claude.py --target-root`
+     workspace, and ladder 3 (run 30182409724) did the same in a real headless Cursor. Both reached
+     a matched result. Neither is interactive, and neither substitutes for the walkthrough.
+   - Outcome: _pending — the two host confirmations._
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
    `skills/transon-authoring/SKILL.md`, the canonical body) is

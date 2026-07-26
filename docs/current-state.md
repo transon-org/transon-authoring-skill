@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `d790c2f` — security: block egress in the cursor smoke, from the observed host set |
+| Repo HEAD | `7dcf3be` — feat: add the UC-004 walkthrough helper for macOS |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
