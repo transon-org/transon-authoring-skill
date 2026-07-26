@@ -46,15 +46,28 @@ non-gating and unrun. This entry is amended in place as those complete.
      installer-provisioned workspace auto-activated the shipped skill against a real host. The job
      exits 1 by construction (a single matched fixture leaves the adversarial bucket empty, which
      `check_evals` reports as a hard red); the pass criterion is the per-fixture majority.
-3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **not yet
-   performed.** No `cursor-agent -p` run against a `install/cursor.py --target-root` workspace has
-   been executed. Non-gating when it is run. Carries an **unresolved credential-exposure risk** the
-   platform prevents closing: the smoke job runs an unverifiable `curl | bash` Cursor binary with
-   `CURSOR_API_KEY` present under audit-only egress (Cursor ships no pinnable artifact, no endpoint
-   list, and no key-proxy). Bounded, not closed — the job refuses to run unless dispatched with
-   `accept_unverified_cli_risk=yes`, and a dedicated revocable key is mandatory. See the workflow
-   header.
-   - Outcome: _pending — run reference or date, result._
+3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **run; the marker
+   assertion does not pass, for a reason that is not a skill defect.** Non-gating. Carries an
+   **unresolved credential-exposure risk** the platform prevents closing: the job runs an
+   unverifiable `curl | bash` Cursor binary with `CURSOR_API_KEY` present under audit-only egress
+   (Cursor ships no pinnable artifact, no endpoint list, and no key-proxy). Bounded, not closed —
+   the job refuses to run without `accept_unverified_cli_risk=yes`, and a dedicated revocable key
+   is mandatory. See the workflow header.
+   - Outcome, 2026-07-26, run 30181831690 (`main`): `cursor-agent` **exit 0**, 489-byte transcript,
+     secret scan clean, **module-recipe marker absent**. The agent stopped and reported that it
+     could not proceed non-interactively without a samples layout — naming `init-config`, the three
+     §11.9 layouts, the `transon-samples` default and `--samples`. That vocabulary is specific to
+     the shipped body, so this is **positive evidence the skill activated**, and the behaviour is
+     exactly what §3 prescribes for a non-interactive run with neither a `--samples` path nor a
+     config (FR-002 / AD-014: no draft without a confirmed SampleSet). The smoke's fixed prompt
+     asks for authoring while supplying neither, so a correct run makes no module call at all and
+     the marker cannot appear. **The assertion, not the skill, is mis-specified**: exercising the
+     recipe needs a pre-confirmed SampleSet provisioned into the workspace and referenced by an
+     explicit `--samples` path in the prompt. Left as-is pending that change.
+   - Two earlier dispatches failed on harness gaps, both fixed: run 30181027384 (exit 1, empty
+     transcript — `cursor-agent` refuses an untrusted directory without `--trust`) and run
+     30181110829 (20-minute hang, zero bytes — `--trust` clears the directory prompt but not
+     command approval; `--force` is required for the agent to run the recipe at all).
 4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
    repo-free machine (`pip install transon-authoring`; both installers; activation in real Claude
    Code and real Cursor; one authored template) has been done. **This is the last outstanding

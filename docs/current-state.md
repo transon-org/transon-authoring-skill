@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `fedbd19` — docs: record the TestPyPI 0.1.0 publish |
+| Repo HEAD | `14ea81f` — fix: cursor smoke needs --force to auto-approve commands |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -93,9 +93,16 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
       states that the baseline predates the `9be1f66` body paragraph.
    b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
       `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
-   c. **Ladder 3** (non-gating, optional). Add the `CURSOR_API_KEY` secret, then dispatch
-      `cursor-activation-smoke.yml` with `accept_unverified_cli_risk=yes`; tighten its egress from
-      `audit` to `block` using the observed host set.
+   c. **Ladder 3** (non-gating) — **run, and it produced a real finding.** Run 30181831690: exit 0,
+      489-byte transcript, marker absent because the agent correctly **stopped at the §3
+      non-interactive gate** (no `--samples` path, no config → no draft, per FR-002/AD-014). Its
+      reply names `init-config`, the three §11.9 layouts and `transon-samples`, so **the skill
+      demonstrably activated**. The assertion is mis-specified, not the skill: to exercise the
+      recipe the workspace needs a **pre-confirmed SampleSet** (`confirmed: true` + `confirmed_by` +
+      a real `content_fingerprint` from `check-samples` — the offline fixture is unconfirmed and
+      will not do) and a prompt naming it via `--samples`. Two earlier runs died on harness gaps,
+      both fixed in-workflow: `--trust` (untrusted dir) and `--force` (command approval).
+      Still open: tighten egress `audit`→`block` from the observed host set.
    d. **Ladder 4 — THE LAST GATING ITEM.** UC-004 walkthrough on a repo-free machine:
       `pip install transon-authoring` (production PyPI, no index override), both installers,
       activation in real Claude Code and real Cursor, one authored template.
