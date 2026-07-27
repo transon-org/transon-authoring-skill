@@ -10,7 +10,7 @@ written as pending, never as a result.
 
 Dates are UTC. Run references are GitHub Actions run URLs or ids.
 
-## 0.1.1 — 2026-07-26
+## 0.1.1 — published 2026-07-27
 
 **Adds the license.** `0.1.0` shipped with no license at all — no `LICENSE` file, no `license`
 field, and `license: None` on PyPI — which left it "all rights reserved" by default and therefore
@@ -45,8 +45,14 @@ part of the publish.
 
 ### Publication
 
-- PyPI: _pending — tag `v0.1.1`, run reference, date._ The `pypi` environment now requires
-  deployment approval, so the tag push pauses until it is approved.
+- **PyPI: `0.1.1` published** 2026-07-27 from tag `v0.1.1` (commit `273dc14`), run 30270216901.
+  First release through the `pypi` environment's deployment-approval gate, which paused the run
+  until a maintainer approved it.
+  - Post-publish verification of the **published artifact**: `pip install transon-authoring==0.1.1`
+    into a clean venv resolves `transon==0.2.3` transitively and the §11.6 surface exits 0; the
+    installed distribution carries `Metadata-Version: 2.4`, `License-Expression: MIT`, and
+    `dist-info/licenses/LICENSE` — the omission that made `0.1.0` legally unusable is closed, in the
+    modern metadata form the `hatchling>=1.27` pin guarantees.
 
 ## 0.1.0 — published 2026-07-25
 

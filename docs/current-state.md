@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `fb59713` — docs: state how the skill is tested and verified in the README |
+| Repo HEAD | `273dc14` — Merge pull request #29 from transon-org/post-a5-release-hardening |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -40,6 +40,19 @@ invented inline and frozen by a test), and NFR-008/AC-042 no longer disagree on 
 be non-empty. Also cut two sentences of legal advocacy from NFR-008 (hygiene: constraints, not
 argument) and normalised a "licence"/"license" split. Deliberately NOT enforced: that a
 `{file = …}` target exists — AC-042 asserts terms are *declared*, not which terms, and says so._
+
+_**`0.1.1` PUBLISHED (2026-07-27, tag `v0.1.1` at `273dc14`, run 30270216901) — the license gap is
+closed on the index.** Verified against the *installed* artifact, not the build:
+`pip install transon-authoring==0.1.1` resolves `transon==0.2.3` transitively, the §11.6 surface
+exits 0, and the distribution carries `Metadata-Version: 2.4`, `License-Expression: MIT` and
+`dist-info/licenses/LICENSE`. First release through the `pypi` deployment-approval gate, which
+paused the run until approved — and that gate had already earned itself the day before by catching a
+`v0.1.1` tagged one commit short. **PR [#29](https://github.com/transon-org/transon-authoring-skill/pull/29)
+merged (`273dc14`)**: `main` was reset to `d98d440` so the 19 previously-direct-to-main commits got a
+real diff, CodeRabbit's four findings were fixed, and the tag was moved onto the reviewed merge
+commit. The `hatchling>=1.27` pin came out of that review and matters — 1.26.3 builds
+`license = "MIT"` but emits the deprecated `License:` field and drops `License-File:`, so unpinned
+the same source yields different license metadata per build host._
 
 _**LICENSE GAP FOUND AND FIXED — `0.1.1` prepared (2026-07-26).** Auditing the repo for FR-037b
 catalog readiness surfaced that **`0.1.0` shipped with no license at all**: no `LICENSE`, no
