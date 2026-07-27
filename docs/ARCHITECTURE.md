@@ -255,6 +255,7 @@ transon-authoring/
 ├── skills/transon-authoring/SKILL.md  # the canonical shipped body (FR-037a)
 ├── install/claude.py cursor.py
 ├── scripts/sync_metadata.py check_snapshot.py check_parity.py check_evals.py check_install.py
+│   └── uc004_walkthrough.sh       # release-checklist helper (NFR-008 / §14 ladder 4)
 │                                  # + eval_harness.py (OQ-017 tool loop, driven by check_evals)
 ├── evals/
 │   ├── runner.json                # AD-020 pin
@@ -267,6 +268,7 @@ transon-authoring/
     ├── ARCHITECTURE.md            # §5, §6, §10
     ├── ROADMAP.md                 # §14–16, §18
     ├── id-ledger.json             # every ID ever issued (§12 append-only lock)
+    ├── release-runbook.md         # non-normative: how to execute a release (NFR-008 / §14 ladder)
     └── traceability.md            # generated or maintained matrix (§17)
 ```
 

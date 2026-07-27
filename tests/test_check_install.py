@@ -1,5 +1,5 @@
 """FR-019 / NFR-009 (AC-009, AC-007's gate half, AC-040, AC-041) and
-NFR-008 / AC-042 (release record) — scripts/check_install.py.
+NFR-008 / AC-042 (release record + license) — scripts/check_install.py.
 
 The gate is invoked via subprocess with the interpreter pytest runs under
 (same style as tests/test_install.py), pointed at throwaway fixture roots
@@ -22,10 +22,14 @@ PYPROJECT = """\
 [project]
 name = "transon-authoring"
 version = "0.0.1"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "transon==0.2.3",
 ]
 """
+
+LICENSE_TEXT = "MIT License\n\nFixture license text for the AC-042 license half.\n"
 
 SKILL_MD = """\
 ---
@@ -89,6 +93,8 @@ def make_fake_root(
     marketplace_json: dict | None = None,
     changelog_md: str | None = None,
     snapshot_md: str | None = None,
+    pyproject: str | None = None,
+    license_text: str | None = None,
     omit: tuple[str, ...] = (),
 ) -> Path:
     root = tmp_path / name
@@ -116,7 +122,15 @@ def make_fake_root(
     (root / "resources" / "metadata-snapshot.md").write_text(
         snapshot_md if snapshot_md is not None else SNAPSHOT_MD, encoding="utf-8"
     )
-    (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        pyproject if pyproject is not None else PYPROJECT, encoding="utf-8"
+    )
+    # NFR-008 / AC-042: a licensed release is the default fixture shape.
+    if "LICENSE" not in omit:
+        (root / "LICENSE").write_text(
+            license_text if license_text is not None else LICENSE_TEXT,
+            encoding="utf-8",
+        )
     # The canonical body is the plugin-path file — there is no second copy.
     if "skill" not in omit:
         skill_dir = root / "skills" / "transon-authoring"
@@ -526,6 +540,116 @@ def test_nfr008_unreleased_heading_above_release_entry_is_ignored(tmp_path: Path
     result = run_gate("--root", str(root))
     assert result.returncode == 0, result.stderr
     assert "release: CHANGELOG.md topmost release record entry 0.0.1" in result.stdout
+
+
+def test_ac042_license_green_on_repo():
+    # AC-042 / NFR-008 — the shipped repo carries a non-empty repo-root LICENSE
+    # and a non-empty `license` declaration in pyproject.toml.
+    result = run_gate("--root", str(REPO_ROOT))
+    assert result.returncode == 0, result.stderr
+    assert "release: LICENSE" in result.stdout
+    assert "pyproject.toml declares a license" in result.stdout
+
+
+def test_ac042_red_on_missing_license_file(tmp_path: Path):
+    # AC-042 — no repo-root LICENSE file at all is red: the distribution would
+    # publish without stating its terms.
+    root = make_fake_root(tmp_path, omit=("LICENSE",))
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "LICENSE" in result.stderr
+
+
+def test_ac042_red_on_empty_license_file(tmp_path: Path):
+    # AC-042 — a present but empty LICENSE states no terms; red.
+    root = make_fake_root(tmp_path, license_text="   \n\n")
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "LICENSE" in result.stderr
+    assert "empty" in result.stderr
+
+
+def test_ac042_red_on_missing_license_declaration(tmp_path: Path):
+    # AC-042 — pyproject.toml with no `license` key is red, even with a LICENSE
+    # file present: the built distribution's metadata would state no terms.
+    root = make_fake_root(
+        tmp_path,
+        pyproject=PYPROJECT.replace('license = "MIT"\n', "").replace(
+            'license-files = ["LICENSE"]\n', ""
+        ),
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "license" in result.stderr
+
+
+def test_ac042_red_on_empty_license_declaration(tmp_path: Path):
+    # AC-042 — `license = ""` declares nothing; red.
+    root = make_fake_root(
+        tmp_path, pyproject=PYPROJECT.replace('license = "MIT"', 'license = ""')
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "license" in result.stderr
+    assert "empty" in result.stderr
+
+
+def test_ac042_license_table_form_is_accepted(tmp_path: Path):
+    # AC-042 — the older table form declares terms just as the PEP 639 string
+    # form does; the gate reads the declaration textually (no tomllib, OQ-019).
+    for declaration in ('license = {text = "MIT"}', 'license = {file = "LICENSE"}'):
+        root = make_fake_root(
+            tmp_path,
+            name=f"root-{declaration.count('file')}",
+            pyproject=PYPROJECT.replace('license = "MIT"', declaration),
+        )
+        result = run_gate("--root", str(root))
+        assert result.returncode == 0, (declaration, result.stderr)
+
+
+def test_ac042_license_outside_the_project_table_does_not_count(tmp_path: Path):
+    # AC-042 — the declaration must be in [project]. A license key in another
+    # table says nothing about this distribution, and honouring it would bless a
+    # wheel that ships no license metadata at all.
+    root = make_fake_root(
+        tmp_path,
+        pyproject=PYPROJECT.replace('license = "MIT"', "")
+        + '\n[tool.something]\nlicense = "MIT"\n',
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 1
+    assert "no [project] license declared" in result.stderr
+
+
+def test_ac042_indented_and_shadowed_declarations_are_read_correctly(tmp_path: Path):
+    # AC-042 — indented keys are valid TOML, and a license key in an earlier
+    # table must not mask the real [project] one. Both were false reds.
+    indented = make_fake_root(
+        tmp_path,
+        name="indented",
+        pyproject=PYPROJECT.replace('license = "MIT"', '    license = "MIT"'),
+    )
+    assert run_gate("--root", str(indented)).returncode == 0
+
+    shadowed = make_fake_root(
+        tmp_path,
+        name="shadowed",
+        pyproject='[tool.other]\nlicense = ""\n\n' + PYPROJECT,
+    )
+    assert run_gate("--root", str(shadowed)).returncode == 0
+
+
+def test_ac042_gate_takes_no_position_on_the_license_choice(tmp_path: Path):
+    # AC-042 — the license half checks that terms are *declared*, not which
+    # terms: an unusual identifier is green, and the gate names no SPDX list.
+    root = make_fake_root(
+        tmp_path,
+        pyproject=PYPROJECT.replace('license = "MIT"', 'license = "LicenseRef-Custom"'),
+        license_text="Custom terms.\n",
+    )
+    result = run_gate("--root", str(root))
+    assert result.returncode == 0, result.stderr
+    assert "MIT" not in result.stdout
 
 
 def test_ac009_no_discoverability_claim_in_output(tmp_path: Path):

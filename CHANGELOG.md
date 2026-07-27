@@ -10,12 +10,50 @@ written as pending, never as a result.
 
 Dates are UTC. Run references are GitHub Actions run URLs or ids.
 
-## 0.1.0 — prepared 2026-07-22, not yet published
+## 0.1.1 — 2026-07-26
 
-Status: **release record prepared; the artifacts are not published.** The version triplet below is
-current; ladder steps 1, 2 and 5 are done, steps 3 and 4 and the PyPI publish are pending. This
-entry is amended in place — with run references and dates — as those steps complete, and it is not
-a claim that release 0.1.0 has shipped.
+**Adds the license.** `0.1.0` shipped with no license at all — no `LICENSE` file, no `license`
+field, and `license: None` on PyPI — which left it "all rights reserved" by default and therefore
+not legally usable by anyone who installed it. `AGENTS.md` had flagged that license details settle
+at release; the obligation was missed. This release exists to correct that, and is otherwise
+functionally identical to `0.1.0`.
+
+- **MIT**, declared three ways so every consumer sees it: repo-root `LICENSE`, `license = "MIT"` +
+  `license-files` in `pyproject.toml` (the wheel carries `License-Expression: MIT` and bundles the
+  file), and PyPI classifiers.
+- `README.md` rewritten. It still described the project as **"Pre-A0"** — false since A5 — and was
+  contract-facing rather than user-facing. Now leads with install for all three channels, states
+  plainly that `pip install` does not deliver the skill body, and links the contract docs below.
+- No change to the skill body, the engine pin, or the metadata snapshot. The gates did change:
+  NFR-008 and AC-042 now require a license declaration and `check_install` enforces it, so a
+  future release cannot repeat this omission while its own gate stays green.
+
+### Version triplet
+
+- Skill version: `0.1.1` (the `pyproject.toml` project version)
+- Engine pin: `transon==0.2.3` (unchanged)
+- Snapshot hash (`snapshot_sha256` from `resources/metadata-snapshot.md`, unchanged):
+  `d4452b950617057a920bfb90101a9806a4aced2b9744766fc82951534cb37a8c`
+
+### Distribution-verification ladder
+
+Unchanged from `0.1.0` and not re-run: the shipped `SKILL.md`, the engine pin and the snapshot are
+byte-identical, so no ladder step measures anything different. The release does change packaging
+metadata, documentation, and the `check_install` release gate (the AC-042 license half) — none of
+which the ladder covers. Ladder 1 (dist smoke) re-runs automatically against the built artifacts as
+part of the publish.
+
+### Publication
+
+- PyPI: _pending — tag `v0.1.1`, run reference, date._ The `pypi` environment now requires
+  deployment approval, so the tag push pauses until it is approved.
+
+## 0.1.0 — published 2026-07-25
+
+First production release: `transon-authoring 0.1.0` is on PyPI (tag `v0.1.0`, run 30180068652),
+with a GitHub Release at `v0.1.0`. **All five distribution-verification ladder steps are green or
+recorded**, so the A5 Definition of Done is met. FR-037b (external catalog submission) gates
+nothing and is now eligible.
 
 ### Version triplet
 
@@ -46,19 +84,67 @@ a claim that release 0.1.0 has shipped.
      installer-provisioned workspace auto-activated the shipped skill against a real host. The job
      exits 1 by construction (a single matched fixture leaves the adversarial bucket empty, which
      `check_evals` reports as a hard red); the pass criterion is the per-fixture majority.
-3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **not yet
-   performed.** No `cursor-agent -p` run against a `install/cursor.py --target-root` workspace has
-   been executed. Non-gating when it is run. Carries an **unresolved credential-exposure risk** the
-   platform prevents closing: the smoke job runs an unverifiable `curl | bash` Cursor binary with
-   `CURSOR_API_KEY` present under audit-only egress (Cursor ships no pinnable artifact, no endpoint
-   list, and no key-proxy). Bounded, not closed — the job refuses to run unless dispatched with
-   `accept_unverified_cli_risk=yes`, and a dedicated revocable key is mandatory. See the workflow
-   header.
-   - Outcome: _pending — run reference or date, result._
-4. **UC-004 human walkthrough (release checklist)** — **not yet performed.** No walkthrough on a
-   repo-free machine (`pip install transon-authoring` from TestPyPI, then PyPI; both installers;
-   activation in real Claude Code and real Cursor; one authored template) has been done.
-   - Outcome: _pending — date, machine/OS, index used, result._
+3. **Cursor headless activation smoke (credentialed dispatch tier, OQ-008)** — **GREEN.**
+   Non-gating. Carries an **unresolved credential-exposure risk** the platform prevents closing:
+   the job runs an unverifiable `curl | bash` Cursor binary with `CURSOR_API_KEY` present (Cursor
+   ships no pinnable artifact and no key-proxy). Bounded, not closed — the job refuses to run
+   without `accept_unverified_cli_risk=yes`, a dedicated revocable key is mandatory, and **egress
+   is denied except a derived allowlist** (`*.cursor.sh`, `registry.npmjs.org`, GitHub infra;
+   OQ-027f(iii)). The block bounds where a leaked key could go but cannot eliminate the path, since
+   Cursor's own API is necessarily reachable. See the workflow header.
+   - Egress tightened `audit` → `block` and **verified green under it** (run 30196218752, same
+     matched envelope, no blocked-host annotations). The allowlist was derived from what the
+     audit-tier runs observed, not guessed — it includes `registry.npmjs.org`, which the CLI
+     contacts at runtime in a job that installs nothing; a hand-written list would have blocked it.
+   - Outcome, 2026-07-26, run 30182409724 (`main`): `cursor-agent` **exit 0**, secret scan clean,
+     and the episode emitted a **schema-valid `AuthoringResult` at `assurance: "matched"`**
+     (template `{"$":"attr","name":"x"}`, `repair_count` 0) — **from a prompt that never named the
+     skill**, in an ephemeral workspace holding only installer-provisioned files plus the task's
+     SampleSet. `verdict`/`assurance`/`repair_count` are produced by the module running against the
+     pinned engine, so the envelope cannot be narrated into existence. Reproduced identically on the
+     preceding run 30182303844. Per OQ-008 this is **not** a claim about the host's internal skill
+     routing, which no credential-free command exposes.
+   - Getting here took four dispatches, each a real defect in the harness rather than the skill,
+     all fixed: 30181027384 (`--trust` — the CLI refuses an untrusted directory), 30181110829
+     (`--force` — `--trust` clears the directory prompt but not command approval, so the agent hung
+     silently for 20 minutes), 30181831690 (the prompt supplied no SampleSet, so the skill correctly
+     stopped at the §3 gate per FR-002/AD-014 and made no module call), and 30182303844 (the
+     assertion grepped for the module-recipe string, which a **correct** run never emits — §7
+     mandates returning `result` stdout verbatim, and that stdout is pure JSON).
+4. **UC-004 human walkthrough (release checklist)** — **GREEN.**
+   - Automated half, 2026-07-26, `scripts/uc004_walkthrough.sh` on macOS 26.5.1 (25F80) arm64,
+     python 3.12.4: **PASS**. From production PyPI with no index override — `transon-authoring
+     0.1.0` with `transon 0.2.3` resolved transitively; module surface green; the `v0.1.0` release
+     archive unpacked and **both** installers run into a throwaway project; installed `SKILL.md`
+     byte-identical to canonical with a complete manifest (`skill_version` `0.1.0`, `engine_pin`
+     `transon==0.2.3`, `snapshot_sha256` `d4452b95…`); `check-samples` `ok_for_verify` and `result`
+     returning a matched `AuthoringResult`.
+   - **Both real hosts, driven headlessly against that same workspace, 2026-07-26 — each returned a
+     matched `AuthoringResult`** (`{"$":"attr","name":"x"}`, `assurance: "matched"`,
+     `repair_count` 0) from a prompt that **never named the skill**, with the skill discovered from
+     the project-scope install made out of the published `v0.1.0` archive:
+     - **Claude Code** 2.1.207 — `claude -p` with tool access scoped to
+       `Bash(python -m transon_authoring:*)`, `Write`, `Read`.
+     - **Cursor** — `cursor-agent -p --trust --force`.
+     The first Claude Code attempt, run with **no** tool permissions, is itself a result worth
+     keeping: the skill activated, drafted the correct template, and then **refused to return it**,
+     stating it could not report success without the pinned engine verifying to
+     `assurance: "matched"`. That is AD-004 verify-before-return holding under pressure.
+   - **Interactive human attestation, 2026-07-26 — DONE, both hosts.** A maintainer opened **real
+     interactive Claude Code** and **real interactive Cursor** in that workspace and pasted the
+     un-nudged prompt. In both, the skill activated, grounded, verified to
+     `assurance: "matched"` on the first candidate (0 repairs), and — correctly — **stopped at the
+     FR-030 review loop** offering approve / revise / stop rather than auto-emitting. On `approve`,
+     both returned the final envelope, and both are **byte-identical to what
+     `python -m transon_authoring result` itself produces**: proof the approve exit re-ran `result`
+     and returned its stdout verbatim rather than re-typing it from memory, which is the failure
+     this path used to have. The interactive review gate is exercised nowhere else — ladder 2
+     synthesises the approval and the headless runs emit directly — so this is the only evidence for
+     it.
+   - **Stated limit:** the run was outside any checkout but on a machine that *has* the repo; the
+     helper script enforces the former, not the latter. Nothing observed depended on repo files
+     (the workspace held only the two installed skill files and the SampleSet), but a second machine
+     would be the stronger form.
 5. **Plugin packaging (FR-037a, offline deterministic)** — *implemented and gated.* The §11.9
    plugin layout (`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
    `skills/transon-authoring/SKILL.md`, the canonical body) is
@@ -85,16 +171,25 @@ and remain future-flake candidates.
 
 ### Publication
 
-- **TestPyPI:** `transon-authoring 0.0.1` (sdist + wheel) was uploaded 2026-07-22 from
-  `.github/workflows/release.yml` on `main`, run 29915374804 — a validation of the publish path,
-  at the pre-bump version. Nothing at `0.1.0` has been uploaded to any index.
-- **PyPI (OQ-020): not yet published.** No upload to the production index has been made. The
-  production job requires a pushed `v*` tag, and no tag exists.
-  - Outcome: _pending — tag, run reference, date, result._
-- FR-037b external catalog submission: not started; it gates nothing and begins only after the
-  PyPI publish.
+- **TestPyPI: `0.1.0` published** 2026-07-25 (sdist + wheel, with provenance attestations) from
+  `.github/workflows/release.yml` on `main`, run 30179949576. An earlier `0.0.1` upload
+  (2026-07-22, run 29915374804) validated the publish path at the pre-bump version.
+  - Post-publish verification of the **published artifact** (not the checkout): installed into a
+    clean venv from TestPyPI, `transon==0.2.3` resolved transitively from PyPI, and `metadata`,
+    `language --list-sections`, `examples search`, `check-samples` and `verify` all exit 0 with
+    valid JSON. This is evidence the distribution is sound; it is **not** ladder step 4, which
+    additionally requires a repo-free machine and real-host activation.
+- **PyPI (OQ-020): `0.1.0` PUBLISHED** 2026-07-25 — the first production release. Tag `v0.1.0`
+  (commit `fedbd19`) triggered `.github/workflows/release.yml`, run 30180068652; wheel + sdist
+  uploaded via Trusted Publishing under the `pypi` environment. The build job re-verified the
+  artifacts and the tag↔version agreement before upload.
+  - Post-publish verification of the **published artifact**: `pip install transon-authoring` into a
+    clean venv resolved `transon-authoring 0.1.0` with `transon==0.2.3` transitively, and
+    `metadata`, `language --list-sections`, `examples search` and `verify` all exit 0.
+- FR-037b external catalog submission: **now eligible** (the PyPI publish it waited on has
+  happened) but not started. It gates nothing.
 
 ### Notes
 
-- No production release exists; this is the first entry. The `0.0.1` artifacts on TestPyPI above
-  are a publish-path validation, not a release.
+- This is the first entry. The `0.0.1` artifacts on TestPyPI are a publish-path validation, not a
+  release; `0.1.0` is the first version on production PyPI.

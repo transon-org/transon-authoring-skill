@@ -485,8 +485,10 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   (the `pyproject.toml` project version), the **engine pin** (`transon==…`), and the **snapshot
   hash** (`snapshot_sha256` from `resources/metadata-snapshot.md`), and MUST record the outcome of
   each distribution-verification ladder step (ROADMAP §14) — the deterministic steps by CI run
-  reference, the credentialed and human steps by run reference or date plus result. Verified by
-  `check_install` (AC-042).
+  reference, the credentialed and human steps by run reference or date plus result.
+  A release MUST also carry a **license**: a non-empty repo-root `LICENSE` file and a non-empty
+  `[project] license` declaration in `pyproject.toml`. An unlicensed publication is defective
+  however green the rest of the record is. Verified by `check_install` (AC-042).
 - **NFR-009 — Install integrity.** FR-015/016/019; wording is **install integrity + runtime
   smoke**, not host “discoverability”; the Claude check adds only the OQ-010
   discoverability-precondition lint.
@@ -694,13 +696,21 @@ Static validation is also insufficient without a **confirmed SampleSet** whose c
   **structural** claim: it asserts the install destination and its integrity, never that Cursor
   discovered or activated the personal-scope skill — no credential-free headless listing exists
   (OQ-008).
-- **AC-042** — **The release record carries the version triplet (NFR-008).** `check_install` is
-  **green** when repo-root `CHANGELOG.md` exists and its topmost release entry names the
+- **AC-042** — **The release record carries the version triplet, and the release is licensed
+  (NFR-008).** `check_install` is **green** when a repo-root `LICENSE` file exists and is
+  non-empty, `pyproject.toml` declares a non-empty `license` **in its `[project]` table** — either
+  the PEP 639 string form or the deprecated `{text = …}` / `{file = …}` table; a `license` key in
+  any other table does not count — and repo-root
+  `CHANGELOG.md` exists and its topmost release entry names the
   `pyproject.toml` project version and states, verbatim, that version's engine pin
   (`transon==<pin>` as read textually from `pyproject.toml`) and the `snapshot_sha256` recorded in
-  `resources/metadata-snapshot.md`. It is **red** when the file is missing, when it names no
+  `resources/metadata-snapshot.md`. It is **red** when the `LICENSE` file or the `license`
+  declaration is missing or empty, when `CHANGELOG.md` is missing, when it names no
   release version, or when any of the three values disagrees with its source of truth — the
-  stale-release-notes failure. A heading names a release version whether or not the version carries
+  stale-release-notes failure. Empty means empty after stripping whitespace. The license half
+  checks that terms are **declared**, not which terms: the gate takes no position on the choice,
+  and does not check that a `{file = …}` target exists.
+  A heading names a release version whether or not the version carries
   the `v` prefix the `refs/tags/v*` publish trigger uses. Headings that open with `Unreleased` or
   `In progress` are never release entries, even when they name a version. The check asserts **agreement with the repo's own sources** and nothing more: a
   green result is never evidence that a release was published, only that the record and the repo
@@ -1599,7 +1609,7 @@ prints a stderr hint and still exits 0 (structural install is valid without the 
 | `check_snapshot` | NFR-004 / AD-007 — metadata snapshot + Language Reference drift (FR-036) |
 | `check_evals` | NFR-010 / AD-020; its `--lint` mode carries the NFR-011 fixture lint (AC-025), the FR-029 seed-regen check (AC-030), and the FR-033 constructed real-world fixture engine-freeze + no-leakage check (AC-035); full runs emit FR-032 transcripts + `failure_modes` plus the FR-035 whole-transcript / `run_summary.json` telemetry (non-gating report artifacts, AC-034 / AC-038) |
 | `check_parity` | NFR-007 / AC-005; NFR-012 / AC-032 (shipped self-sufficiency lint) |
-| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging); FR-038 / AC-041 (Cursor personal scope); NFR-008 / AC-042 (release record triplet) |
+| `check_install` | NFR-009 / FR-019 (integrity + smoke); FR-037a / AC-040 (plugin packaging); FR-038 / AC-041 (Cursor personal scope); NFR-008 / AC-042 (release record triplet + license declaration) |
 | Authoring evals | should-succeed → matched |
 | Adversarial evals | expect refuse =100% |
 | Sandbox evals | AC-015/023/024/028 |

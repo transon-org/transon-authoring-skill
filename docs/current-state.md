@@ -8,16 +8,68 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `18e00f1` — fix: report a recipe marker, not activation; tighten the NFR-008 flip note (review) |
-| Branch | `a5-release` |
+| Repo HEAD | `fb59713` — docs: state how the skill is tested and verified in the README |
+| Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
 
 ## Last action
 
-_**A5 release slice — on `a5-release`, PUSHED, PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28) open, all gates green.**
+_**`transon-authoring 0.1.0` IS PUBLISHED ON PyPI** (2026-07-25, tag `v0.1.0`, run 30180068652) —
+OQ-020's first production release. `pip install transon-authoring` works from a clean venv and pulls
+`transon==0.2.3` transitively; the full CLI surface exits 0. TestPyPI carries `0.1.0` too (run
+30179949576), plus a GitHub Release at `v0.1.0`. **A5's Definition of Done is MET** — all five
+ladder steps green/recorded, the `CHANGELOG.md` record cites the triplet and every outcome, the
+first PyPI publish is done, and AC-040/041/042 are green. `NFR-008` is `[x]`; **no unchecked rows
+remain in `traceability.md`**. `docs/release-runbook.md` is the how-to for future releases._
+
+_**NFR-008 now requires a license, and AC-042 enforces it (2026-07-26).** Governed change, SPEC
+first: NFR-008 requires a non-empty repo-root `LICENSE` and a non-empty **`[project] license`** in
+`pyproject.toml`; AC-042 gained the mechanical half. This closes the hole that let `0.1.0` ship
+unusable while its own gate stayed green.
+**`spec-reviewer` caught a false green that would have made the whole change pointless:** the first
+implementation matched a `license` key in **any** table, so a `pyproject.toml` with no `[project]`
+license but a `[tool.something] license = "MIT"` exited 0 with "terms are declared" — blessing the
+exact defect the gate exists to catch. Reproduced end to end. Same root cause gave two false reds
+(column-0 anchoring rejected valid indented keys, and an earlier `[tool.x] license = ""` masked the
+real declaration). Fixed by isolating the `[project]` table body before searching it; verified
+against seven probe cases and confirmed red-first by reverting the scoping.
+Two further findings were contract-precision and went into SPEC, not code: AC-042 now names
+`[project]` scope and the two accepted spellings (the `{text=…}`/`{file=…}` tolerance had been
+invented inline and frozen by a test), and NFR-008/AC-042 no longer disagree on the file needing to
+be non-empty. Also cut two sentences of legal advocacy from NFR-008 (hygiene: constraints, not
+argument) and normalised a "licence"/"license" split. Deliberately NOT enforced: that a
+`{file = …}` target exists — AC-042 asserts terms are *declared*, not which terms, and says so._
+
+_**LICENSE GAP FOUND AND FIXED — `0.1.1` prepared (2026-07-26).** Auditing the repo for FR-037b
+catalog readiness surfaced that **`0.1.0` shipped with no license at all**: no `LICENSE`, no
+`license` field, no classifiers, `license: None` on PyPI. That makes it "all rights reserved" — not
+legally usable by anyone who installed it. `AGENTS.md:61` had flagged that license details settle at
+release and the obligation was simply missed; it did not break A5's DoD because NFR-008's normative
+text (which I wrote) requires only version/pin/hash + ladder outcomes and never carried the license
+in. **Now MIT**, declared three ways — repo-root `LICENSE`, `license`/`license-files` in
+`pyproject.toml` (wheel verified carrying `License-Expression: MIT` and bundling the file), and PyPI
+classifiers. Copyright line reads `Eugene Chernyshov`; swap to an entity if preferred.
+Also fixed, all catalog-facing: `README.md` still said **"Status: Pre-A0"** for a shipped product and
+was contract-facing rather than user-facing (rewritten around install + how-it-works); the repo had
+**no description, homepage or topics** (set, 8 topics). `0.1.1` is committed with its CHANGELOG entry
+and AC-042 green — **it needs a `v0.1.1` tag to publish**, which will pause for deployment approval.
+FR-037b submissions deliberately deferred (its own framing is "driven by real adoption")._
+
+_**Ladder 4 closed by interactive human attestation (2026-07-26).** In both real interactive Claude
+Code and real interactive Cursor, from an un-nudged prompt in a workspace holding only the two
+installer-provisioned skill files plus a SampleSet: the skill activated, verified to
+`assurance: "matched"` on the first candidate, and **stopped at the FR-030 review loop** offering
+approve/revise/stop rather than auto-emitting. On `approve` both returned the final envelope
+**byte-identical to `python -m transon_authoring result`'s own stdout** — proof the approve exit
+re-ran `result` instead of re-typing from memory, the failure that path historically had. Nothing
+else exercises that gate: ladder 2 synthesises the approval, and headless runs emit directly.
+Stated limit: outside any checkout, but on a machine that has the repo._
+
+_**A5 release slice — MERGED to `main` 2026-07-25 (PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28), merge `d98d440`); all gates green on `main`.**
 The agent-implementable half of A5 is complete; everything left is maintainer-only (Next steps).
-Delivered across the branch:_
+The `marketplace.json` owner stays `transon-org` (org abstraction, no personal data published).
+Delivered:_
 - _**FR-037a/AC-040** — the §11.9 Claude Code plugin tree (`.claude-plugin/plugin.json` +
   `marketplace.json`), then restructured so **the plugin-native `skills/transon-authoring/SKILL.md`
   is THE canonical body** — one `SKILL.md` in the repo, single source by absence of a second copy
@@ -26,8 +78,8 @@ Delivered across the branch:_
 - _**FR-038/AC-041** — Cursor personal scope; the project-only exclusion was a product choice, so
   all four superseded artifacts were swept and `check_install` exercises `cursor/personal`._
 - _**NFR-008/AC-042** — repo-root `CHANGELOG.md` as the release record; `check_install` verifies its
-  version triplet against `pyproject.toml` + `resources/metadata-snapshot.md`. Row stays `[ ]`: the
-  mechanical half is green+cited, the release-checklist half is unperformed._
+  version triplet against `pyproject.toml` + `resources/metadata-snapshot.md`. Row is `[x]` since
+  the release checklist completed._
 - _**Ladder 1** dist smoke (pre-existing) and **ladder 2** installer-provisioned eval workspace —
   ladder 2 validated by a targeted `--only` probe (run 29961198852, majority `pass`, zero
   `infra_error`, $0.49). **Ladder 3** = `cursor-activation-smoke.yml`, dispatch-only, non-gating._
@@ -39,9 +91,10 @@ trigger has fired; the `CHANGELOG` discloses that the baseline predates a few ad
 **`transon-authoring 0.0.1` is already on TestPyPI** (run 29915374804) — AC-042 checks only the
 triplet, so every ladder/publication line in the `CHANGELOG` is unverified prose to check against
 `gh run list` before release. **Ladder 3 carries an unresolved credential-exposure risk** the
-platform blocks closing (Cursor ships no pinnable artifact / endpoint list / key-proxy): it runs an
-unverified `curl|bash` binary with `CURSOR_API_KEY` under audit-only egress, now gated behind an
-`accept_unverified_cli_risk=yes` dispatch input and a mandatory throwaway key. **Three
+platform blocks closing (Cursor ships no pinnable artifact and no key-proxy): it runs an unverified
+`curl|bash` binary with `CURSOR_API_KEY` present. Bounded by an `accept_unverified_cli_risk=yes`
+dispatch gate, a mandatory throwaway key, and egress blocked to a derived allowlist — which cannot
+eliminate the path, since Cursor's own API must stay reachable. **Three
 `spec-reviewer` passes** (two-copy design; the restructure — whose lead finding was a guard landed
 code-first, since fixed spec-first via AC-005; the CodeRabbit-fix commit) and **four CodeRabbit
 rounds** are all settled._
@@ -72,36 +125,39 @@ Authoritative milestone DoDs live in [`ROADMAP.md` §14](ROADMAP.md). This is th
 
 ## Next steps (ordered)
 
-1. Review and merge PR [#28](https://github.com/transon-org/transon-authoring-skill/pull/28)
-   (pushed, gates green, CodeRabbit settled).
-2. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
+**A5 is complete.** The A5 section of this list is closed; what remains is post-release and
+non-gating.
+
+1. **Publish `0.1.1`** — prepared and committed (now also carries the NFR-008/AC-042 license
+   requirement); needs the tag:
+   `git tag v0.1.1 && git push origin v0.1.1`. The run now **pauses at `Review pending`** (the
+   `pypi` environment gained required reviewers), so approve the deployment in the run's page. Then
+   fill the Publication slot in the `CHANGELOG.md` `0.1.1` entry.
+2. **FR-037b — external catalog submission** (non-gating). Deliberately **deferred**: FR-037b frames
+   listing as "driven by real adoption", and the package is days old. Presentation blockers are now
+   cleared (license, README, description, topics). Targets when wanted — official Anthropic
+   directory via the web form at `clau.de/plugin-directory-submission` (a form, so maintainer-only),
+   and PR-based community lists (`ComposioHQ/awesome-claude-plugins`,
+   `Chat2AnyLLM/awesome-claude-plugins`). CI never claims catalog presence or host discoverability.
+3. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
    `skill_md` is vestigial for the real host — supplied, ignored at the call site).
-3. Maintainer-only A5 items, none of which an agent can perform — each fills a `_pending_` slot in
-   the `CHANGELOG.md` 0.1.0 entry:
-   a. ~~Entry-condition eval rerun~~ — **not required**, and deliberately not done. The entry
-      condition was already satisfied by the green gate of 2026-07-20 (run 29782513843); no §11.8
-      reset trigger has fired since. The ≈$18–19 rerun was dropped in `60be2fa`; the release record
-      states that the baseline predates the `9be1f66` body paragraph.
-   b. ~~Ladder 2 probe~~ — **done**, run 29961198852 on `a5-release`: majority `pass`, zero
-      `infra_error`, $0.49. Recorded in the `CHANGELOG.md` ladder-2 slot.
-   c. **Ladder 3.** Add the `CURSOR_API_KEY` secret, then dispatch `cursor-activation-smoke.yml`;
-      tighten its egress from `audit` to `block` using the observed host set.
-   d. **Ladder 4.** UC-004 walkthrough on a repo-free machine, TestPyPI then PyPI.
-   e. **Publish.** Register the trusted publishers + environments, dispatch TestPyPI, push `v0.1.0`.
-      FR-037b outreach begins only after this.
-4. Flip the NFR-008 traceability row to `[x]` once 3a–3e are recorded **and** the row's normal
-   bar is met — its cited tests (incl. AC-042's `test_ac042_*`) green and citing the ID, and
-   `check_traceability` consistent. Recording the checklist items alone does not satisfy the row.
+4. ~~Protect the `pypi` environment~~ — **done** 2026-07-26: required reviewer `Evgenus`, plus a
+   deployment branch policy restricting it to **`v*` tags**, so its Trusted Publishing identity is
+   unreachable from a branch. `testpypi` left unprotected on purpose (rehearsal channel).
+5. Watch items carried forward: three fixtures passed the accepted baseline 2/3
+   (`ec2-flatten-inventory`, `refuse-recursive-flatten`, `seed-refuse-nonexistent-mode`) and are
+   future-flake candidates the ratchet will surface via `failure_modes`; the eval baseline predates
+   a few additive `SKILL.md` edits (disclosed in `CHANGELOG.md`, no §11.8 reset trigger fired).
 
 ## Open blockers / waiting-on
 
-- A5's DoD cannot close without the maintainer items in Next step 3.
-- Confirm the `marketplace.json` owner identity (`transon-org`, inferred from the git remote) — the
-  repo is named `transon-authoring-skill` while the plugin is `transon-authoring`.
-- Watch item: 3 fixtures passed the baseline gate 2/3 — future-flake candidates the ratchet will
-  surface via `failure_modes`.
+- **None blocking.** A5's DoD is met and `0.1.0` is published; remaining work is post-release and
+  non-gating (Next steps).
+- Note for the next release: the `pypi` environment now requires **deployment approval**, so a tag
+  push pauses at `Review pending` until approved in the run's page. Self-review is deliberately
+  allowed — a sole reviewer who also pushes tags would otherwise deadlock releases.
 
 ## Do-not-relitigate (pointers, not copies)
 

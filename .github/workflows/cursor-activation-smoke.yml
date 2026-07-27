@@ -27,20 +27,25 @@ name: Cursor activation smoke (headless)
 #   2. The `smoke` job then EXECUTES that unverified binary with `CURSOR_API_KEY`
 #      in its environment (the key IS the agent's own credential — unlike the
 #      Anthropic path in evals.yml, Cursor exposes no proxy to withhold it, so
-#      OQ-027f(ii) is unsatisfiable here), under AUDIT-only egress (Cursor
-#      publishes no endpoint list to build a block allowlist from, and the first
-#      dispatch is what would discover it — a chicken-and-egg the block can't win
-#      on run one).
-# So a compromised installer or binary could exfiltrate the key over its OWN
-# network calls BEFORE the transcript scan runs — the scan sees the transcript,
-# never the binary's traffic, so scan-before-log does nothing against this path.
+#      OQ-027f(ii) is unsatisfiable here). Egress is now BLOCKED to a derived
+#      allowlist (see the harden-runner step), which bounds where a leaked key
+#      could go — but Cursor's own API is necessarily reachable, so it does not
+#      eliminate the path.
+# A compromised installer or binary could still exfiltrate the key over its OWN
+# calls to an allowed host, BEFORE the transcript scan runs — the scan sees the
+# transcript, never the binary's traffic, so scan-before-log does nothing here.
 # This is NOT closed. It is bounded, and enabling it is a deliberate choice:
 #   - the risk is inert until a maintainer both creates the CURSOR_API_KEY secret
 #     AND sets the `accept_unverified_cli_risk` dispatch input to "yes" (the smoke
 #     job refuses to run otherwise);
 #   - use a DEDICATED, low-privilege, REVOCABLE Cursor key — never a personal or
 #     org-wide one — so the blast radius of a leak is one throwaway key;
-#   - the prompt is fixed and maintainer-authored (no untrusted corpus input);
+#   - the prompt is fixed and maintainer-authored (no untrusted corpus input) —
+#     which is what makes `--force` (auto-approve commands, required for the
+#     agent to run the skill's recipe at all) acceptable here: the model executes
+#     shell in the ephemeral workspace with no approval gate, so the absence of
+#     untrusted input is load-bearing. Do not point this workflow at a
+#     caller-supplied or corpus-derived prompt without revisiting that;
 #   - the transcript is still secret-scanned before it can reach the log/artifact,
 #     which covers accidental leakage into the transcript (not binary exfil).
 # Close it properly the day Cursor ships a pinnable/checksummed artifact or a
@@ -52,9 +57,17 @@ on:
       prompt:
         description: "Task handed to the headless agent"
         required: false
+        # Deliberately does NOT name the skill. This is an ACTIVATION smoke: the
+        # host must route to the shipped SKILL.md on its frontmatter description
+        # alone (OQ-027a faithful engagement — no injection, no coercion), exactly
+        # as the §11.8 eval harness does. Naming the skill would prove only that
+        # the agent can follow an instruction. The task matches the SampleSet
+        # provisioned into the workspace, and cites it by path so the run is not
+        # blocked at the §3 samples gate.
         default: >-
-          Author a Transon template that renames the top-level key "amount" to
-          "total". Use the transon-authoring skill.
+          Author a Transon template that returns the value of the top-level key
+          "x". A confirmed SampleSet for this task is at samples.json in the
+          current directory — use it as the samples path.
       accept_unverified_cli_risk:
         description: >-
           Set to "yes" to acknowledge the unverified-binary + exposed-key risk in
@@ -115,12 +128,22 @@ jobs:
           find "${BUNDLE}/cursor" -maxdepth 2 -name 'cursor-agent*' | sort
 
           # The workspace the agent runs in: skill files installed BY THE SHIPPED
-          # INSTALLER into a target root that is not this checkout. Nothing else
-          # from the repo is copied in — if the skill does not carry what it
-          # needs, the agent cannot fall back on repo files (NFR-012).
+          # INSTALLER into a target root that is not this checkout. The only other
+          # thing placed here is the task's SampleSet — caller-supplied input, the
+          # same shape the eval harness gives an episode. No repo docs, no source:
+          # if the skill does not carry what it needs, the agent cannot fall back
+          # on repo files (NFR-012).
           WORKSPACE="${BUNDLE}/workspace"
           mkdir -p "${WORKSPACE}"
           python3 install/cursor.py --scope project --target-root "${WORKSPACE}"
+
+          # A PRE-CONFIRMED SampleSet (confirmed + coverage_complete =>
+          # ok_for_verify), so the episode can reach the authoring path at all.
+          # Without one the skill correctly refuses to draft (FR-002 / AD-014) and
+          # stops at the §3 gate, which is what run 30181831690 observed. The
+          # library never sets `confirmed` itself, so this is the CI-fixture form:
+          # a committed SampleSet whose content_fingerprint came from check-samples.
+          cp tests/fixtures/offline/sample_set.json "${WORKSPACE}/samples.json"
           echo "Provisioned workspace:"
           find "${WORKSPACE}" -type f | sort
 
@@ -160,14 +183,29 @@ jobs:
             exit 1
           fi
 
-      # Cursor publishes no endpoint list for the CLI, so an allow-list block
-      # here would be invented rather than derived — and a wrong one would look
-      # like a failed activation. AUDIT records every host this run touches;
-      # tighten to `block` with the observed set once a dispatch has produced it.
-      - name: Audit egress (OQ-027f(iii), audit tier)
+      # OQ-027f(iii). Cursor publishes no endpoint list, so this allowlist is
+      # DERIVED from what audit-tier dispatches actually observed (runs
+      # 30182303844 / 30182409724): api2, api3, agentn.global.api5 and repo42
+      # under cursor.sh, plus registry.npmjs.org — the CLI fetches from npm at
+      # runtime even though this job installs nothing. `*.cursor.sh` rather than
+      # the four exact hosts, mirroring how evals.yml allows `*.anthropic.com`:
+      # the vendor rotates subdomains, and pinning them would turn a routine
+      # change into a failure that looks like a broken skill. Everything else is
+      # denied — a compromised CLI has nowhere to send the key.
+      #
+      # The unpinned `curl | bash` install runs in the BUILD job, which holds no
+      # credential and is deliberately not blocked; this job fetches nothing.
+      - name: Deny egress except Cursor + GitHub infra (OQ-027f(iii))
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            *.cursor.sh:443
+            registry.npmjs.org:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -199,6 +237,14 @@ jobs:
           echo "runtime recipe OK"
           test -f "${B}/workspace/.cursor/skills/transon-authoring/SKILL.md"
           echo "installed skill present"
+          # The episode cannot reach the authoring path unless the SampleSet is
+          # present AND ok_for_verify — assert both here rather than discovering
+          # it from a confusing transcript after the credentialed call.
+          test -f "${B}/workspace/samples.json"
+          PYTHONPATH="${B}/pydeps" python3 -m transon_authoring check-samples \
+            --samples "${B}/workspace/samples.json" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('ok_for_verify') else 1)"
+          echo "workspace SampleSet is ok_for_verify"
 
       - name: Run the headless episode
         env:
@@ -212,8 +258,23 @@ jobs:
           mkdir -p "${OUT}"
           cd "${WORKSPACE}"
           set +e
-          "${CURSOR_AGENT}" -p --output-format text \
-            "${SMOKE_PROMPT}" > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
+          # Both flags are required to run at all:
+          #   --trust  cursor-agent refuses an untrusted directory (exit 1).
+          #   --force  auto-approves commands. Without it the agent blocks on the
+          #            approval prompt for its first shell command with nowhere to
+          #            render it, and hangs producing zero bytes on both streams.
+          # The skill's whole procedure is `python -m transon_authoring …` calls,
+          # so command approval is not optional here. `-p` already grants tool
+          # access including shell, so --force removes an approval gate rather
+          # than widening capability. Bounded by: an ephemeral workspace holding
+          # only installer-provisioned files, a fixed maintainer-authored prompt
+          # (no untrusted corpus input), and a dedicated revocable key.
+          #
+          # stdin from /dev/null so nothing can wait on a terminal; the step
+          # timeout keeps a future hang cheap instead of burning the job budget.
+          timeout 480 "${CURSOR_AGENT}" -p --trust --force --output-format text \
+            "${SMOKE_PROMPT}" \
+            < /dev/null > "${OUT}/episode.txt" 2>"${OUT}/episode.err"
           STATUS=$?
           set -e
           # Persist the exit status for the post-scan assertion. It must NOT gate
@@ -238,22 +299,50 @@ jobs:
           python3 "${RUNNER_TEMP}/cursorbundle/scripts/scan_transcripts.py" \
             "${RUNNER_TEMP}/cursor-transcript"
 
-      # Claims only what the transcript shows — a recipe marker, not activation.
-      # The agent's cwd IS the provisioned workspace, so it could read the
-      # installed SKILL.md and quote the recipe without the host activating it as
-      # a skill; plain text output cannot tell the two apart.
-      - name: Assert the episode succeeded and the recipe marker appeared
+      # Claims only what the transcript shows. A matched AuthoringResult means the
+      # shipped flow ran end to end against the pinned engine — verdict/assurance/
+      # repair_count come from the module, so quoting a command cannot forge one.
+      # It is still not a claim about the host's internal skill routing, which no
+      # credential-free command exposes (OQ-008).
+      - name: Assert the episode emitted a matched AuthoringResult
         if: always() && steps.scan.outcome == 'success'
         run: |
           python3 - "${RUNNER_TEMP}/cursor-transcript/episode.txt" \
                     "${RUNNER_TEMP}/cursor-transcript/exit-status" <<'PY'
-          import os, sys
+          import json, os, sys
           from pathlib import Path
 
           path = Path(sys.argv[1])
           status_path = Path(sys.argv[2])
           text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
           transcript_bytes = path.stat().st_size if path.is_file() else 0
+
+          def matched_envelope(blob):
+              """The strongest signal the transcript can carry: a schema-valid
+              AuthoringResult at assurance `matched`. `verdict`/`assurance`/
+              `repair_count` are produced by the module running against the
+              pinned engine, so this cannot be narrated into existence — unlike a
+              recipe substring, which a quoted command would satisfy."""
+              decoder = json.JSONDecoder()
+              # raw_decode at each `{`: parses a JSON prefix and ignores whatever
+              # follows, so an envelope wrapped in prose still matches.
+              for i, ch in enumerate(blob):
+                  if ch != "{":
+                      continue
+                  try:
+                      doc, _ = decoder.raw_decode(blob[i:])
+                  except ValueError:
+                      continue
+                  if not isinstance(doc, dict):
+                      continue
+                  if (doc.get("ok") is True and doc.get("status") == "matched"
+                          and isinstance(doc.get("verdict"), dict)
+                          and doc["verdict"].get("assurance") == "matched"
+                          and doc.get("template") is not None):
+                      return doc
+              return None
+
+          envelope = matched_envelope(text)
           # A missing status file means the run step never reached the recorder —
           # treat as failure, not as an implicit pass.
           status = status_path.read_text().strip() if status_path.is_file() else "missing"
@@ -264,15 +353,19 @@ jobs:
               "### Cursor headless activation smoke",
               "",
               f"- **cursor-agent exit status:** `{status}`",
+              f"- **matched AuthoringResult emitted:** {envelope is not None}"
+              + (f" (template `{json.dumps(envelope['template'])}`, "
+                 f"repair_count {envelope.get('repair_count')})" if envelope else ""),
+              f"- **module-recipe marker in text:** {grounded} "
+              "(informational — a verbatim `result` envelope contains no command text)",
               f"- **skill name present in transcript:** {named}",
-              f"- **module-recipe marker observed:** {grounded}",
               f"- **transcript bytes:** {transcript_bytes}",
               "",
               "",
-              "_Dispatch-tier observation (OQ-008). Text output cannot distinguish "
-              "activation from the agent reading the installed file, so this is a "
-              "recipe MARKER — not proof the host activated the skill. Gates no "
-              "merge and no milestone._",
+              "_Dispatch-tier observation (OQ-008). A matched envelope shows the "
+              "shipped flow ran end to end against the pinned engine; it is not a "
+              "claim about the host's internal skill routing, which no "
+              "credential-free command exposes. Gates no merge and no milestone._",
           ]
           summary = "\n".join(lines) + "\n"
           print(summary)
@@ -287,13 +380,13 @@ jobs:
               print(f"SMOKE FAIL: cursor-agent exited {status!r} — the episode did "
                     "not complete successfully")
               sys.exit(1)
-          if not grounded:
-              print("SMOKE FAIL: the module-recipe marker did not appear in the "
-                    "transcript")
+          if envelope is None:
+              print("SMOKE FAIL: no matched AuthoringResult in the transcript — the "
+                    "episode did not complete the shipped authoring flow")
               sys.exit(1)
-          print("SMOKE PASS: the episode completed cleanly and the module-recipe "
-                "marker appeared in the transcript (a marker, not proof of skill "
-                "activation — see the summary note).")
+          print("SMOKE PASS: from a prompt that never named the skill, the episode "
+                "emitted a schema-valid AuthoringResult at assurance 'matched' — the "
+                "shipped flow ran end to end against the pinned engine.")
           PY
 
       - name: Upload the transcript (build artifact, never committed)
