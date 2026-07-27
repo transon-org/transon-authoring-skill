@@ -26,7 +26,7 @@ This pins `transon` transitively. Note `pip install` does **not** install the sk
 
 **2a. Skill files — Claude Code plugin:**
 
-```
+```text
 /plugin marketplace add transon-org/transon-authoring-skill
 /plugin install transon-authoring@transon-authoring
 ```
@@ -145,6 +145,7 @@ Deterministic gates (bound in pre-commit and CI):
 python3 harness/scripts/check_traceability.py
 python3 harness/scripts/check_append_only_ids.py
 python3 scripts/check_snapshot.py && python3 scripts/check_parity.py && python3 scripts/check_install.py
+python3 scripts/check_evals.py --lint
 ```
 
 ## License

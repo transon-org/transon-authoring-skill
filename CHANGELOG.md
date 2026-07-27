@@ -24,7 +24,9 @@ functionally identical to `0.1.0`.
 - `README.md` rewritten. It still described the project as **"Pre-A0"** — false since A5 — and was
   contract-facing rather than user-facing. Now leads with install for all three channels, states
   plainly that `pip install` does not deliver the skill body, and links the contract docs below.
-- No change to the skill body, the engine pin, the metadata snapshot, or any gate.
+- No change to the skill body, the engine pin, or the metadata snapshot. The gates did change:
+  NFR-008 and AC-042 now require a license declaration and `check_install` enforces it, so a
+  future release cannot repeat this omission while its own gate stays green.
 
 ### Version triplet
 
@@ -35,9 +37,11 @@ functionally identical to `0.1.0`.
 
 ### Distribution-verification ladder
 
-Unchanged from `0.1.0` and not re-run: this release alters packaging metadata and documentation
-only, leaving the shipped `SKILL.md`, the engine pin and the snapshot byte-identical. Ladder 1
-(dist smoke) re-runs automatically against the built artifacts as part of the publish.
+Unchanged from `0.1.0` and not re-run: the shipped `SKILL.md`, the engine pin and the snapshot are
+byte-identical, so no ladder step measures anything different. The release does change packaging
+metadata, documentation, and the `check_install` release gate (the AC-042 license half) — none of
+which the ladder covers. Ladder 1 (dist smoke) re-runs automatically against the built artifacts as
+part of the publish.
 
 ### Publication
 
