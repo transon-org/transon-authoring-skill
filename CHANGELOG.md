@@ -192,8 +192,19 @@ and remain future-flake candidates.
   - Post-publish verification of the **published artifact**: `pip install transon-authoring` into a
     clean venv resolved `transon-authoring 0.1.0` with `transon==0.2.3` transitively, and
     `metadata`, `language --list-sections`, `examples search` and `verify` all exit 0.
-- FR-037b external catalog submission: **now eligible** (the PyPI publish it waited on has
-  happened) but not started. It gates nothing.
+- FR-037b external catalog submission: **started** 2026-07-29, and it gates nothing.
+  - **Chat2AnyLLM** — [awesome-repo-configs#129](https://github.com/Chat2AnyLLM/awesome-repo-configs/pull/129)
+    open: a 9-line additive entry in `plugin_repos.json`, the reference-based config that feeds
+    `awesome-claude-plugins`. Their three required checks pass. Reference-based listing suits this
+    project: the catalog points at the self-hosted marketplace, so the canonical body stays the
+    single copy AC-005 requires.
+  - **Anthropic's official directory** — submission is a web form
+    (`clau.de/plugin-directory-submission`), so it is a maintainer action, not an automatable one.
+  - **ComposioHQ/awesome-claude-plugins — deliberately not submitted.** It asks contributors to
+    vendor the plugin *into* the catalog repo. That would create a second copy of the shipped
+    `SKILL.md` outside this repo's gates, which is exactly what AC-005 forbids and what the
+    single-`SKILL.md` restructure removed. Listing there would trade the single-source invariant for
+    discoverability.
 
 ### Notes
 

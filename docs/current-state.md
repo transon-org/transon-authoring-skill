@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `273dc14` — Merge pull request #29 from transon-org/post-a5-release-hardening |
+| Repo HEAD | `3da2ea5` — docs: record the 0.1.1 publish |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -146,12 +146,14 @@ non-gating.
    `git tag v0.1.1 && git push origin v0.1.1`. The run now **pauses at `Review pending`** (the
    `pypi` environment gained required reviewers), so approve the deployment in the run's page. Then
    fill the Publication slot in the `CHANGELOG.md` `0.1.1` entry.
-2. **FR-037b — external catalog submission** (non-gating). Deliberately **deferred**: FR-037b frames
-   listing as "driven by real adoption", and the package is days old. Presentation blockers are now
-   cleared (license, README, description, topics). Targets when wanted — official Anthropic
-   directory via the web form at `clau.de/plugin-directory-submission` (a form, so maintainer-only),
-   and PR-based community lists (`ComposioHQ/awesome-claude-plugins`,
-   `Chat2AnyLLM/awesome-claude-plugins`). CI never claims catalog presence or host discoverability.
+2. **FR-037b — external catalog submission** (non-gating) — **started** 2026-07-29.
+   [Chat2AnyLLM/awesome-repo-configs#129](https://github.com/Chat2AnyLLM/awesome-repo-configs/pull/129)
+   open (9-line additive entry in `plugin_repos.json`; their three required checks pass). Anthropic's
+   official directory is a **web form** (`clau.de/plugin-directory-submission`) — maintainer action.
+   **ComposioHQ deliberately skipped**: it asks contributors to vendor the plugin into the catalog
+   repo, which would create a second `SKILL.md` outside this repo's gates — exactly what AC-005
+   forbids. Prefer reference-based catalogs; they point at the self-hosted marketplace and leave the
+   canonical body as the single copy.
 3. Small leftovers deliberately not done: `check_plugin` inspects only the first matching
    marketplace entry (a duplicate later entry with a bad `source` is unexamined); two hygiene
    stragglers in `host_harness.py` (the `run_fixture` comment narrates work the installer now does;
