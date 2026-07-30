@@ -1,4 +1,5 @@
 {
+  "description": "Self-hosted marketplace for transon-authoring: authors engine-valid Transon JSON transformation templates, verified against confirmed samples before any template is returned.",
   "name": "transon-authoring",
   "owner": {
     "name": "transon-org",

@@ -8,7 +8,7 @@
 <!-- BEGIN generated: at-a-glance · python3 harness/scripts/update_memory.py --state -->
 | | |
 |---|---|
-| Repo HEAD | `3da2ea5` — docs: record the 0.1.1 publish |
+| Repo HEAD | `aee2918` — docs: start FR-037b — Chat2AnyLLM catalog submission opened |
 | Branch | `main` |
 | Engine pin | `transon==0.2.3` (see [pyproject.toml](../pyproject.toml)) |
 <!-- END generated: at-a-glance -->
@@ -148,8 +148,12 @@ non-gating.
    fill the Publication slot in the `CHANGELOG.md` `0.1.1` entry.
 2. **FR-037b — external catalog submission** (non-gating) — **started** 2026-07-29.
    [Chat2AnyLLM/awesome-repo-configs#129](https://github.com/Chat2AnyLLM/awesome-repo-configs/pull/129)
-   open (9-line additive entry in `plugin_repos.json`; their three required checks pass). Anthropic's
-   official directory is a **web form** (`clau.de/plugin-directory-submission`) — maintainer action.
+   open (9-line additive entry in `plugin_repos.json`; their three required checks pass). **Anthropic's
+   `claude-plugins-official` has NO application process** — curated at Anthropic's discretion, and
+   the submission form does not feed it (an earlier note claiming otherwise was wrong). The form
+   feeds **`claude-community`**; it is an in-app form (claude.ai directory submissions needs a
+   Team/Enterprise org, or `platform.claude.com/plugins/submit` for individual authors), so it is a
+   maintainer action. `claude plugin validate . --strict` passes.
    **ComposioHQ deliberately skipped**: it asks contributors to vendor the plugin into the catalog
    repo, which would create a second `SKILL.md` outside this repo's gates — exactly what AC-005
    forbids. Prefer reference-based catalogs; they point at the self-hosted marketplace and leave the

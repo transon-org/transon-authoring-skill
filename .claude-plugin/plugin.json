@@ -1,5 +1,12 @@
 {
+  "author": {
+    "name": "transon-org",
+    "url": "https://github.com/transon-org"
+  },
   "description": "Authors engine-valid Transon JSON transformation templates and returns one only after the pinned engine verifies it against a confirmed SampleSet. Requires the runtime: pip install transon-authoring.",
+  "homepage": "https://github.com/transon-org/transon-authoring-skill",
+  "license": "MIT",
   "name": "transon-authoring",
+  "repository": "https://github.com/transon-org/transon-authoring-skill",
   "version": "0.1.1"
 }

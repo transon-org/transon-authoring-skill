@@ -198,8 +198,15 @@ and remain future-flake candidates.
     `awesome-claude-plugins`. Their three required checks pass. Reference-based listing suits this
     project: the catalog points at the self-hosted marketplace, so the canonical body stays the
     single copy AC-005 requires.
-  - **Anthropic's official directory** — submission is a web form
-    (`clau.de/plugin-directory-submission`), so it is a maintainer action, not an automatable one.
+  - **Anthropic's `claude-plugins-official`** — **not applicable.** It is curated by Anthropic at
+    their discretion, with **no application process**; the submission form does not add plugins to
+    it. Earlier notes here said otherwise and were wrong.
+  - **Anthropic's `claude-community`** (`anthropics/claude-plugins-community`) — this is what the
+    form actually feeds, after review plus automated safety screening. Submission is an in-app form,
+    so it is a maintainer action. Prerequisite done: `claude plugin validate .` — the same check the
+    review pipeline runs — passes **with `--strict`**, after adding the manifest fields it warned
+    about (`author`, `homepage`, `repository`, `license` on the plugin; `description` on the
+    marketplace).
   - **ComposioHQ/awesome-claude-plugins — deliberately not submitted.** It asks contributors to
     vendor the plugin *into* the catalog repo. That would create a second copy of the shipped
     `SKILL.md` outside this repo's gates, which is exactly what AC-005 forbids and what the
